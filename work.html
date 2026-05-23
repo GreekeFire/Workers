@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Work — Alfred</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Alfred Work">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050506">
+<link rel="manifest" href="/manifest.json">
+<script src="data/listings-data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="shared/shared.css">
+<script src="shared/config.js"></script>
+<script src="shared/utils.js"></script>
+<style>
+  :root {
+    --text-primary: #FAFAFA;
+    --text-secondary: #B8B6B0;
+    --text-tertiary: #76746E;
+    --coral: #E07658;
+    --success: #6BE3A4;
+    --danger: #E05858;
+    --card-bg: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.06);
+    --card-radius: 16px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: #050506;
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
+    filter: blur(40px);
+    animation: bgDrift 36s ease-in-out infinite alternate;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes bgDrift {
+    0%   { transform: translate(0,0) scale(1); }
+    50%  { transform: translate(20px,-15px) scale(1.04); }
+    100% { transform: translate(-10px,10px) scale(0.97); }
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top, 24px) 20px calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* Session bar */
+  .session-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .sess-item {
+    flex: 1;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .sess-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .sess-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sess-val.green { color: var(--success); }
+  .sess-val.coral { color: var(--coral); }
+
+  /* Segmented toggle */
+  .seg-toggle {
+    display: flex;
+    background: rgba(20,20,22,0.72);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .seg-btn.active {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-primary);
+  }
+
+  /* Progress line */
+  .progress-line {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  /* Listing card */
+  .listing-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 24px 20px;
+    margin-bottom: 16px;
+  }
+  .title-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 10px 12px;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 16px;
+    display: block;
+    width: 100%;
+  }
+  .title-input:focus { outline: none; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+  .title-input { overflow: hidden; }
+  .listing-links {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .link-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.03);
+    transition: all 0.15s;
+  }
+  .link-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.07); }
+  .link-edit-input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 10px;
+    font-family: inherit;
+    min-width: 0;
+  }
+  .link-edit-input:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .listing-price {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .price-sell {
+    color: var(--success);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .price-arrow { color: var(--text-tertiary); }
+
+  /* AI section */
+  .ai-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+  }
+  .ai-loading { font-size: 13px; color: var(--text-tertiary); padding: 8px 0; }
+  .ai-field {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .ai-field:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .ai-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .ai-key-inline { display: flex; gap: 8px; margin-bottom: 8px; }
+  .ai-key-input {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 8px 10px;
+    font-family: monospace;
+  }
+  .ai-key-input:focus { outline: none; border-color: rgba(255,255,255,0.18); }
+  .shopee-collapsed {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 6px 0;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .shopee-collapsed:hover { color: var(--text-secondary); }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+  .copy-btn.copied { color: var(--success); border-color: var(--success); }
+  .field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .field-label { font-size: 11px; color: var(--text-tertiary); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+  .ai-gen-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: rgba(224,118,88,0.12);
+    border: 1px solid rgba(224,118,88,0.25);
+    color: var(--coral);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ai-gen-btn:hover { background: rgba(224,118,88,0.2); }
+  .ai-gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .api-key-section { margin-top: 10px; }
+  .api-key-row { display: flex; gap: 8px; }
+  .api-key-input {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 8px 12px;
+    font-family: monospace;
+  }
+  .api-key-input:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .api-key-save-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Action row */
+  .action-row { display: flex; gap: 12px; }
+  .btn-delete {
+    flex: 1;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(224,88,88,0.25);
+    background: rgba(224,88,88,0.08);
+    color: var(--danger);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-delete:hover { background: rgba(224,88,88,0.15); }
+  .btn-done {
+    flex: 2;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(107,227,164,0.25);
+    background: rgba(107,227,164,0.08);
+    color: var(--success);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-done:hover { background: rgba(107,227,164,0.15); }
+
+  /* Queue complete */
+  .queue-complete {
+    text-align: center;
+    padding: 48px 24px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    margin-bottom: 16px;
+  }
+  .queue-complete .big-check { font-size: 48px; margin-bottom: 16px; }
+  .queue-complete h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .queue-complete p { font-size: 14px; color: var(--text-tertiary); }
+
+  /* Sales section */
+  .revenue-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .revenue-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+  .revenue-amount {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--success);
+  }
+  .log-form-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 12px 14px;
+    font-family: inherit;
+  }
+  .form-input:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .btn-log {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(224,118,88,0.25);
+    background: rgba(224,118,88,0.1);
+    color: var(--coral);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-log:hover { background: rgba(224,118,88,0.18); }
+  .sales-list { display: flex; flex-direction: column; gap: 8px; }
+  .sale-entry {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sale-info { flex: 1; min-width: 0; }
+  .sale-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sale-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .sale-price {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--success);
+    margin-left: 12px;
+    flex-shrink: 0;
+  }
+
+  /* Search dropdown */
+  .search-wrap { position: relative; }
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: rgba(18,18,20,0.98);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 20;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  }
+  .search-result {
+    padding: 12px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover, .search-result:active { background: rgba(255,255,255,0.06); }
+  .search-result-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .search-result-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .search-result-price { font-size: 11px; color: var(--text-tertiary); }
+  .search-result-link { font-size: 11px; color: var(--coral); text-decoration: none; }
+  .search-result-link:hover { text-decoration: underline; }
+  .sale-listing-info {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .sale-info-price { font-size: 13px; color: var(--success); font-weight: 700; }
+  .sale-info-link { font-size: 12px; color: var(--coral); text-decoration: none; }
+  .sale-info-link:hover { text-decoration: underline; }
+
+  /* Price calculator in Fix */
+  .price-calc {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+  }
+  .pcol { flex: 1; }
+  .pcol-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+  .pcol-input-wrap { display: flex; align-items: center; gap: 4px; }
+  .pcol-currency { font-size: 14px; color: var(--text-tertiary); }
+  .cost-input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 10px;
+    font-family: inherit;
+    width: 100%;
+  }
+  .cost-input:focus { outline: none; border-color: rgba(255,255,255,0.28); }
+  .cost-input::-webkit-inner-spin-button,
+  .cost-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .cost-input { -moz-appearance: textfield; }
+  .parrow { font-size: 18px; color: var(--text-tertiary); padding-top: 18px; flex-shrink: 0; }
+  .sell-display {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--success);
+    margin-top: 2px;
+  }
+
+  /* Done list */
+  .done-search-wrap { margin-bottom: 12px; }
+  .done-list { display: flex; flex-direction: column; gap: 8px; }
+  .done-entry {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .done-entry:hover { background: rgba(255,255,255,0.06); }
+  .done-entry.editing { cursor: default; flex-direction: column; align-items: stretch; gap: 10px; }
+  .done-entry.editing:hover { background: var(--card-bg); }
+  .done-info { flex: 1; min-width: 0; }
+  .done-title-text {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .done-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .done-edit-icon { font-size: 14px; color: var(--text-tertiary); margin-left: 12px; flex-shrink: 0; }
+  .done-edit-title {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 12px;
+    font-family: inherit;
+  }
+  .done-edit-title:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .done-edit-price {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .done-edit-cost {
+    width: 90px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 7px 10px;
+    font-family: inherit;
+  }
+  .done-edit-cost:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .done-edit-cost::-webkit-inner-spin-button,
+  .done-edit-cost::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .done-edit-cost { -moz-appearance: textfield; }
+  .done-edit-sell { font-size: 16px; font-weight: 700; color: var(--success); }
+  .done-edit-actions { display: flex; gap: 8px; }
+  .done-cancel-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-link-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(224,118,88,0.25);
+    background: rgba(224,118,88,0.08);
+    color: var(--coral);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-link-inputs { display: flex; flex-direction: column; gap: 6px; }
+  .done-save-btn {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(107,227,164,0.25);
+    background: rgba(107,227,164,0.08);
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-empty { text-align: center; color: var(--text-tertiary); font-size: 13px; padding: 24px 0; }
+
+  /* API key bar */
+  .api-key-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .api-key-bar-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .api-key-bar-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.12); }
+  .api-key-bar-btn.set { color: var(--success); border-color: rgba(107,227,164,0.25); }
+  .api-key-bar-row { display: flex; gap: 8px; flex: 1; max-width: 320px; }
+  .api-key-bar-field {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 10px;
+    font-family: monospace;
+  }
+  .api-key-bar-field:focus { outline: none; border-color: rgba(255,255,255,0.18); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: calc(80px + env(safe-area-inset-bottom) + 12px);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(20,20,22,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: all 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* tab bar from shared.css */
+
+  @media (max-width: 600px) {
+    .ai-field { font-size: 16px; }
+    .form-input { font-size: 16px; }
+    .ai-gen-btn { padding: 10px 18px; font-size: 14px; }
+    .copy-btn { padding: 8px 12px; font-size: 12px; }
+    .link-btn { padding: 10px 16px; font-size: 13px; }
+    .shopee-collapsed { padding: 12px 0; font-size: 14px; }
+    .seg-btn { padding: 12px; font-size: 14px; }
+    .done-cancel-btn, .done-link-btn, .done-save-btn { padding: 14px; font-size: 14px; }
+    .search-result { padding: 16px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+
+  <!-- Session bar -->
+  <div class="session-bar">
+    <div class="sess-item">
+      <span class="sess-label">Done</span>
+      <span class="sess-val green" id="cnt-done">0</span>
+    </div>
+    <div class="sess-item">
+      <span class="sess-label">Deleted</span>
+      <span class="sess-val" id="cnt-deleted">0</span>
+    </div>
+    <div class="sess-item">
+      <span class="sess-label">Revenue</span>
+      <span class="sess-val coral" id="cnt-revenue">$0</span>
+    </div>
+  </div>
+
+  <!-- Segmented toggle -->
+  <div class="seg-toggle">
+    <button class="seg-btn active" id="btn-fix" onclick="switchTab('fix')">FIX</button>
+    <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
+    <button class="seg-btn" id="btn-done" onclick="switchTab('done')">DONE</button>
+  </div>
+
+  <!-- FIX view -->
+  <div id="view-fix">
+    <div class="progress-line" id="progress-line">Loading&hellip;</div>
+    <div id="listing-wrap"></div>
+    <div class="action-row" id="action-row" style="display:none">
+      <button class="btn-delete" onclick="markDeleted()">Delete</button>
+      <button class="btn-done" onclick="markDone()">Done</button>
+    </div>
+  </div>
+
+  <!-- SALES view -->
+  <div id="view-sales" style="display:none">
+    <div class="revenue-card">
+      <div class="revenue-label">Revenue Today</div>
+      <div class="revenue-amount" id="revenue-display">$0</div>
+    </div>
+    <div class="log-form-card">
+      <div class="search-wrap">
+        <input type="text" class="form-input" id="sale-listing" placeholder="Search listing..." autocomplete="off" oninput="searchListings(this.value)" onblur="hideDropdown()">
+        <div class="search-dropdown" id="search-dropdown" style="display:none"></div>
+      </div>
+      <div class="sale-listing-info" id="sale-listing-info" style="display:none"></div>
+      <input type="number" class="form-input" id="sale-price" placeholder="Price ($)" step="0.01" min="0">
+      <button class="btn-log" onclick="logSale()">Log Sale</button>
+    </div>
+    <div class="sales-list" id="sales-list"></div>
+  </div>
+
+  <!-- DONE view -->
+  <div id="view-done" style="display:none">
+    <div class="done-search-wrap">
+      <input type="text" class="form-input" id="done-search" placeholder="Search done listings..." autocomplete="off" oninput="editingDoneIdx=null;renderDoneView()">
+    </div>
+    <div class="done-list" id="done-list"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="shared/nav.js"></script>
+
+<script>
+function calcSell(cost) {
+  const c = parseFloat(cost) || 0;
+  return Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5;
+}
+
+function onCostChange(val) {
+  editedCost = parseFloat(val) || 0;
+  const el = document.getElementById('sell-display');
+  if (el) el.textContent = '$' + calcSell(editedCost);
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// State
+let currentIndex = 0;
+let doneSet = new Set();
+let deletedSet = new Set();
+let doneData = [];
+let doneTodayCount = 0;
+let deletedTodayCount = 0;
+let todayDate = new Date().toISOString().slice(0, 10);
+let salesLog = [];
+let activeTab = 'fix';
+let editingDoneIdx = null;
+
+// AI state
+let aiExpanded = false;
+let aiLoading = false;
+let aiTitle = '';
+let aiDesc = '';
+let editedCost = null;
+let shopeeInput = '';
+let shopeeCollapsed = false;
+let apiKeyVisible = false;
+
+// Link overrides
+let linkEditing = false;
+let doneLinkEditIdx = null;
+let urlOverrides = {};
+
+// Init
+async function init() {
+  loadLocal();
+  currentIndex = findNext(currentIndex);
+  renderAll();
+  await syncFromSupabase();
+  currentIndex = findNext(currentIndex);
+  renderAll();
+}
+
+function loadLocal() {
+  const today = new Date().toISOString().slice(0, 10);
+  const raw = localStorage.getItem('carobiz_work');
+  if (raw) {
+    const s = JSON.parse(raw);
+    currentIndex = s.currentIndex || 0;
+    doneSet = new Set(s.doneIndexes || []);
+    deletedSet = new Set(s.deletedIndexes || []);
+    doneData = s.doneData || [];
+    if (s.todayDate === today) {
+      doneTodayCount = s.doneTodayCount || 0;
+      deletedTodayCount = s.deletedTodayCount || 0;
+    }
+    todayDate = today;
+  }
+  const rawSales = localStorage.getItem('carobiz_sales');
+  if (rawSales) salesLog = JSON.parse(rawSales);
+  const rawOverrides = localStorage.getItem('carobiz_url_overrides');
+  if (rawOverrides) urlOverrides = JSON.parse(rawOverrides);
+}
+
+async function syncFromSupabase() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const [pRes, dRes, sRes] = await Promise.all([
+      sb.from('app_state').select('data').eq('key', 'carobiz_work_progress').single(),
+      sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
+      sb.from('app_state').select('data').eq('key', 'carobiz_sales').single()
+    ]);
+
+    if (pRes.data?.data) {
+      const p = pRes.data.data;
+      for (const i of (p.doneIndexes || [])) doneSet.add(i);
+      for (const i of (p.deletedIndexes || [])) deletedSet.add(i);
+      if ((p.currentIndex || 0) > currentIndex) currentIndex = p.currentIndex;
+      if (p.todayDate === today) {
+        doneTodayCount = Math.max(doneTodayCount, p.doneTodayCount || 0);
+        deletedTodayCount = Math.max(deletedTodayCount, p.deletedTodayCount || 0);
+      }
+      todayDate = today;
+    }
+
+    if (dRes.data?.data) {
+      doneData = dRes.data.data;
+    }
+
+    if (sRes.data?.data) {
+      salesLog = sRes.data.data;
+      localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+    }
+
+    saveLocal();
+  } catch (e) {
+    console.warn('Supabase sync error:', e);
+  }
+}
+
+function saveLocal() {
+  localStorage.setItem('carobiz_work', JSON.stringify({
+    currentIndex,
+    doneIndexes: [...doneSet],
+    deletedIndexes: [...deletedSet],
+    doneData,
+    doneTodayCount,
+    deletedTodayCount,
+    todayDate
+  }));
+}
+
+async function pushToSupabase() {
+  const now = new Date().toISOString();
+  const today = new Date().toISOString().slice(0, 10);
+  Promise.all([
+    sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
+      currentIndex,
+      doneIndexes: [...doneSet],
+      deletedIndexes: [...deletedSet],
+      doneTodayCount,
+      deletedTodayCount,
+      todayDate: today
+    }, updated_at: now }),
+    sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
+    sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
+  ]).catch(e => console.warn('Supabase push error:', e));
+}
+
+// Queue
+function findNext(from) {
+  let i = from;
+  while (i < LISTINGS.length && (doneSet.has(i) || deletedSet.has(i))) i++;
+  return i;
+}
+
+function markDone() {
+  const idx = currentIndex;
+  if (!doneSet.has(idx) && !deletedSet.has(idx)) {
+    const L = LISTINGS[idx];
+    doneSet.add(idx);
+    doneTodayCount++;
+    doneData.push({
+      index: idx,
+      title: aiTitle || L[0],
+      description: aiDesc,
+      shopeeUrl: L[1],
+      carousellUrl: L[2],
+      sourceCost: editedCost !== null ? editedCost : L[3],
+      sellPrice: calcSell(editedCost !== null ? editedCost : L[3]),
+      doneAt: new Date().toISOString()
+    });
+  }
+  resetAI();
+  currentIndex = findNext(idx + 1);
+  saveLocal();
+  pushToSupabase();
+  renderAll();
+  toast('Done ✓');
+}
+
+function markDeleted() {
+  const idx = currentIndex;
+  if (!doneSet.has(idx) && !deletedSet.has(idx)) {
+    deletedSet.add(idx);
+    deletedTodayCount++;
+  }
+  resetAI();
+  currentIndex = findNext(idx + 1);
+  saveLocal();
+  pushToSupabase();
+  renderAll();
+  toast('Deleted');
+}
+
+function saveDoneLinkEdits(doneIdx, listingIndex) {
+  const s = document.getElementById(`done-link-shopee-${doneIdx}`)?.value.trim() || '';
+  const c = document.getElementById(`done-link-caro-${doneIdx}`)?.value.trim() || '';
+  urlOverrides[listingIndex] = { shopeeUrl: s, carousellUrl: c };
+  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
+  doneLinkEditIdx = null;
+  renderDoneView();
+  toast('Links saved');
+}
+
+function saveLinkEdits() {
+  const s = document.getElementById('link-shopee-input')?.value.trim() || '';
+  const c = document.getElementById('link-caro-input')?.value.trim() || '';
+  urlOverrides[currentIndex] = { shopeeUrl: s, carousellUrl: c };
+  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
+  linkEditing = false;
+  renderFixView();
+  toast('Links saved');
+}
+
+function resetAI() {
+  aiLoading = false;
+  aiTitle = '';
+  aiDesc = '';
+  editedCost = null;
+  shopeeInput = '';
+  linkEditing = false;
+  shopeeCollapsed = false;
+  shopeeInput = '';
+}
+
+// AI
+async function generateAI() {
+  const apiKey = localStorage.getItem('alfred_claude_key');
+  if (!apiKey) { apiKeyVisible = true; renderFixView(); return; }
+  const taEl = document.getElementById('shopee-input-ta');
+  if (taEl) shopeeInput = taEl.value;
+  if (!shopeeInput.trim()) { toast('Paste Shopee title + description first'); return; }
+  aiLoading = true;
+  renderFixView();
+  const titleSystem = `You are a Carousell Singapore SEO copywriter.
+
+TASK: Write a Carousell listing title for the product below. Output the title text only — no JSON, no explanation, no quotes, nothing else.
+
+RULES:
+1. Length: exactly 200–225 characters. Count every character. This is the strictest rule.
+2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2–4 words — never a single word alone.
+3. Front-load the strongest buyer search terms in the first 50 characters.
+4. Every segment must be something a real buyer types into a search bar.
+5. Never repeat the same root word across segments. Before writing each segment, check every previous segment — if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2–end must not contain "Clean", "Cleaner", "Cleans", or any variation.
+6. Correct any spelling errors found in the source text — do not copy typos.
+7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (—).
+
+CORRECT EXAMPLE (219 chars):
+Automatic Pet Water Dispenser | Wireless Rechargeable | Motion Sensor | 2.5L Capacity | 4000mAh Battery | Dual Power Supply | 110 Days Runtime | Smart Timing Mode | Pet Fountain | Water Bowl | Indoor Outdoor
+
+WRONG EXAMPLE:
+Wireless RGB Keyboard — 98-key compact, triple-mode connectivity  ← sentence structure, forbidden
+
+Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
+
+  const descSystem = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
+
+Rewrite the product description for a Carousell listing. Plain text only inside the JSON — no **bold**, no #headers, no markdown. Use section labels exactly as shown.
+
+TONE:
+- Friendly and direct — speak to the buyer as "you"
+- Benefits-focused, not feature-focused
+- Specific — never say "high quality", "amazing", "best"
+- No hype words: "incredible", "must-have", "limited"
+- No multiple exclamation marks
+
+Use exactly this structure:
+
+[Product name — one clear descriptive phrase, no brand names]
+[One sentence: what this is and the main benefit it gives the buyer]
+
+WHY YOU'LL LOVE IT:
+• [Specific benefit — what it does for them daily]
+• [Practical benefit — size, ease of use, time-saving]
+• [Emotional benefit — how it makes life better]
+• [Quality/durability note — materials or build, if known]
+
+PERFECT FOR:
+[2–3 specific situations: who uses it and where]
+
+WHAT'S INCLUDED:
+[Exactly what comes in the package]
+
+SPECIFICATIONS (only include lines where the value is confirmed — skip any line where the value is unknown, do not write "Not specified"):
+• Material: [confirmed value only]
+• Dimensions: [L x W x H in cm — confirmed only]
+• Weight: [confirmed only]
+• Colours available: [confirmed colours only]
+
+WHY BUY FROM ME:
+✓ Fast Singapore shipping
+✓ Quality checked before sending
+✓ Secure packaging
+✓ Responsive customer service
+
+---
+DM me for bulk discounts or questions!
+
+CHECK BEFORE OUTPUT:
+- No brand names anywhere
+- No platform names (Shopee, Lazada, Amazon, etc.)
+- No markdown symbols like ** or ##
+- No vague superlatives ("amazing", "best", "incredible")`;
+
+  async function callClaude(system, userContent, maxTokens, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: maxTokens,
+          temperature: 0.3,
+          system,
+          messages: [{ role: 'user', content: userContent }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) {
+        const isOverload = data.error.type === 'overloaded_error' || resp.status === 529;
+        if (isOverload && attempt < retries) {
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+        throw new Error(data.error.message);
+      }
+      return data.content?.[0]?.text || '';
+    }
+  }
+
+  let aiError = null;
+  try {
+    const productContent = `Product info:\n\n${shopeeInput}`;
+    const [titleText, descText] = await Promise.all([
+      callClaude(titleSystem, productContent, 512),
+      callClaude(descSystem, productContent, 1536)
+    ]);
+    let rawTitle = titleText.trim().split('\n')[0].trim();
+    if (rawTitle.length < 200) {
+      const retry = await callClaude(titleSystem, productContent + '\n\nIMPORTANT: Previous attempt was too short. You MUST reach at least 200 characters. Add more keyword segments.', 512);
+      rawTitle = retry.trim().split('\n')[0].trim();
+    }
+    if (rawTitle.length > 225) {
+      const parts = rawTitle.split(' | ');
+      while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
+      rawTitle = parts.join(' | ');
+    }
+    aiTitle = rawTitle;
+    const descMatch = descText.match(/\{[\s\S]*\}/);
+    if (descMatch) aiDesc = JSON.parse(descMatch[0]).description || '';
+    if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
+  } catch (e) {
+    aiError = e.message || 'Unknown error';
+  }
+  if (aiTitle || aiDesc) shopeeCollapsed = true;
+  aiLoading = false;
+  renderFixView();
+  if (aiError) {
+    const errEl = document.createElement('div');
+    errEl.style.cssText = 'background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13px;word-break:break-all';
+    errEl.textContent = 'Error: ' + aiError;
+    const aiSection = document.querySelector('.ai-section');
+    if (aiSection) aiSection.prepend(errEl);
+  }
+}
+
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (val) {
+    localStorage.setItem('alfred_claude_key', val);
+    apiKeyVisible = false;
+    toast('Key saved');
+    generateAI();
+  }
+}
+
+// Sales
+function logSale() {
+  const name = document.getElementById('sale-listing').value.trim();
+  const price = parseFloat(document.getElementById('sale-price').value);
+  if (!name || isNaN(price) || price <= 0) { toast('Fill in name and price'); return; }
+  salesLog.unshift({ name, price, date: new Date().toISOString().slice(0, 10), ts: new Date().toISOString() });
+  document.getElementById('sale-listing').value = '';
+  document.getElementById('sale-price').value = '';
+  document.getElementById('sale-listing-info').style.display = 'none';
+  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+  pushToSupabase();
+  renderSalesView();
+  renderSessionBar();
+  toast('Logged ✓');
+}
+
+function searchListings(query) {
+  const dropdown = document.getElementById('search-dropdown');
+  if (!query.trim()) { dropdown.style.display = 'none'; return; }
+  const q = query.toLowerCase();
+  const matches = [];
+  for (let i = 0; i < LISTINGS.length && matches.length < 6; i++) {
+    if (LISTINGS[i][0].toLowerCase().includes(q)) matches.push({ L: LISTINGS[i], i });
+  }
+  if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = matches.map(({ L, i }) => {
+    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
+    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
+    const isDone = doneSet.has(i) || deletedSet.has(i);
+    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix →</span>` : '';
+    return `<div class="search-result" onmousedown="selectListing(${i})">
+      <div class="search-result-name">${esc(L[0])}</div>
+      <div class="search-result-meta">
+        <span class="search-result-price">Sell $${L[4]}</span>
+        ${shopeeLink}${caroLink}${fixBtn}
+      </div>
+    </div>`;
+  }).join('');
+  dropdown.style.display = 'block';
+}
+
+function jumpToFix(idx) {
+  currentIndex = idx;
+  document.getElementById('search-dropdown').style.display = 'none';
+  document.getElementById('sale-listing').value = '';
+  switchTab('fix');
+}
+
+function selectListing(idx) {
+  const L = LISTINGS[idx];
+  if (!L) return;
+  document.getElementById('sale-listing').value = L[0];
+  document.getElementById('search-dropdown').style.display = 'none';
+  document.getElementById('sale-price').value = L[4];
+  const infoEl = document.getElementById('sale-listing-info');
+  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
+  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell ↗</a>` : '';
+  infoEl.innerHTML = `<span class="sale-info-price">$${L[4]}</span>${shopeeLink}${caroLink}`;
+  infoEl.style.display = 'flex';
+  document.getElementById('sale-price').focus();
+}
+
+function hideDropdown() {
+  setTimeout(() => {
+    const el = document.getElementById('search-dropdown');
+    if (el) el.style.display = 'none';
+  }, 150);
+}
+
+function todayRevenue() {
+  const today = new Date().toISOString().slice(0, 10);
+  return salesLog.filter(s => s.date === today).reduce((sum, s) => sum + s.price, 0);
+}
+
+// Render
+function renderAll() {
+  renderSessionBar();
+  if (activeTab === 'fix') renderFixView();
+  else if (activeTab === 'sales') renderSalesView();
+  else renderDoneView();
+}
+
+function renderSessionBar() {
+  document.getElementById('cnt-done').textContent = doneData.length;
+  document.getElementById('cnt-deleted').textContent = deletedTodayCount;
+  document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(0);
+}
+
+function renderFixView() {
+  const total = LISTINGS.length;
+  const processed = doneSet.size + deletedSet.size;
+  const remaining = total - processed;
+  document.getElementById('progress-line').textContent =
+    doneSet.size + ' done · ' + deletedSet.size + ' deleted · ' + remaining + ' remaining';
+
+  const wrap = document.getElementById('listing-wrap');
+  const actionRow = document.getElementById('action-row');
+
+  if (currentIndex >= total || remaining === 0) {
+    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
+    actionRow.style.display = 'none';
+    return;
+  }
+
+  const L = LISTINGS[currentIndex];
+  const title = aiTitle || L[0];
+  const ov = urlOverrides[currentIndex] || {};
+  const shopeeUrl = ov.shopeeUrl !== undefined ? ov.shopeeUrl : L[1];
+  const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
+  const cost = editedCost !== null ? editedCost : L[3];
+  const sell = L[4];
+  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : '✨ Generate';
+  const loadingMsg = aiLoading ? '<div class="ai-loading">Generating…</div>' : '';
+  const descField = (aiTitle || aiDesc) ? `
+    <div class="field-header">
+      <span class="field-label">Description</span>
+      <button class="copy-btn" id="copy-desc-btn" onclick="copyField('ai-desc-ta','copy-desc-btn')">Copy</button>
+    </div>
+    <textarea class="ai-field" id="ai-desc-ta" oninput="aiDesc=this.value;autoResize(this)">${esc(aiDesc)}</textarea>` : '';
+
+  wrap.innerHTML = `<div class="listing-card">
+    <div class="field-header">
+      <span class="field-label">Title</span>
+      <button class="copy-btn" id="copy-title-btn" onclick="copyField('title-ta','copy-title-btn')">Copy</button>
+    </div>
+    <textarea class="title-input" rows="1" oninput="aiTitle=this.value;autoResize(this)" id="title-ta">${esc(title)}</textarea>
+    <div class="listing-links">
+      ${linkEditing ? `
+        <input class="link-edit-input" id="link-shopee-input" type="url" placeholder="Shopee URL" value="${esc(shopeeUrl)}">
+        <input class="link-edit-input" id="link-caro-input" type="url" placeholder="Carousell URL" value="${esc(carousellUrl)}">
+        <button class="copy-btn" onclick="saveLinkEdits()">Save</button>
+        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">✕</button>
+      ` : `
+        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
+        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
+        <button class="copy-btn" style="opacity:0.4;font-size:10px" onclick="linkEditing=true;renderFixView()">Edit</button>
+      `}
+    </div>
+    <div class="price-calc">
+      <div class="pcol">
+        <div class="pcol-label">Cost</div>
+        <div class="pcol-input-wrap">
+          <span class="pcol-currency">$</span>
+          <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(cost))}" oninput="onCostChange(this.value)" id="cost-input">
+        </div>
+      </div>
+      <div class="parrow">→</div>
+      <div class="pcol">
+        <div class="pcol-label">Sell</div>
+        <div class="sell-display" id="sell-display">$${calcSell(cost)}</div>
+      </div>
+    </div>
+    <div class="ai-section">
+      <div class="field-header">
+        <span class="field-label">✨ AI</span>
+        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
+      </div>
+      ${(!localStorage.getItem('alfred_claude_key') || apiKeyVisible) ? `
+        <div class="ai-key-inline">
+          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-…">
+          <button class="copy-btn" onclick="saveApiKey()">Save</button>
+          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
+        </div>` : ''}
+      ${shopeeCollapsed
+        ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content ▼</div>`
+        : `<textarea class="ai-field" id="shopee-input-ta" oninput="shopeeInput=this.value" onchange="shopeeInput=this.value" placeholder="Paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
+      }
+      ${loadingMsg}
+      ${descField}
+      <div class="ai-row"><button class="ai-gen-btn" ${aiLoading ? 'disabled' : ''} onclick="generateAI()">${genLabel}</button></div>
+    </div>
+  </div>`;
+
+  actionRow.style.display = 'flex';
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('title-ta');
+    if (ta) autoResize(ta);
+    const da = document.getElementById('ai-desc-ta');
+    if (da) autoResize(da);
+    const sa = document.getElementById('shopee-input-ta');
+    if (sa) autoResize(sa);
+  });
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+
+function renderSalesView() {
+  document.getElementById('revenue-display').textContent = '$' + todayRevenue().toFixed(2);
+  const list = document.getElementById('sales-list');
+  if (salesLog.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);font-size:13px;padding:24px 0">No sales yet</p>';
+    return;
+  }
+  list.innerHTML = salesLog.map(s => `<div class="sale-entry">
+    <div class="sale-info">
+      <div class="sale-name">${esc(s.name)}</div>
+      <div class="sale-meta">${esc(s.date)}</div>
+    </div>
+    <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
+  </div>`).join('');
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('view-fix').style.display = tab === 'fix' ? 'block' : 'none';
+  document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
+  document.getElementById('view-done').style.display = tab === 'done' ? 'block' : 'none';
+  document.getElementById('btn-fix').classList.toggle('active', tab === 'fix');
+  document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
+  document.getElementById('btn-done').classList.toggle('active', tab === 'done');
+  if (tab === 'fix') renderFixView();
+  else if (tab === 'sales') renderSalesView();
+  else renderDoneView();
+}
+
+function renderDoneView() {
+  const query = (document.getElementById('done-search')?.value || '').toLowerCase();
+  const list = document.getElementById('done-list');
+  const filtered = doneData.map((d, i) => ({ ...d, _i: i }))
+    .filter(d => !query || d.title.toLowerCase().includes(query));
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="done-empty">${doneData.length === 0 ? 'No done listings yet' : 'No matches'}</p>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(d => {
+    const ov = urlOverrides[d.index] || {};
+    const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (LISTINGS[d.index]?.[1] || '');
+    const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (LISTINGS[d.index]?.[2] || '');
+    const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
+      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
+      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
+    </div>`;
+    if (editingDoneIdx === d._i) {
+      const linkSection = doneLinkEditIdx === d._i ? `
+        <div class="done-link-inputs">
+          <input class="link-edit-input" id="done-link-shopee-${d._i}" type="url" placeholder="Shopee URL" value="${esc(dShopee)}">
+          <input class="link-edit-input" id="done-link-caro-${d._i}" type="url" placeholder="Carousell URL" value="${esc(dCaro)}">
+          <button class="done-save-btn" onclick="saveDoneLinkEdits(${d._i},${d.index})">Save Links</button>
+        </div>` : linkBtns;
+      return `<div class="done-entry editing">
+        <input class="done-edit-title" type="text" value="${esc(d.title)}" id="edit-title-${d._i}" placeholder="Title">
+        <div class="done-edit-price">
+          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
+          <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
+          <span style="color:var(--text-tertiary)">→</span>
+          <span class="done-edit-sell" id="edit-sell-${d._i}">$${d.sellPrice}</span>
+        </div>
+        ${linkSection}
+        <div class="done-edit-actions">
+          <button class="done-cancel-btn" onclick="editingDoneIdx=null;doneLinkEditIdx=null;renderDoneView()">Cancel</button>
+          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
+          <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
+        </div>
+        <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i},${d.index})">Delete listing</button>
+      </div>`;
+    }
+    return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
+      <div class="done-info">
+        <div class="done-title-text">${esc(d.title)}</div>
+        <div class="done-meta">Cost $${d.sourceCost} → Sell $${d.sellPrice}</div>
+        ${linkBtns}
+      </div>
+      <div class="done-edit-icon">✎</div>
+    </div>`;
+  }).join('');
+}
+
+
+function updateDoneEditSell(i, val) {
+  const el = document.getElementById(`edit-sell-${i}`);
+  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0);
+}
+
+function saveDoneEdit(i) {
+  const title = document.getElementById(`edit-title-${i}`)?.value?.trim();
+  const cost = parseFloat(document.getElementById(`edit-cost-${i}`)?.value) || 0;
+  if (!title) { toast('Title cannot be empty'); return; }
+  doneData[i].title = title;
+  doneData[i].sourceCost = cost;
+  doneData[i].sellPrice = calcSell(cost);
+  editingDoneIdx = null;
+  saveLocal();
+  pushToSupabase();
+  renderDoneView();
+  toast('Saved');
+}
+
+function deleteDoneEntry(i, listingIndex) {
+  if (!confirm('Remove this listing from Done? This also removes it from your processed count.')) return;
+  doneData.splice(i, 1);
+  doneSet.delete(listingIndex);
+  editingDoneIdx = null;
+  doneLinkEditIdx = null;
+  saveLocal();
+  pushToSupabase();
+  renderDoneView();
+  renderFixView();
+  toast('Listing removed');
+}
+
+function copyField(fieldId, btnId) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+    }
+  });
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+init();
+</script>
+</body>
+</html>
