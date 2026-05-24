@@ -978,6 +978,29 @@ async function syncFromSupabase() {
   const { data, error } = await db.from('app_state').select('key,data,updated_at');
   if (error || !data) return;
   for (const row of data) {
+    if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
+      // Merge strategy: done and deleted are sticky — once true locally, never overwrite with false
+      const localData = storeGet(row.key);
+      if (Array.isArray(localData)) {
+        const localMap = new Map(localData.map(g => [g.text, g]));
+        const merged = row.data.map(g => {
+          const local = localMap.get(g.text);
+          return {
+            ...g,
+            done:    g.done    || (local?.done    ?? false),
+            deleted: g.deleted || (local?.deleted ?? false),
+          };
+        });
+        // Add any local items not in remote (e.g. added offline)
+        for (const lg of localData) {
+          if (!row.data.find(g => g.text === lg.text)) merged.push(lg);
+        }
+        localStorage.setItem(row.key, JSON.stringify(merged));
+        if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
+        continue;
+      }
+    }
+    // For non-goals keys, use timestamp comparison
     const localTs = localStorage.getItem('_ts:' + row.key);
     if (localTs && row.updated_at && row.updated_at < localTs) continue;
     localStorage.setItem(row.key, JSON.stringify(row.data));
