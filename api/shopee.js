@@ -1,19 +1,31 @@
-// Vercel serverless function — proxies Shopee's internal API to avoid browser CORS
-module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+// Vercel Edge Function — runs at the nearest PoP to the user (Singapore for SG users)
+// This avoids Shopee blocking requests from Vercel's default US region.
+export const config = { runtime: 'edge' };
 
-  const { url } = req.query;
-  if (!url) return res.status(400).json({ error: 'url parameter is required' });
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+}
 
-  // Extract shopId + itemId
-  const match = url.match(/i\.(\d+)\.(\d+)/);
-  if (!match) {
-    return res.status(400).json({
-      error: 'Could not parse Shopee URL — expected format: shopee.sg/…-i.SHOPID.ITEMID'
+export default async function handler(req) {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' },
     });
   }
+
+  const { searchParams } = new URL(req.url);
+  const url = searchParams.get('url');
+  if (!url) return json({ error: 'url parameter is required' }, 400);
+
+  const match = url.match(/i\.(\d+)\.(\d+)/);
+  if (!match) return json({ error: 'Could not parse Shopee URL — expected: shopee.sg/…-i.SHOPID.ITEMID' }, 400);
 
   const shopId = match[1];
   const itemId = match[2];
@@ -26,12 +38,8 @@ module.exports = async (req, res) => {
     'Accept-Language': 'en-SG,en;q=0.9',
     'x-api-source': 'rn',
     'x-shopee-language': 'en',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
   };
 
-  // Try endpoints in order
   const endpoints = [
     `https://shopee.sg/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`,
     `https://shopee.sg/api/v4/pdp/get_pc?item_id=${itemId}&shop_id=${shopId}`,
@@ -39,52 +47,45 @@ module.exports = async (req, res) => {
   ];
 
   for (const apiUrl of endpoints) {
-    let data;
     try {
-      const response = await fetch(apiUrl, {
-        headers,
-        signal: AbortSignal.timeout(10000),
-      });
-      const text = await response.text();
-      try { data = JSON.parse(text); } catch { continue; }
-    } catch { continue; }
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 8000)
+      );
+      const response = await Promise.race([fetch(apiUrl, { headers }), timeout]);
+      const data = await response.json();
 
-    // v4/item/get and v2 response
-    const item = data?.data || data?.item;
-    if (item && item.name) {
-      const images = (item.images || [])
-        .slice(0, 9)
-        .map(hash => `https://cf.shopee.sg/file/${hash}`);
-      return res.status(200).json({
-        title:       item.name        || '',
-        description: item.description || '',
-        images,
-        price:    item.price     ? item.price     / 100000 : null,
-        priceMax: item.price_max ? item.price_max / 100000 : null,
-        _source: apiUrl,
-      });
-    }
-
-    // v4/pdp/get_pc response shape
-    if (data?.data?.pdp_info) {
-      const pdp  = data.data.pdp_info;
-      const name = pdp.title || pdp.name || '';
-      const desc = pdp.description || '';
-      const imgs = (pdp.images || []).slice(0, 9).map(h => `https://cf.shopee.sg/file/${h}`);
-      if (name) {
-        return res.status(200).json({
-          title: name, description: desc, images: imgs, _source: apiUrl,
+      // v4/item/get and v2 shape
+      const item = data?.data || data?.item;
+      if (item?.name) {
+        const images = (item.images || [])
+          .slice(0, 9)
+          .map(hash => `https://cf.shopee.sg/file/${hash}`);
+        return json({
+          title:       item.name        || '',
+          description: item.description || '',
+          images,
+          price:    item.price     ? item.price     / 100000 : null,
+          priceMax: item.price_max ? item.price_max / 100000 : null,
         });
       }
-    }
 
-    // Log what Shopee actually returned (visible in Vercel function logs)
-    console.log(`[shopee] ${apiUrl} → error=${data?.error} hasData=${!!data?.data}`);
+      // v4/pdp/get_pc shape
+      const pdp = data?.data?.pdp_info;
+      if (pdp?.title || pdp?.name) {
+        return json({
+          title:       pdp.title || pdp.name || '',
+          description: pdp.description || '',
+          images:      (pdp.images || []).slice(0, 9).map(h => `https://cf.shopee.sg/file/${h}`),
+        });
+      }
+    } catch {
+      continue;
+    }
   }
 
-  return res.status(502).json({
-    error: 'Shopee returned no product data — the listing may be unavailable or region-blocked',
+  return json({
+    error: 'Shopee returned no product data — listing may be private or unavailable',
     shopId,
     itemId,
-  });
-};
+  }, 502);
+}
