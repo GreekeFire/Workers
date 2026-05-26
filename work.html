@@ -713,6 +713,7 @@
   <!-- Segmented toggle -->
   <div class="seg-toggle">
     <button class="seg-btn active" id="btn-fix" onclick="switchTab('fix')">FIX</button>
+    <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
     <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
     <button class="seg-btn" id="btn-done" onclick="switchTab('done')">DONE</button>
   </div>
@@ -725,6 +726,11 @@
       <button class="btn-delete" onclick="markDeleted()">Delete</button>
       <button class="btn-done" onclick="markDone()">Done</button>
     </div>
+  </div>
+
+  <!-- NEW view -->
+  <div id="view-new" style="display:none">
+    <div id="new-wrap"></div>
   </div>
 
   <!-- SALES view -->
@@ -794,6 +800,17 @@ let editedCost = null;
 let shopeeInput = '';
 let shopeeCollapsed = false;
 let apiKeyVisible = false;
+
+// NEW tab state
+let newTitle = '';
+let newDesc = '';
+let newShopeeInput = '';
+let newCost = '';
+let newShopeeUrl = '';
+let newCaroUrl = '';
+let newLoading = false;
+let newShopeeCollapsed = false;
+let newApiKeyVisible = false;
 
 // Link overrides
 let linkEditing = false;
@@ -973,16 +990,8 @@ function resetAI() {
   shopeeInput = '';
 }
 
-// AI
-async function generateAI() {
-  const apiKey = localStorage.getItem('alfred_claude_key');
-  if (!apiKey) { apiKeyVisible = true; renderFixView(); return; }
-  const taEl = document.getElementById('shopee-input-ta');
-  if (taEl) shopeeInput = taEl.value;
-  if (!shopeeInput.trim()) { toast('Paste Shopee title + description first'); return; }
-  aiLoading = true;
-  renderFixView();
-  const titleSystem = `You are a Carousell Singapore SEO copywriter.
+// AI — shared constants & helpers
+const TITLE_SYSTEM = `You are a Carousell Singapore SEO copywriter.
 
 TASK: Write a Carousell listing title for the product below. Output the title text only — no JSON, no explanation, no quotes, nothing else.
 
@@ -1003,7 +1012,7 @@ Wireless RGB Keyboard — 98-key compact, triple-mode connectivity  ← sentence
 
 Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
 
-  const descSystem = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
+const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
 
 Rewrite the product description for a Carousell listing. Plain text only inside the JSON — no **bold**, no #headers, no markdown. Use section labels exactly as shown.
 
@@ -1052,59 +1061,78 @@ CHECK BEFORE OUTPUT:
 - No markdown symbols like ** or ##
 - No vague superlatives ("amazing", "best", "incredible")`;
 
-  async function callClaude(system, userContent, maxTokens, retries = 2) {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: maxTokens,
-          temperature: 0.3,
-          system,
-          messages: [{ role: 'user', content: userContent }]
-        })
-      });
-      const data = await resp.json();
-      if (data.error) {
-        const isOverload = data.error.type === 'overloaded_error' || resp.status === 529;
-        if (isOverload && attempt < retries) {
-          await new Promise(r => setTimeout(r, 3000));
-          continue;
-        }
-        throw new Error(data.error.message);
+async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: maxTokens,
+        temperature: 0.3,
+        system,
+        messages: [{ role: 'user', content: userContent }]
+      })
+    });
+    const data = await resp.json();
+    if (data.error) {
+      const isOverload = data.error.type === 'overloaded_error' || resp.status === 529;
+      if (isOverload && attempt < retries) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
       }
-      return data.content?.[0]?.text || '';
+      throw new Error(data.error.message);
     }
+    return data.content?.[0]?.text || '';
   }
+}
 
+async function runAIGenerate(productText) {
+  // Shared generation logic — returns { title, desc } or throws
+  const apiKey = localStorage.getItem('alfred_claude_key');
+  if (!apiKey) throw new Error('NO_KEY');
+  const productContent = `Product info:\n\n${productText}`;
+  const [titleText, descText] = await Promise.all([
+    callClaude(apiKey, TITLE_SYSTEM, productContent, 512),
+    callClaude(apiKey, DESC_SYSTEM, productContent, 1536)
+  ]);
+  let rawTitle = titleText.trim().split('\n')[0].trim();
+  if (rawTitle.length < 200) {
+    const retry = await callClaude(apiKey, TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. You MUST reach at least 200 characters. Add more keyword segments.', 512);
+    rawTitle = retry.trim().split('\n')[0].trim();
+  }
+  if (rawTitle.length > 225) {
+    const parts = rawTitle.split(' | ');
+    while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
+    rawTitle = parts.join(' | ');
+  }
+  const descMatch = descText.match(/\{[\s\S]*\}/);
+  const desc = descMatch ? (JSON.parse(descMatch[0]).description || '') : '';
+  return { title: rawTitle, desc };
+}
+
+// FIX tab AI
+async function generateAI() {
+  const apiKey = localStorage.getItem('alfred_claude_key');
+  if (!apiKey) { apiKeyVisible = true; renderFixView(); return; }
+  const taEl = document.getElementById('shopee-input-ta');
+  if (taEl) shopeeInput = taEl.value;
+  if (!shopeeInput.trim()) { toast('Paste Shopee title + description first'); return; }
+  aiLoading = true;
+  renderFixView();
   let aiError = null;
   try {
-    const productContent = `Product info:\n\n${shopeeInput}`;
-    const [titleText, descText] = await Promise.all([
-      callClaude(titleSystem, productContent, 512),
-      callClaude(descSystem, productContent, 1536)
-    ]);
-    let rawTitle = titleText.trim().split('\n')[0].trim();
-    if (rawTitle.length < 200) {
-      const retry = await callClaude(titleSystem, productContent + '\n\nIMPORTANT: Previous attempt was too short. You MUST reach at least 200 characters. Add more keyword segments.', 512);
-      rawTitle = retry.trim().split('\n')[0].trim();
-    }
-    if (rawTitle.length > 225) {
-      const parts = rawTitle.split(' | ');
-      while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
-      rawTitle = parts.join(' | ');
-    }
-    aiTitle = rawTitle;
-    const descMatch = descText.match(/\{[\s\S]*\}/);
-    if (descMatch) aiDesc = JSON.parse(descMatch[0]).description || '';
+    const { title, desc } = await runAIGenerate(shopeeInput);
+    aiTitle = title;
+    aiDesc = desc;
     if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
   } catch (e) {
+    if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
     aiError = e.message || 'Unknown error';
   }
   if (aiTitle || aiDesc) shopeeCollapsed = true;
@@ -1127,6 +1155,79 @@ function saveApiKey() {
     toast('Key saved');
     generateAI();
   }
+}
+
+// NEW tab AI
+async function generateAINew() {
+  const apiKey = localStorage.getItem('alfred_claude_key');
+  if (!apiKey) { newApiKeyVisible = true; renderNewView(); return; }
+  const taEl = document.getElementById('new-shopee-ta');
+  if (taEl) newShopeeInput = taEl.value;
+  if (!newShopeeInput.trim()) { toast('Paste Shopee title + description first'); return; }
+  newLoading = true;
+  renderNewView();
+  let aiError = null;
+  try {
+    const { title, desc } = await runAIGenerate(newShopeeInput);
+    newTitle = title;
+    newDesc = desc;
+    if (!newTitle && !newDesc) aiError = 'No content returned — try again';
+  } catch (e) {
+    if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
+    aiError = e.message || 'Unknown error';
+  }
+  if (newTitle || newDesc) newShopeeCollapsed = true;
+  newLoading = false;
+  renderNewView();
+  if (aiError) {
+    const errEl = document.createElement('div');
+    errEl.style.cssText = 'background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13px;word-break:break-all';
+    errEl.textContent = 'Error: ' + aiError;
+    document.getElementById('new-wrap')?.prepend(errEl);
+  }
+}
+
+function saveApiKeyNew() {
+  const val = document.getElementById('new-api-key-input').value.trim();
+  if (val) {
+    localStorage.setItem('alfred_claude_key', val);
+    newApiKeyVisible = false;
+    toast('Key saved');
+    generateAINew();
+  }
+}
+
+function saveNewListing() {
+  const titleEl = document.getElementById('new-title-ta');
+  const descEl = document.getElementById('new-desc-ta');
+  const costEl = document.getElementById('new-cost-input');
+  const shopeeEl = document.getElementById('new-shopee-url');
+  const caroEl = document.getElementById('new-caro-url');
+  if (titleEl) newTitle = titleEl.value.trim();
+  if (descEl) newDesc = descEl.value.trim();
+  if (costEl) newCost = costEl.value;
+  if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
+  if (caroEl) newCaroUrl = caroEl.value.trim();
+  if (!newTitle) { toast('Add a title first'); return; }
+  const cost = parseFloat(newCost) || 0;
+  doneData.push({
+    index: null,
+    title: newTitle,
+    description: newDesc,
+    shopeeUrl: newShopeeUrl,
+    carousellUrl: newCaroUrl,
+    sourceCost: cost,
+    sellPrice: calcSell(cost),
+    doneAt: new Date().toISOString()
+  });
+  // Reset new tab
+  newTitle = ''; newDesc = ''; newShopeeInput = ''; newCost = '';
+  newShopeeUrl = ''; newCaroUrl = ''; newShopeeCollapsed = false;
+  saveLocal();
+  pushToSupabase();
+  renderSessionBar();
+  switchTab('done');
+  toast('Saved to Done ✓');
 }
 
 // Sales
@@ -1207,6 +1308,7 @@ function todayRevenue() {
 function renderAll() {
   renderSessionBar();
   if (activeTab === 'fix') renderFixView();
+  else if (activeTab === 'new') renderNewView();
   else if (activeTab === 'sales') renderSalesView();
   else renderDoneView();
 }
@@ -1319,6 +1421,97 @@ function autoResize(el) {
 }
 
 
+function renderNewView() {
+  const wrap = document.getElementById('new-wrap');
+  const apiKey = localStorage.getItem('alfred_claude_key');
+  const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
+  const sell = calcSell(parseFloat(newCost) || 0);
+
+  let html = `<div class="listing-card">`;
+
+  // API key section
+  if (!apiKey || newApiKeyVisible) {
+    html += `<div class="field-header" style="margin-bottom:8px">
+      <span class="field-label">Claude API Key</span>
+      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">✕</button>` : ''}
+    </div>
+    <div class="ai-key-inline">
+      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-…">
+      <button class="copy-btn" onclick="saveApiKeyNew()">Save</button>
+    </div>`;
+  }
+
+  // Shopee textarea
+  html += newShopeeCollapsed
+    ? `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`
+    : `<div class="field-header"><span class="field-label">Shopee Info</span></div>
+       <textarea class="ai-field" id="new-shopee-ta" oninput="newShopeeInput=this.value" placeholder="Paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+
+  if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
+
+  // Generated title + description
+  if (newTitle || newDesc) {
+    html += `<div class="field-header" style="margin-top:12px">
+      <span class="field-label">Title</span>
+      <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
+    </div>
+    <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)">${esc(newTitle)}</textarea>
+    <div class="field-header">
+      <span class="field-label">Description</span>
+      <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
+    </div>
+    <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)">${esc(newDesc)}</textarea>`;
+  }
+
+  // Generate button row
+  html += `<div class="ai-row">
+    <button class="ai-gen-btn" ${newLoading ? 'disabled' : ''} onclick="generateAINew()">${genLabel}</button>
+    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
+  </div>`;
+
+  // Price calculator
+  html += `<div class="price-calc">
+    <div class="pcol">
+      <div class="pcol-label">Cost</div>
+      <div class="pcol-input-wrap">
+        <span class="pcol-currency">$</span>
+        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0)" id="new-cost-input">
+      </div>
+    </div>
+    <div class="parrow">→</div>
+    <div class="pcol">
+      <div class="pcol-label">Sell</div>
+      <div class="sell-display" id="new-sell-display">$${sell}</div>
+    </div>
+  </div>`;
+
+  // URL inputs
+  html += `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
+    <div class="field-header" style="margin-bottom:0"><span class="field-label">Links (optional)</span></div>
+    <input class="link-edit-input" id="new-shopee-url" type="url" placeholder="Shopee URL" value="${esc(newShopeeUrl)}" oninput="newShopeeUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
+    <input class="link-edit-input" id="new-caro-url" type="url" placeholder="Carousell URL" value="${esc(newCaroUrl)}" oninput="newCaroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
+  </div>`;
+
+  html += `</div>`; // close listing-card
+
+  // Save + Clear row
+  html += `<div class="action-row" style="margin-top:16px">
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;renderNewView()">Clear</button>
+    <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
+  </div>`;
+
+  wrap.innerHTML = html;
+
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('new-title-ta');
+    if (ta) autoResize(ta);
+    const da = document.getElementById('new-desc-ta');
+    if (da) autoResize(da);
+    const sa = document.getElementById('new-shopee-ta');
+    if (sa) autoResize(sa);
+  });
+}
+
 function renderSalesView() {
   document.getElementById('revenue-display').textContent = '$' + todayRevenue().toFixed(2);
   const list = document.getElementById('sales-list');
@@ -1337,13 +1530,16 @@ function renderSalesView() {
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('view-fix').style.display = tab === 'fix' ? 'block' : 'none';
+  document.getElementById('view-fix').style.display   = tab === 'fix'   ? 'block' : 'none';
+  document.getElementById('view-new').style.display   = tab === 'new'   ? 'block' : 'none';
   document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
-  document.getElementById('view-done').style.display = tab === 'done' ? 'block' : 'none';
-  document.getElementById('btn-fix').classList.toggle('active', tab === 'fix');
+  document.getElementById('view-done').style.display  = tab === 'done'  ? 'block' : 'none';
+  document.getElementById('btn-fix').classList.toggle('active',   tab === 'fix');
+  document.getElementById('btn-new').classList.toggle('active',   tab === 'new');
   document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
-  document.getElementById('btn-done').classList.toggle('active', tab === 'done');
+  document.getElementById('btn-done').classList.toggle('active',  tab === 'done');
   if (tab === 'fix') renderFixView();
+  else if (tab === 'new') renderNewView();
   else if (tab === 'sales') renderSalesView();
   else renderDoneView();
 }
@@ -1361,8 +1557,8 @@ function renderDoneView() {
 
   list.innerHTML = filtered.map(d => {
     const ov = urlOverrides[d.index] || {};
-    const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (LISTINGS[d.index]?.[1] || '');
-    const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (LISTINGS[d.index]?.[2] || '');
+    const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (d.shopeeUrl || LISTINGS[d.index]?.[1] || '');
+    const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (d.carousellUrl || LISTINGS[d.index]?.[2] || '');
     const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
       ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
       ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
