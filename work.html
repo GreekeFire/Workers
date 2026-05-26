@@ -838,6 +838,8 @@ let editedCost = null;
 let shopeeInput = '';
 let shopeeCollapsed = false;
 let apiKeyVisible = false;
+let fixShopeeImages = [];
+let fixShopeeFetching = false;
 
 // Undo / copy state
 let undoTimer = null;
@@ -1067,6 +1069,8 @@ function resetAI() {
   linkEditing = false;
   shopeeCollapsed = false;
   shopeeInput = '';
+  fixShopeeImages = [];
+  fixShopeeFetching = false;
 }
 
 // AI — shared constants & helpers
@@ -1270,6 +1274,31 @@ async function fetchShopeeData() {
   renderNewView();
   requestAnimationFrame(() => {
     const ta = document.getElementById('new-shopee-ta');
+    if (ta) autoResize(ta);
+  });
+}
+
+// FIX tab — fetch from Shopee URL
+async function fetchShopeeDataFix() {
+  const urlEl = document.getElementById('fix-shopee-fetch-url');
+  const url   = urlEl?.value.trim();
+  if (!url) { toast('Paste a Shopee URL first'); return; }
+  fixShopeeFetching = true;
+  renderFixView();
+  try {
+    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    shopeeInput      = [data.title, data.description].filter(Boolean).join('\n\n');
+    fixShopeeImages  = data.images || [];
+    toast('Fetched ✓');
+  } catch(e) {
+    toast('Failed — ' + (e.message || 'unknown error'));
+  }
+  fixShopeeFetching = false;
+  renderFixView();
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('shopee-input-ta');
     if (ta) autoResize(ta);
   });
 }
@@ -1514,7 +1543,22 @@ function renderFixView() {
         </div>` : ''}
       ${shopeeCollapsed
         ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content ▼</div>`
-        : `<textarea class="ai-field" id="shopee-input-ta" oninput="shopeeInput=this.value;autoResize(this)" onchange="shopeeInput=this.value;autoResize(this)" placeholder="Paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
+        : `<div class="shopee-fetch-row">
+            <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
+              placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
+              oninput="" style="flex:1;font-size:13px;padding:9px 12px">
+            <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
+              ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+            </button>
+          </div>
+          ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
+            `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
+              <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+            </a>`).join('')}</div>` : ''}
+          <textarea class="ai-field" id="shopee-input-ta"
+            oninput="shopeeInput=this.value;autoResize(this)"
+            onchange="shopeeInput=this.value;autoResize(this)"
+            placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
       }
       ${loadingMsg}
       ${descField}
