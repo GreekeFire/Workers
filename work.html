@@ -258,6 +258,27 @@
     margin-bottom: 8px;
   }
   .shopee-collapsed:hover { color: var(--text-secondary); }
+  .shopee-fetch-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .shopee-fetch-btn {
+    white-space: nowrap; padding: 9px 14px; flex-shrink: 0;
+    border-radius: 8px; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); color: var(--text-primary);
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .shopee-fetch-btn:hover    { background: rgba(255,255,255,0.11); }
+  .shopee-fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .shopee-img-grid {
+    display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .shopee-img-grid::-webkit-scrollbar { display: none; }
+  .shopee-img-thumb {
+    flex-shrink: 0; width: 76px; height: 76px; border-radius: 9px; overflow: hidden;
+    display: block; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+  }
+  .shopee-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .copy-btn {
     background: none;
     border: 1px solid var(--card-border);
@@ -832,6 +853,8 @@ let newShopeeUrl = '';
 let newCaroUrl = '';
 let newLoading = false;
 let newShopeeCollapsed = false;
+let newShopeeImages = [];
+let newShopeeFetching = false;
 let newApiKeyVisible = false;
 
 // Link overrides
@@ -1223,6 +1246,34 @@ function saveApiKey() {
   }
 }
 
+// NEW tab — fetch from Shopee URL
+async function fetchShopeeData() {
+  const urlEl = document.getElementById('new-shopee-fetch-url');
+  const url   = (urlEl?.value || newShopeeUrl).trim();
+  if (!url) { toast('Paste a Shopee URL first'); return; }
+  newShopeeUrl      = url;
+  newShopeeFetching = true;
+  renderNewView();
+  try {
+    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    newShopeeInput  = [data.title, data.description].filter(Boolean).join('\n\n');
+    newShopeeImages = data.images || [];
+    // Pre-fill cost if Shopee price is available (as a reference)
+    if (data.price && !newCost) newCost = data.price.toFixed(2);
+    toast('Fetched ✓');
+  } catch(e) {
+    toast('Failed — ' + (e.message || 'unknown error'));
+  }
+  newShopeeFetching = false;
+  renderNewView();
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('new-shopee-ta');
+    if (ta) autoResize(ta);
+  });
+}
+
 // NEW tab AI
 async function generateAINew() {
   const apiKey = localStorage.getItem('alfred_claude_key');
@@ -1264,16 +1315,16 @@ function saveApiKeyNew() {
 }
 
 function saveNewListing() {
-  const titleEl = document.getElementById('new-title-ta');
-  const costEl = document.getElementById('new-cost-input');
-  const shopeeEl = document.getElementById('new-shopee-url');
-  const caroEl = document.getElementById('new-caro-url');
-  const descEl = document.getElementById('new-desc-ta');
-  if (titleEl) newTitle = titleEl.value.trim();
-  if (descEl) newDesc = descEl.value.trim();
-  if (costEl) newCost = costEl.value;
+  const titleEl  = document.getElementById('new-title-ta');
+  const costEl   = document.getElementById('new-cost-input');
+  const shopeeEl = document.getElementById('new-shopee-fetch-url');
+  const caroEl   = document.getElementById('new-caro-url');
+  const descEl   = document.getElementById('new-desc-ta');
+  if (titleEl)  newTitle     = titleEl.value.trim();
+  if (descEl)   newDesc      = descEl.value.trim();
+  if (costEl)   newCost      = costEl.value;
   if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
-  if (caroEl) newCaroUrl = caroEl.value.trim();
+  if (caroEl)   newCaroUrl   = caroEl.value.trim();
   if (!newTitle) { toast('Add a title first'); return; }
   const cost = parseFloat(newCost) || 0;
   doneData.push({
@@ -1289,6 +1340,7 @@ function saveNewListing() {
   // Reset new tab
   newTitle = ''; newDesc = ''; newShopeeInput = ''; newCost = '';
   newShopeeUrl = ''; newCaroUrl = ''; newShopeeCollapsed = false;
+  newShopeeImages = []; newShopeeFetching = false;
   saveLocal();
   pushToSupabase();
   renderSessionBar();
@@ -1532,11 +1584,31 @@ function renderNewView() {
     </div>`;
   }
 
-  // Shopee textarea
-  html += newShopeeCollapsed
-    ? `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`
-    : `<div class="field-header"><span class="field-label">Shopee Info</span></div>
-       <textarea class="ai-field" id="new-shopee-ta" oninput="newShopeeInput=this.value;autoResize(this)" placeholder="Paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+  // Shopee section — URL fetch or manual paste
+  if (newShopeeCollapsed) {
+    html += `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`;
+  } else {
+    html += `<div class="field-header"><span class="field-label">Shopee</span></div>
+      <div class="shopee-fetch-row">
+        <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
+          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
+          oninput="newShopeeUrl=this.value"
+          style="flex:1;font-size:13px;padding:9px 12px">
+        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
+          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+        </button>
+      </div>`;
+    if (newShopeeImages.length > 0) {
+      html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
+        `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
+          <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+        </a>`
+      ).join('')}</div>`;
+    }
+    html += `<textarea class="ai-field" id="new-shopee-ta"
+      oninput="newShopeeInput=this.value;autoResize(this)"
+      placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+  }
 
   if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
 
@@ -1576,8 +1648,7 @@ function renderNewView() {
 
   // URL inputs
   html += `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
-    <div class="field-header" style="margin-bottom:0"><span class="field-label">Links (optional)</span></div>
-    <input class="link-edit-input" id="new-shopee-url" type="url" placeholder="Shopee URL" value="${esc(newShopeeUrl)}" oninput="newShopeeUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
+    <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
     <input class="link-edit-input" id="new-caro-url" type="url" placeholder="Carousell URL" value="${esc(newCaroUrl)}" oninput="newCaroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
   </div>`;
 
@@ -1585,7 +1656,7 @@ function renderNewView() {
 
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
-    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;renderNewView()">Clear</button>
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;renderNewView()">Clear</button>
     <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 
