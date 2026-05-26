@@ -1168,8 +1168,9 @@ async function generateAINew() {
   renderNewView();
   let aiError = null;
   try {
-    const { title } = await runAIGenerate(newShopeeInput, { titleOnly: true });
+    const { title, desc } = await runAIGenerate(newShopeeInput);
     newTitle = title;
+    newDesc = desc;
     if (!newTitle && !newDesc) aiError = 'No content returned — try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
@@ -1201,7 +1202,9 @@ function saveNewListing() {
   const costEl = document.getElementById('new-cost-input');
   const shopeeEl = document.getElementById('new-shopee-url');
   const caroEl = document.getElementById('new-caro-url');
+  const descEl = document.getElementById('new-desc-ta');
   if (titleEl) newTitle = titleEl.value.trim();
+  if (descEl) newDesc = descEl.value.trim();
   if (costEl) newCost = costEl.value;
   if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
   if (caroEl) newCaroUrl = caroEl.value.trim();
@@ -1451,7 +1454,12 @@ function renderNewView() {
     <span class="field-label">Title</span>
     <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
   </div>
-  <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)" placeholder="Type or generate a title…">${esc(newTitle)}</textarea>`;
+  <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)" placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
+  <div class="field-header">
+    <span class="field-label">Description</span>
+    <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
+  </div>
+  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
 
   // Generate button row
   html += `<div class="ai-row">
@@ -1486,7 +1494,7 @@ function renderNewView() {
 
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
-    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;renderNewView()">Clear</button>
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;renderNewView()">Clear</button>
     <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 
@@ -1495,6 +1503,8 @@ function renderNewView() {
   requestAnimationFrame(() => {
     const ta = document.getElementById('new-title-ta');
     if (ta) autoResize(ta);
+    const da = document.getElementById('new-desc-ta');
+    if (da) autoResize(da);
     const sa = document.getElementById('new-shopee-ta');
     if (sa) autoResize(sa);
   });
