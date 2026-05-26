@@ -1199,12 +1199,10 @@ function saveApiKeyNew() {
 
 function saveNewListing() {
   const titleEl = document.getElementById('new-title-ta');
-  const descEl = document.getElementById('new-desc-ta');
   const costEl = document.getElementById('new-cost-input');
   const shopeeEl = document.getElementById('new-shopee-url');
   const caroEl = document.getElementById('new-caro-url');
   if (titleEl) newTitle = titleEl.value.trim();
-  if (descEl) newDesc = descEl.value.trim();
   if (costEl) newCost = costEl.value;
   if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
   if (caroEl) newCaroUrl = caroEl.value.trim();
@@ -1449,17 +1447,12 @@ function renderNewView() {
 
   if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
 
-  // Title + description (always visible)
+  // Title (always visible)
   html += `<div class="field-header" style="margin-top:12px">
     <span class="field-label">Title</span>
     <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
   </div>
-  <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)" placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
-  <div class="field-header">
-    <span class="field-label">Description</span>
-    <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
-  </div>
-  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Type or generate a description…">${esc(newDesc)}</textarea>`;
+  <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)" placeholder="Type or generate a title…">${esc(newTitle)}</textarea>`;
 
   // Generate button row
   html += `<div class="ai-row">
@@ -1503,8 +1496,6 @@ function renderNewView() {
   requestAnimationFrame(() => {
     const ta = document.getElementById('new-title-ta');
     if (ta) autoResize(ta);
-    const da = document.getElementById('new-desc-ta');
-    if (da) autoResize(da);
     const sa = document.getElementById('new-shopee-ta');
     if (sa) autoResize(sa);
   });
