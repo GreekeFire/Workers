@@ -131,8 +131,9 @@
     transition: all 0.15s;
   }
   .seg-btn.active {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.10);
     color: var(--text-primary);
+    box-shadow: inset 0 -2px 0 var(--coral);
   }
 
   /* Progress line */
@@ -167,7 +168,6 @@
     font-family: inherit;
     margin-bottom: 16px;
     display: block;
-    width: 100%;
   }
   .title-input:focus { outline: none; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
   .title-input { overflow: hidden; }
@@ -672,7 +672,23 @@
     z-index: 100;
     white-space: nowrap;
   }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+
+  /* Sync status */
+  .sync-status {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-align: right;
+    padding: 4px 2px 8px;
+    min-height: 20px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    color: var(--text-tertiary);
+  }
+  .sync-status.visible { opacity: 1; }
+  .sync-status.synced { color: var(--success); }
+  .sync-status.error { color: var(--danger); }
 
   /* tab bar from shared.css */
 
@@ -709,6 +725,7 @@
       <span class="sess-val coral" id="cnt-revenue">$0</span>
     </div>
   </div>
+  <div class="sync-status" id="sync-status"></div>
 
   <!-- Segmented toggle -->
   <div class="seg-toggle">
@@ -800,6 +817,11 @@ let editedCost = null;
 let shopeeInput = '';
 let shopeeCollapsed = false;
 let apiKeyVisible = false;
+
+// Undo / copy state
+let undoTimer = null;
+let pendingDeleteUndo = null;
+const copyTimers = {};
 
 // NEW tab state
 let newTitle = '';
@@ -899,6 +921,7 @@ function saveLocal() {
 async function pushToSupabase() {
   const now = new Date().toISOString();
   const today = new Date().toISOString().slice(0, 10);
+  setSyncStatus('syncing');
   Promise.all([
     sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
       currentIndex,
@@ -910,7 +933,24 @@ async function pushToSupabase() {
     }, updated_at: now }),
     sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
     sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
-  ]).catch(e => console.warn('Supabase push error:', e));
+  ]).then(() => setSyncStatus('synced')).catch(e => { console.warn('Supabase push error:', e); setSyncStatus('error'); });
+}
+
+let syncStatusTimer = null;
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  clearTimeout(syncStatusTimer);
+  el.className = 'sync-status visible ' + state;
+  if (state === 'syncing') {
+    el.textContent = '⟳ Syncing…';
+  } else if (state === 'synced') {
+    el.textContent = '✓ Synced';
+    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
+  } else if (state === 'error') {
+    el.textContent = '✗ Sync failed';
+    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
+  }
 }
 
 // Queue
@@ -954,9 +994,25 @@ function markDeleted() {
   resetAI();
   currentIndex = findNext(idx + 1);
   saveLocal();
-  pushToSupabase();
   renderAll();
-  toast('Deleted');
+  // Hold Supabase push for 4s so user can undo
+  pendingDeleteUndo = { idx };
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => { pendingDeleteUndo = null; pushToSupabase(); }, 4000);
+  toastWithUndo('Deleted', undoDelete);
+}
+
+function undoDelete() {
+  if (!pendingDeleteUndo) return;
+  const { idx } = pendingDeleteUndo;
+  pendingDeleteUndo = null;
+  clearTimeout(undoTimer);
+  deletedSet.delete(idx);
+  deletedTodayCount = Math.max(0, deletedTodayCount - 1);
+  currentIndex = idx;
+  saveLocal();
+  renderAll();
+  toast('Undo ✓');
 }
 
 function saveDoneLinkEdits(doneIdx, listingIndex) {
@@ -1063,23 +1119,33 @@ CHECK BEFORE OUTPUT:
 
 async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: maxTokens,
-        temperature: 0.3,
-        system,
-        messages: [{ role: 'user', content: userContent }]
-      })
-    });
-    const data = await resp.json();
+    let resp, data;
+    try {
+      resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: maxTokens,
+          temperature: 0.3,
+          system,
+          messages: [{ role: 'user', content: userContent }]
+        })
+      });
+      data = await resp.json();
+    } catch (e) {
+      // Network / parse error — retry with backoff
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
     if (data.error) {
       const isOverload = data.error.type === 'overloaded_error' || resp.status === 529;
       if (isOverload && attempt < retries) {
@@ -1314,9 +1380,9 @@ function renderAll() {
 }
 
 function renderSessionBar() {
-  document.getElementById('cnt-done').textContent = doneData.length;
+  document.getElementById('cnt-done').textContent = doneTodayCount;
   document.getElementById('cnt-deleted').textContent = deletedTodayCount;
-  document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(0);
+  document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
 }
 
 function renderFixView() {
@@ -1396,7 +1462,7 @@ function renderFixView() {
         </div>` : ''}
       ${shopeeCollapsed
         ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content ▼</div>`
-        : `<textarea class="ai-field" id="shopee-input-ta" oninput="shopeeInput=this.value" onchange="shopeeInput=this.value" placeholder="Paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
+        : `<textarea class="ai-field" id="shopee-input-ta" oninput="shopeeInput=this.value;autoResize(this)" onchange="shopeeInput=this.value;autoResize(this)" placeholder="Paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
       }
       ${loadingMsg}
       ${descField}
@@ -1413,6 +1479,7 @@ function renderFixView() {
     const sa = document.getElementById('shopee-input-ta');
     if (sa) autoResize(sa);
   });
+  addSwipeGestures();
 }
 
 function autoResize(el) {
@@ -1420,6 +1487,30 @@ function autoResize(el) {
   el.style.height = el.scrollHeight + 'px';
 }
 
+function addSwipeGestures() {
+  const card = document.querySelector('#listing-wrap .listing-card');
+  if (!card) return;
+  let startX = 0, startY = 0, swiping = false;
+  card.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = true;
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (!swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) swiping = false; // cancel if mostly vertical
+  }, { passive: true });
+  card.addEventListener('touchend', e => {
+    if (!swiping) return;
+    swiping = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+    if (dx > 0) markDone(); else markDeleted();
+  }, { passive: true });
+}
 
 function renderNewView() {
   const wrap = document.getElementById('new-wrap');
@@ -1445,7 +1536,7 @@ function renderNewView() {
   html += newShopeeCollapsed
     ? `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`
     : `<div class="field-header"><span class="field-label">Shopee Info</span></div>
-       <textarea class="ai-field" id="new-shopee-ta" oninput="newShopeeInput=this.value" placeholder="Paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+       <textarea class="ai-field" id="new-shopee-ta" oninput="newShopeeInput=this.value;autoResize(this)" placeholder="Paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
 
   if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
 
@@ -1637,7 +1728,12 @@ function copyField(fieldId, btnId) {
     if (btn) {
       btn.textContent = 'Copied';
       btn.classList.add('copied');
-      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+      clearTimeout(copyTimers[btnId]);
+      copyTimers[btnId] = setTimeout(() => {
+        const b = document.getElementById(btnId);
+        if (b) { b.textContent = 'Copy'; b.classList.remove('copied'); }
+        delete copyTimers[btnId];
+      }, 1500);
     }
   });
 }
@@ -1655,6 +1751,24 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
 }
+
+function toastWithUndo(msg, undoFn) {
+  window._toastUndoFn = undoFn;
+  const el = document.getElementById('toast');
+  el.innerHTML = esc(msg) + '  <button onclick="window._toastUndoFn&&window._toastUndoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); window._toastUndoFn = null; }, 4000);
+}
+
+// Keyboard shortcuts for FIX tab (desktop)
+document.addEventListener('keydown', e => {
+  if (activeTab !== 'fix') return;
+  if (e.target.matches('input, textarea, select')) return;
+  if (currentIndex >= LISTINGS.length) return;
+  if (e.key === 'd' || e.key === 'D') { e.preventDefault(); markDone(); }
+  if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') { e.preventDefault(); markDeleted(); }
+});
 
 init();
 </script>
