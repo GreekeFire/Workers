@@ -1092,15 +1092,13 @@ async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
   }
 }
 
-async function runAIGenerate(productText) {
-  // Shared generation logic — returns { title, desc } or throws
+async function runAIGenerate(productText, { titleOnly = false } = {}) {
   const apiKey = localStorage.getItem('alfred_claude_key');
   if (!apiKey) throw new Error('NO_KEY');
   const productContent = `Product info:\n\n${productText}`;
-  const [titleText, descText] = await Promise.all([
-    callClaude(apiKey, TITLE_SYSTEM, productContent, 512),
-    callClaude(apiKey, DESC_SYSTEM, productContent, 1536)
-  ]);
+  const titlePromise = callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
+  const descPromise = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536);
+  let titleText = await titlePromise;
   let rawTitle = titleText.trim().split('\n')[0].trim();
   if (rawTitle.length < 200) {
     const retry = await callClaude(apiKey, TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. You MUST reach at least 200 characters. Add more keyword segments.', 512);
@@ -1111,6 +1109,8 @@ async function runAIGenerate(productText) {
     while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
     rawTitle = parts.join(' | ');
   }
+  if (titleOnly) return { title: rawTitle, desc: '' };
+  const descText = await descPromise;
   const descMatch = descText.match(/\{[\s\S]*\}/);
   const desc = descMatch ? (JSON.parse(descMatch[0]).description || '') : '';
   return { title: rawTitle, desc };
@@ -1168,9 +1168,8 @@ async function generateAINew() {
   renderNewView();
   let aiError = null;
   try {
-    const { title, desc } = await runAIGenerate(newShopeeInput);
+    const { title } = await runAIGenerate(newShopeeInput, { titleOnly: true });
     newTitle = title;
-    newDesc = desc;
     if (!newTitle && !newDesc) aiError = 'No content returned — try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
