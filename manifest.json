@@ -1,6 +1,6 @@
 {
-  "name": "My Dashboard",
-  "short_name": "Dashboard",
+  "name": "Second",
+  "short_name": "Second",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#050506",
