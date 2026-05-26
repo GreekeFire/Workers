@@ -1,5 +1,5 @@
-// Vercel Edge Function — runs at the nearest PoP to the user (Singapore for SG users)
-// This avoids Shopee blocking requests from Vercel's default US region.
+// Vercel Edge Function — scrapes Shopee product page HTML for og: meta tags
+// No auth needed; og: tags are embedded for SEO on every public listing.
 export const config = { runtime: 'edge' };
 
 function json(data, status = 200) {
@@ -10,6 +10,45 @@ function json(data, status = 200) {
       'Access-Control-Allow-Origin': '*',
     },
   });
+}
+
+function extractMeta(html, property) {
+  // Handles both property= and name= variants
+  const re = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`,
+    'i'
+  );
+  const re2 = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`,
+    'i'
+  );
+  return (html.match(re) || html.match(re2) || [])[1] || '';
+}
+
+function extractAllImages(html) {
+  // og:image only gives one image; also look for Shopee CDN image hashes in the HTML
+  const images = new Set();
+
+  // og:image tags
+  const ogRe = /<meta[^>]+(?:property)=["']og:image(?::\w+)?["'][^>]+content=["']([^"']+)["']/gi;
+  let m;
+  while ((m = ogRe.exec(html)) !== null) {
+    if (m[1] && m[1].includes('shopee')) images.add(m[1].split('?')[0]);
+  }
+
+  // Shopee CDN hashes embedded in JSON/scripts: "cf.shopee.sg/file/HASH"
+  const cdnRe = /https?:\/\/cf\.shopee\.sg\/file\/([a-f0-9]{32,})/gi;
+  while ((m = cdnRe.exec(html)) !== null) {
+    images.add(`https://cf.shopee.sg/file/${m[1]}`);
+  }
+
+  // Also try sg-live CDN
+  const cdn2Re = /https?:\/\/down-[a-z]+\.img\.susercontent\.com\/file\/([a-z0-9_.-]+)/gi;
+  while ((m = cdn2Re.exec(html)) !== null) {
+    images.add(m[0].split('?')[0]);
+  }
+
+  return [...images].slice(0, 9);
 }
 
 export default async function handler(req) {
@@ -24,68 +63,58 @@ export default async function handler(req) {
   const url = searchParams.get('url');
   if (!url) return json({ error: 'url parameter is required' }, 400);
 
-  const match = url.match(/i\.(\d+)\.(\d+)/);
-  if (!match) return json({ error: 'Could not parse Shopee URL — expected: shopee.sg/…-i.SHOPID.ITEMID' }, 400);
+  if (!url.includes('shopee.sg')) return json({ error: 'Only shopee.sg URLs are supported' }, 400);
 
-  const shopId = match[1];
-  const itemId = match[2];
+  // Clean the URL — strip query params which can confuse Shopee's SSR
+  const cleanUrl = url.split('?')[0];
 
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-    'Referer': `https://shopee.sg/i.${shopId}.${itemId}`,
-    'Origin': 'https://shopee.sg',
-    'Accept': 'application/json',
-    'Accept-Language': 'en-SG,en;q=0.9',
-    'x-api-source': 'rn',
-    'x-shopee-language': 'en',
-  };
+  try {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timed out')), 12000)
+    );
 
-  const endpoints = [
-    `https://shopee.sg/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`,
-    `https://shopee.sg/api/v4/pdp/get_pc?item_id=${itemId}&shop_id=${shopId}`,
-    `https://shopee.sg/api/v2/item/get?itemid=${itemId}&shopid=${shopId}`,
-  ];
+    const fetchPage = fetch(cleanUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-SG,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+      },
+      redirect: 'follow',
+    });
 
-  for (const apiUrl of endpoints) {
-    try {
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 8000)
-      );
-      const response = await Promise.race([fetch(apiUrl, { headers }), timeout]);
-      const data = await response.json();
+    const response = await Promise.race([fetchPage, timeout]);
 
-      // v4/item/get and v2 shape
-      const item = data?.data || data?.item;
-      if (item?.name) {
-        const images = (item.images || [])
-          .slice(0, 9)
-          .map(hash => `https://cf.shopee.sg/file/${hash}`);
-        return json({
-          title:       item.name        || '',
-          description: item.description || '',
-          images,
-          price:    item.price     ? item.price     / 100000 : null,
-          priceMax: item.price_max ? item.price_max / 100000 : null,
-        });
-      }
-
-      // v4/pdp/get_pc shape
-      const pdp = data?.data?.pdp_info;
-      if (pdp?.title || pdp?.name) {
-        return json({
-          title:       pdp.title || pdp.name || '',
-          description: pdp.description || '',
-          images:      (pdp.images || []).slice(0, 9).map(h => `https://cf.shopee.sg/file/${h}`),
-        });
-      }
-    } catch {
-      continue;
+    if (!response.ok) {
+      return json({ error: `Page returned HTTP ${response.status}` }, 502);
     }
-  }
 
-  return json({
-    error: 'Shopee returned no product data — listing may be private or unavailable',
-    shopId,
-    itemId,
-  }, 502);
+    const html = await response.text();
+
+    const title       = extractMeta(html, 'og:title');
+    const description = extractMeta(html, 'og:description');
+    const images      = extractAllImages(html);
+
+    if (!title && !description && images.length === 0) {
+      return json({
+        error: 'Could not extract product data — Shopee may have served a bot-challenge page',
+      }, 502);
+    }
+
+    // Try to extract price from JSON-LD
+    let price = null;
+    const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+    if (ldMatch) {
+      try {
+        const ld = JSON.parse(ldMatch[1]);
+        price = ld?.offers?.price ?? ld?.offers?.[0]?.price ?? null;
+      } catch { /* ignore */ }
+    }
+
+    return json({ title, description, images, price });
+
+  } catch (err) {
+    return json({ error: err.message || 'Failed to fetch Shopee page' }, 502);
+  }
 }
