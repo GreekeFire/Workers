@@ -957,13 +957,23 @@ const C = 2 * Math.PI * 52;
 function storeGet(key) {
   try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
 }
+
+// Pending write queue — survives page reloads so failed writes get retried
+function getPending() {
+  try { return JSON.parse(localStorage.getItem('_pending')) || {}; } catch { return {}; }
+}
+function setPending(p) { localStorage.setItem('_pending', JSON.stringify(p)); }
+
 function storeSet(key, value) {
   const jsonStr = JSON.stringify(value);
   const ts = new Date().toISOString();
   localStorage.setItem(key, jsonStr);
   localStorage.setItem('_ts:' + key, ts);
   lastSyncedJson[key] = jsonStr;
-  db.from('app_state').upsert({ key, data: value, updated_at: ts }, { onConflict: 'key' }).then();
+  // Mark as pending until Supabase confirms
+  const p = getPending(); p[key] = ts; setPending(p);
+  db.from('app_state').upsert({ key, data: value, updated_at: ts }, { onConflict: 'key' })
+    .then(() => { const p = getPending(); delete p[key]; setPending(p); });
   if (key.startsWith('goals:')) {
     window.dispatchEvent(new CustomEvent('goals-changed'));
   }
@@ -971,36 +981,49 @@ function storeSet(key, value) {
 function storeDelete(key) {
   localStorage.removeItem(key);
   localStorage.removeItem('_ts:' + key);
+  const p = getPending(); delete p[key]; setPending(p);
   db.from('app_state').delete().eq('key', key).then();
 }
 
 async function syncFromSupabase() {
+  // Retry any writes that failed last session
+  const pending = getPending();
+  for (const key of Object.keys(pending)) {
+    const data = storeGet(key);
+    const ts   = localStorage.getItem('_ts:' + key);
+    if (data !== null) {
+      db.from('app_state').upsert({ key, data, updated_at: ts }, { onConflict: 'key' })
+        .then(() => { const p = getPending(); delete p[key]; setPending(p); });
+    }
+  }
+
   const { data, error } = await db.from('app_state').select('key,data,updated_at');
   if (error || !data) return;
   for (const row of data) {
+    // Never overwrite a key we have a pending write for
+    if (pending[row.key]) continue;
+
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
-      // Merge strategy: done and deleted are sticky — once true locally, never overwrite with false
+      // Merge: done and deleted are sticky — once true they can never be reset by sync
       const localData = storeGet(row.key);
-      if (Array.isArray(localData)) {
-        const localMap = new Map(localData.map(g => [g.text, g]));
-        const merged = row.data.map(g => {
-          const local = localMap.get(g.text);
-          return {
-            ...g,
-            done:    g.done    || (local?.done    ?? false),
-            deleted: g.deleted || (local?.deleted ?? false),
-          };
-        });
-        // Add any local items not in remote (e.g. added offline)
-        for (const lg of localData) {
-          if (!row.data.find(g => g.text === lg.text)) merged.push(lg);
-        }
-        localStorage.setItem(row.key, JSON.stringify(merged));
-        if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
-        continue;
+      const base = Array.isArray(localData) ? localData : [];
+      const localMap = new Map(base.map(g => [g.text, g]));
+      const merged = row.data.map(g => {
+        const local = localMap.get(g.text);
+        return { ...g,
+          done:    g.done    || (local?.done    ?? false),
+          deleted: g.deleted || (local?.deleted ?? false),
+        };
+      });
+      // Keep any local items not yet in remote
+      for (const lg of base) {
+        if (!row.data.find(g => g.text === lg.text)) merged.push(lg);
       }
+      localStorage.setItem(row.key, JSON.stringify(merged));
+      if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
+      continue;
     }
-    // For non-goals keys, use timestamp comparison
+
     const localTs = localStorage.getItem('_ts:' + row.key);
     if (localTs && row.updated_at && row.updated_at < localTs) continue;
     localStorage.setItem(row.key, JSON.stringify(row.data));
