@@ -1449,19 +1449,17 @@ function renderNewView() {
 
   if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
 
-  // Generated title + description
-  if (newTitle || newDesc) {
-    html += `<div class="field-header" style="margin-top:12px">
-      <span class="field-label">Title</span>
-      <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
-    </div>
-    <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)">${esc(newTitle)}</textarea>
-    <div class="field-header">
-      <span class="field-label">Description</span>
-      <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
-    </div>
-    <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)">${esc(newDesc)}</textarea>`;
-  }
+  // Title + description (always visible)
+  html += `<div class="field-header" style="margin-top:12px">
+    <span class="field-label">Title</span>
+    <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
+  </div>
+  <textarea class="title-input" rows="1" id="new-title-ta" oninput="newTitle=this.value;autoResize(this)" placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
+  <div class="field-header">
+    <span class="field-label">Description</span>
+    <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
+  </div>
+  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Type or generate a description…">${esc(newDesc)}</textarea>`;
 
   // Generate button row
   html += `<div class="ai-row">
