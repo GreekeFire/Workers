@@ -1,10 +1,5 @@
 {
   "rewrites": [
     { "source": "/", "destination": "/dashboard.html" }
-  ],
-  "functions": {
-    "api/shopee.js": {
-      "regions": ["sin1", "hnd1", "syd1"]
-    }
-  }
+  ]
 }
