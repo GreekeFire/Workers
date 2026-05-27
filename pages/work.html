@@ -842,6 +842,8 @@ let newShopeeCollapsed = false;
 let newShopeeImages = [];
 let newShopeeFetching = false;
 let newApiKeyVisible = false;
+let newShopeePrice = null;   // scraped price hint (not auto-filled)
+let fixShopeePrice = null;   // scraped price hint for FIX tab
 
 // Link overrides
 let linkEditing = false;
@@ -1276,8 +1278,7 @@ async function fetchShopeeData() {
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
     newShopeeInput  = [data.title, data.description].filter(Boolean).join('\n\n');
     newShopeeImages = data.images || [];
-    // Pre-fill cost if Shopee price is available (as a reference)
-    if (data.price && !newCost) newCost = data.price.toFixed(2);
+    newShopeePrice  = data.price || null;
     toast('Fetched ✓');
   } catch(e) {
     toast('Failed — ' + (e.message || 'unknown error'));
@@ -1303,6 +1304,7 @@ async function fetchShopeeDataFix() {
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
     shopeeInput      = [data.title, data.description].filter(Boolean).join('\n\n');
     fixShopeeImages  = data.images || [];
+    fixShopeePrice   = data.price || null;
     toast('Fetched ✓');
   } catch(e) {
     toast('Failed — ' + (e.message || 'unknown error'));
@@ -1540,7 +1542,7 @@ function renderFixView() {
     </div>
     <div class="price-calc">
       <div class="pcol">
-        <div class="pcol-label">Cost</div>
+        <div class="pcol-label">Cost${fixShopeePrice ? ` <span style="color:var(--text-tertiary);font-weight:500;letter-spacing:0">(Shopee $${fixShopeePrice.toFixed(2)})</span>` : ''}</div>
         <div class="pcol-input-wrap">
           <span class="pcol-currency">$</span>
           <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(cost))}" oninput="onCostChange(this.value)" id="cost-input">
@@ -1716,7 +1718,7 @@ function renderNewView() {
   // Price calculator
   html += `<div class="price-calc">
     <div class="pcol">
-      <div class="pcol-label">Cost</div>
+      <div class="pcol-label">Cost${newShopeePrice ? ` <span style="color:var(--text-tertiary);font-weight:500;letter-spacing:0">(Shopee $${newShopeePrice.toFixed(2)})</span>` : ''}</div>
       <div class="pcol-input-wrap">
         <span class="pcol-currency">$</span>
         <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0)" id="new-cost-input">
@@ -1739,7 +1741,7 @@ function renderNewView() {
 
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
-    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;renderNewView()">Clear</button>
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;newShopeePrice=null;renderNewView()">Clear</button>
     <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 

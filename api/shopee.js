@@ -129,8 +129,8 @@ export default async function handler(req) {
         if (m) {
           const raw = parseInt(m[1], 10);
           const candidate = raw / 100000;
-          // Sanity check: reasonable SGD range $1–$2000
-          if (candidate >= 1 && candidate <= 2000) {
+          // Sanity check: reasonable SGD range $5–$2000 (below $5 is likely a fee/voucher field)
+          if (candidate >= 5 && candidate <= 2000) {
             price = Math.round(candidate * 100) / 100;
             break;
           }
