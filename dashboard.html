@@ -964,12 +964,20 @@ function getPending() {
 }
 function setPending(p) { localStorage.setItem('_pending', JSON.stringify(p)); }
 
+// Pending delete queue — same idea: retried each session until Supabase confirms
+function getPendingDeletes() {
+  try { return JSON.parse(localStorage.getItem('_pending_del')) || {}; } catch { return {}; }
+}
+function setPendingDeletes(p) { localStorage.setItem('_pending_del', JSON.stringify(p)); }
+
 function storeSet(key, value) {
   const jsonStr = JSON.stringify(value);
   const ts = new Date().toISOString();
   localStorage.setItem(key, jsonStr);
   localStorage.setItem('_ts:' + key, ts);
   lastSyncedJson[key] = jsonStr;
+  // If there was a pending delete for this key, cancel it
+  const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd);
   // Mark as pending until Supabase confirms
   const p = getPending(); p[key] = ts; setPending(p);
   db.from('app_state').upsert({ key, data: value, updated_at: ts }, { onConflict: 'key' })
@@ -982,7 +990,10 @@ function storeDelete(key) {
   localStorage.removeItem(key);
   localStorage.removeItem('_ts:' + key);
   const p = getPending(); delete p[key]; setPending(p);
-  db.from('app_state').delete().eq('key', key).then();
+  // Track pending delete — retried each session until confirmed, and sync skips this key
+  const pd = getPendingDeletes(); pd[key] = new Date().toISOString(); setPendingDeletes(pd);
+  db.from('app_state').delete().eq('key', key)
+    .then(() => { const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd); });
 }
 
 async function syncFromSupabase() {
@@ -997,11 +1008,20 @@ async function syncFromSupabase() {
     }
   }
 
+  // Retry any deletes that failed last session
+  const pendingDeletes = getPendingDeletes();
+  for (const key of Object.keys(pendingDeletes)) {
+    db.from('app_state').delete().eq('key', key)
+      .then(() => { const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd); });
+  }
+
   const { data, error } = await db.from('app_state').select('key,data,updated_at');
   if (error || !data) return;
   for (const row of data) {
     // Never overwrite a key we have a pending write for
     if (pending[row.key]) continue;
+    // Never restore a key we're trying to delete
+    if (pendingDeletes[row.key]) continue;
 
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
       // Merge: done and deleted are sticky — once true they can never be reset by sync
@@ -1079,23 +1099,12 @@ function runRollover() {
     if (ds >= activeDate) continue;
     const goals = storeGet(key) || [];
     const undone = goals.filter(g => !g.done && !g.deleted);
-    if (!undone.length) {
-      // Mark all as deleted via storeSet (has retry queue) instead of storeDelete.
-      // storeDelete only fires a fire-and-forget Supabase call — if it fails, the old
-      // key survives in Supabase and gets synced back next session as done:false items,
-      // causing goals to reappear. storeSet persists to the pending-write queue so it
-      // is retried until confirmed, and the sticky deleted:true merge keeps it gone.
-      if (goals.some(g => !g.deleted)) {
-        storeSet(key, goals.map(g => ({ ...g, deleted: true })));
-      }
-      continue;
-    }
+    if (!undone.length) { storeDelete(key); continue; }
     const todayGoals = storeGet('goals:' + activeDate) || [];
     const existing = new Set(todayGoals.map(g => g.text));
     const toAdd = undone.filter(g => !existing.has(g.text)).map(g => ({ text: g.text, done: false }));
     storeSet('goals:' + activeDate, [...toAdd, ...todayGoals]);
-    // Mark ALL items in the old key as deleted (including the just-rolled-over undone ones)
-    storeSet(key, goals.map(g => ({ ...g, deleted: true })));
+    storeDelete(key);
   }
 }
 
