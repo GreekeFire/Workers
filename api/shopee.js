@@ -132,8 +132,10 @@ export default async function handler(req) {
     let price = null;
 
     // Strategy 1: Shopee JSON API — most reliable, actual DB price
+    // Response may nest under data.item (v4) or directly in data (v2)
     if (apiData?.data) {
-      const raw = apiData.data.price_min ?? apiData.data.price ?? null;
+      const itemData = apiData.data.item ?? apiData.data;
+      const raw = itemData?.price_min ?? itemData?.price ?? null;
       if (raw !== null) {
         const candidate = raw / 100000;
         if (candidate >= 1 && candidate <= 2000) {
@@ -172,7 +174,15 @@ export default async function handler(req) {
       }
     }
 
-    return json({ title, description, images, price });
+    // _debug: remove after diagnosing price extraction
+    const _debug = apiData ? {
+      error: apiData.error,
+      hasData: !!apiData.data,
+      keys: apiData.data ? Object.keys(apiData.data).slice(0, 15) : [],
+      price_raw: apiData.data?.price_min ?? apiData.data?.price ?? apiData.data?.item?.price_min ?? apiData.data?.item?.price ?? 'not found',
+    } : 'api_null';
+
+    return json({ title, description, images, price, _debug });
 
   } catch (err) {
     return json({ error: err.message || 'Failed to fetch Shopee page' }, 502);
