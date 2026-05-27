@@ -1000,13 +1000,13 @@ async function syncFromSupabase() {
   const { data, error } = await db.from('app_state').select('key,data,updated_at');
   if (error || !data) return;
   const activeDate = getActiveDateString();
-  const rolledOver = JSON.parse(localStorage.getItem('_rolled') || '{}');
   for (const row of data) {
     // Never overwrite a key we have a pending write for
     if (pending[row.key]) continue;
-    // Never restore a past goals date that rollover has already processed —
-    // it will have been marked deleted:true locally; restoring from Supabase would undo that
-    if (row.key.startsWith('goals:') && row.key.slice(6) < activeDate && rolledOver[row.key]) continue;
+    // Never restore a past goals date that isn't already in localStorage.
+    // If it's absent locally, rollover already processed and cleaned it up —
+    // restoring from Supabase would re-trigger rollover and re-add items to today.
+    if (row.key.startsWith('goals:') && row.key.slice(6) < activeDate && !localStorage.getItem(row.key)) continue;
 
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
       // Merge: done and deleted are sticky — once true they can never be reset by sync
@@ -1079,19 +1079,11 @@ function formatDate(ds) {
 function runRollover() {
   const activeDate = getActiveDateString();
   const keys = storeListKeys('goals:').sort();
-  const rolledOver = JSON.parse(localStorage.getItem('_rolled') || '{}');
-  // Prune _rolled entries older than 60 days
-  const cutoff = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
-  for (const k of Object.keys(rolledOver)) { if (k.slice(6) < cutoff) delete rolledOver[k]; }
-
   for (const key of keys) {
     const ds = key.slice(6);
     if (ds >= activeDate) continue;
-    rolledOver[key] = true; // mark as processed — sync will never restore this past date
     const goals = storeGet(key) || [];
     const undone = goals.filter(g => !g.done && !g.deleted);
-    // Use storeSet(deleted:true) instead of storeDelete so the pending-write retry queue
-    // ensures Supabase eventually has deleted:true, and the sticky merge prevents revival.
     if (!undone.length) {
       if (goals.some(g => !g.deleted)) storeSet(key, goals.map(g => ({ ...g, deleted: true })));
       continue;
@@ -1102,7 +1094,6 @@ function runRollover() {
     storeSet('goals:' + activeDate, [...toAdd, ...todayGoals]);
     storeSet(key, goals.map(g => ({ ...g, deleted: true })));
   }
-  localStorage.setItem('_rolled', JSON.stringify(rolledOver));
 }
 
 // ── Streak ──
