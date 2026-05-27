@@ -1,6 +1,5 @@
-// Vercel Edge Function — scrapes Shopee product page for og: meta tags + price
-// Price is fetched from Shopee's own JSON API (/api/v4/item/get) in parallel
-// with the HTML fetch, using shopId/itemId extracted from the URL.
+// Vercel Edge Function — scrapes Shopee product page HTML for og: meta tags
+// Price extraction is not possible server-side (Shopee loads prices via JS/API with session cookies).
 export const config = { runtime: 'edge' };
 
 function json(data, status = 200) {
@@ -47,15 +46,18 @@ function extractAllImages(html) {
   return [...images].slice(0, 9);
 }
 
-// Extract shopId + itemId from Shopee URL patterns:
-//   shopee.sg/product/{shopId}/{itemId}
-//   shopee.sg/{slug}.i.{shopId}.{itemId}
-function extractIds(url) {
-  const m = url.match(/\/product\/(\d+)\/(\d+)/) || url.match(/\.i\.(\d+)\.(\d+)/);
-  return m ? { shopId: m[1], itemId: m[2] } : null;
+// Strip Shopee boilerplate from og:title and og:description
+function cleanTitle(raw) {
+  return raw
+    .replace(/\s*\|\s*Shopee\s+Singapore\s*$/i, '')
+    .replace(/\s*-\s*Shopee\s+Singapore\s*$/i, '')
+    .trim();
 }
 
-const BROWSER_UA = 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
+function cleanDescription(raw) {
+  // Strip trailing "- Buy <product name>" SEO tail that Shopee appends
+  return raw.replace(/\s*-\s*Buy\s+.{0,120}$/, '').trim();
+}
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -71,17 +73,15 @@ export default async function handler(req) {
   if (!url.includes('shopee.sg')) return json({ error: 'Only shopee.sg URLs are supported' }, 400);
 
   const cleanUrl = url.split('?')[0];
-  const ids = extractIds(cleanUrl);
 
   try {
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Request timed out')), 12000)
     );
 
-    // Fire HTML fetch and JSON API fetch in parallel
     const fetchPage = fetch(cleanUrl, {
       headers: {
-        'User-Agent': BROWSER_UA,
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-SG,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
@@ -90,28 +90,7 @@ export default async function handler(req) {
       redirect: 'follow',
     });
 
-    // Shopee's own item API — returns price_min/price in 1/100000 SGD units
-    const fetchApi = ids
-      ? fetch(
-          `https://shopee.sg/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`,
-          {
-            headers: {
-              'User-Agent': BROWSER_UA,
-              'Referer': 'https://shopee.sg/',
-              'Accept': 'application/json',
-              'Accept-Language': 'en-SG,en;q=0.9',
-              'X-Shopee-Language': 'en',
-            },
-          }
-        )
-          .then(r => (r.ok ? r.json() : null))
-          .catch(() => null)
-      : Promise.resolve(null);
-
-    const [response, apiData] = await Promise.all([
-      Promise.race([fetchPage, timeout]),
-      fetchApi,
-    ]);
+    const response = await Promise.race([fetchPage, timeout]);
 
     if (!response.ok) {
       return json({ error: `Page returned HTTP ${response.status}` }, 502);
@@ -119,8 +98,8 @@ export default async function handler(req) {
 
     const html = await response.text();
 
-    const title       = extractMeta(html, 'og:title');
-    const description = extractMeta(html, 'og:description');
+    const title       = cleanTitle(extractMeta(html, 'og:title'));
+    const description = cleanDescription(extractMeta(html, 'og:description'));
     const images      = extractAllImages(html);
 
     if (!title && !description && images.length === 0) {
@@ -129,60 +108,7 @@ export default async function handler(req) {
       }, 502);
     }
 
-    let price = null;
-
-    // Strategy 1: Shopee JSON API — most reliable, actual DB price
-    // Response may nest under data.item (v4) or directly in data (v2)
-    if (apiData?.data) {
-      const itemData = apiData.data.item ?? apiData.data;
-      const raw = itemData?.price_min ?? itemData?.price ?? null;
-      if (raw !== null) {
-        const candidate = raw / 100000;
-        if (candidate >= 1 && candidate <= 2000) {
-          price = Math.round(candidate * 100) / 100;
-        }
-      }
-    }
-
-    // Strategy 2: JSON-LD structured data
-    if (price === null) {
-      const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
-      if (ldMatch) {
-        try {
-          const ld = JSON.parse(ldMatch[1]);
-          price = ld?.offers?.price ?? ld?.offers?.[0]?.price ?? null;
-        } catch { /* ignore */ }
-      }
-    }
-
-    // Strategy 3: og:price:amount / product:price:amount meta tags
-    if (price === null) {
-      price = parseFloat(extractMeta(html, 'og:price:amount') || extractMeta(html, 'product:price:amount')) || null;
-    }
-
-    // Strategy 4: embedded script JSON (price_min / price as raw 1/100000 integers)
-    if (price === null) {
-      for (const key of ['price_min', 'price']) {
-        const m = html.match(new RegExp('"' + key + '"\\s*:\\s*(\\d{5,})'));
-        if (m) {
-          const candidate = parseInt(m[1], 10) / 100000;
-          if (candidate >= 5 && candidate <= 2000) {
-            price = Math.round(candidate * 100) / 100;
-            break;
-          }
-        }
-      }
-    }
-
-    // _debug: remove after diagnosing price extraction
-    const _debug = apiData ? {
-      error: apiData.error,
-      hasData: !!apiData.data,
-      keys: apiData.data ? Object.keys(apiData.data).slice(0, 15) : [],
-      price_raw: apiData.data?.price_min ?? apiData.data?.price ?? apiData.data?.item?.price_min ?? apiData.data?.item?.price ?? 'not found',
-    } : 'api_null';
-
-    return json({ title, description, images, price, _debug });
+    return json({ title, description, images });
 
   } catch (err) {
     return json({ error: err.message || 'Failed to fetch Shopee page' }, 502);
