@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Work â€” Workers</title>
+<title>Work — Workers</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Workers">
@@ -18,15 +18,9 @@
 <script src="/shared/utils.js"></script>
 <style>
   :root {
-    --text-primary: #FAFAFA;
-    --text-secondary: #B8B6B0;
-    --text-tertiary: #76746E;
-    --coral: #E07658;
-    --success: #6BE3A4;
+    /* --coral = --accent from shared.css; --danger overrides shared's #FF6B6B with a softer red */
+    --coral: var(--accent);
     --danger: #E05858;
-    --card-bg: rgba(255,255,255,0.04);
-    --card-border: rgba(255,255,255,0.06);
-    --card-radius: 16px;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,34 +34,7 @@
     overflow-x: hidden;
   }
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
-      radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
-    filter: blur(40px);
-    animation: bgDrift 36s ease-in-out infinite alternate;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  @keyframes bgDrift {
-    0%   { transform: translate(0,0) scale(1); }
-    50%  { transform: translate(20px,-15px) scale(1.04); }
-    100% { transform: translate(-10px,10px) scale(0.97); }
-  }
+  /* body::before / body::after / @keyframes bgDrift — from shared.css */
 
   .container {
     position: relative;
@@ -248,7 +215,7 @@
     color: var(--text-primary);
     font-size: 13px;
     padding: 8px 10px;
-    font-family: monospace;
+    font-family: var(--font-mono);
   }
   .ai-key-input:focus { outline: none; border-color: rgba(255,255,255,0.18); }
   .shopee-collapsed {
@@ -340,7 +307,7 @@
     color: var(--text-primary);
     font-size: 12px;
     padding: 8px 12px;
-    font-family: monospace;
+    font-family: var(--font-mono);
   }
   .api-key-input:focus { outline: none; border-color: rgba(255,255,255,0.15); }
   .api-key-save-btn {
@@ -691,7 +658,7 @@
     color: var(--text-primary);
     font-size: 12px;
     padding: 6px 10px;
-    font-family: monospace;
+    font-family: var(--font-mono);
   }
   .api-key-bar-field:focus { outline: none; border-color: rgba(255,255,255,0.18); }
 
@@ -839,6 +806,9 @@ function onCostChange(val) {
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Returns today's date string YYYY-MM-DD (recomputed each call so midnight rollovers work)
+function getToday() { return new Date().toISOString().slice(0, 10); }
+
 // State
 let currentIndex = 0;
 let doneSet = new Set();
@@ -846,7 +816,7 @@ let deletedSet = new Set();
 let doneData = [];
 let doneTodayCount = 0;
 let deletedTodayCount = 0;
-let todayDate = new Date().toISOString().slice(0, 10);
+let todayDate = getToday();
 let salesLog = [];
 let activeTab = 'fix';
 let editingDoneIdx = null;
@@ -898,7 +868,7 @@ async function init() {
 }
 
 function loadLocal() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getToday();
   const raw = localStorage.getItem('carobiz_work');
   if (raw) {
     const s = JSON.parse(raw);
@@ -934,7 +904,7 @@ function loadLocal() {
 
 async function syncFromSupabase() {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getToday();
     const [pRes, dRes, sRes] = await Promise.all([
       sb.from('app_state').select('data').eq('key', 'carobiz_work_progress').single(),
       sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
@@ -982,7 +952,7 @@ function saveLocal() {
 
 async function pushToSupabase() {
   const now = new Date().toISOString();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getToday();
   setSyncStatus('syncing');
   Promise.all([
     sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
@@ -1005,12 +975,12 @@ function setSyncStatus(state) {
   clearTimeout(syncStatusTimer);
   el.className = 'sync-status visible ' + state;
   if (state === 'syncing') {
-    el.textContent = 'âŸ³ Syncingâ€¦';
+    el.textContent = '⟳ Syncing…';
   } else if (state === 'synced') {
-    el.textContent = 'âœ“ Synced';
+    el.textContent = '✓ Synced';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
   } else if (state === 'error') {
-    el.textContent = 'âœ— Sync failed';
+    el.textContent = '✗ Sync failed';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
   }
 }
@@ -1044,7 +1014,7 @@ function markDone() {
   saveLocal();
   pushToSupabase();
   renderAll();
-  toast('Done âœ“');
+  toast('Done ✓');
 }
 
 function markDeleted() {
@@ -1074,7 +1044,7 @@ function undoDelete() {
   currentIndex = idx;
   saveLocal();
   renderAll();
-  toast('Undo âœ“');
+  toast('Undo ✓');
 }
 
 function saveDoneLinkEdits(doneIdx, listingIndex) {
@@ -1105,72 +1075,71 @@ function resetAI() {
   shopeeInput = '';
   linkEditing = false;
   shopeeCollapsed = false;
-  shopeeInput = '';
   fixShopeeImages = [];
   fixShopeeFetching = false;
 }
 
-// AI â€” shared constants & helpers
+// AI — shared constants & helpers
 const TITLE_SYSTEM = `You are a Carousell Singapore SEO copywriter.
 
-TASK: Write a Carousell listing title for the product below. Output the title text only â€” no JSON, no explanation, no quotes, nothing else.
+TASK: Write a Carousell listing title for the product below. Output the title text only — no JSON, no explanation, no quotes, nothing else.
 
 RULES:
-1. Length: exactly 200â€“225 characters. Count every character. This is the strictest rule.
-2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2â€“4 words â€” never a single word alone.
+1. Length: exactly 200–225 characters. Count every character. This is the strictest rule.
+2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2–4 words — never a single word alone.
 3. Front-load the strongest buyer search terms in the first 50 characters.
 4. Every segment must be something a real buyer types into a search bar.
-5. Never repeat the same root word across segments. Before writing each segment, check every previous segment â€” if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2â€“end must not contain "Clean", "Cleaner", "Cleans", or any variation.
-6. Correct any spelling errors found in the source text â€” do not copy typos.
-7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (â€”).
+5. Never repeat the same root word across segments. Before writing each segment, check every previous segment — if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2–end must not contain "Clean", "Cleaner", "Cleans", or any variation.
+6. Correct any spelling errors found in the source text — do not copy typos.
+7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (—).
 
 CORRECT EXAMPLE (219 chars):
 Automatic Pet Water Dispenser | Wireless Rechargeable | Motion Sensor | 2.5L Capacity | 4000mAh Battery | Dual Power Supply | 110 Days Runtime | Smart Timing Mode | Pet Fountain | Water Bowl | Indoor Outdoor
 
 WRONG EXAMPLE:
-Wireless RGB Keyboard â€” 98-key compact, triple-mode connectivity  â† sentence structure, forbidden
+Wireless RGB Keyboard — 98-key compact, triple-mode connectivity  â† sentence structure, forbidden
 
-Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title â€” no counting, no explanation, nothing else.`;
+Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
 
 const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
 
-Rewrite the product description for a Carousell listing. Plain text only inside the JSON â€” no **bold**, no #headers, no markdown. Use section labels exactly as shown.
+Rewrite the product description for a Carousell listing. Plain text only inside the JSON — no **bold**, no #headers, no markdown. Use section labels exactly as shown.
 
 TONE:
-- Friendly and direct â€” speak to the buyer as "you"
+- Friendly and direct — speak to the buyer as "you"
 - Benefits-focused, not feature-focused
-- Specific â€” never say "high quality", "amazing", "best"
+- Specific — never say "high quality", "amazing", "best"
 - No hype words: "incredible", "must-have", "limited"
 - No multiple exclamation marks
 
 Use exactly this structure:
 
-[Product name â€” one clear descriptive phrase, no brand names]
+[Product name — one clear descriptive phrase, no brand names]
 [One sentence: what this is and the main benefit it gives the buyer]
 
 WHY YOU'LL LOVE IT:
-â€¢ [Specific benefit â€” what it does for them daily]
-â€¢ [Practical benefit â€” size, ease of use, time-saving]
-â€¢ [Emotional benefit â€” how it makes life better]
-â€¢ [Quality/durability note â€” materials or build, if known]
+• [Specific benefit — what it does for them daily]
+• [Practical benefit — size, ease of use, time-saving]
+• [Emotional benefit — how it makes life better]
+• [Quality/durability note — materials or build, if known]
 
 PERFECT FOR:
-[2â€“3 specific situations: who uses it and where]
+[2–3 specific situations: who uses it and where]
 
 WHAT'S INCLUDED:
 [Exactly what comes in the package]
 
-SPECIFICATIONS (only include lines where the value is confirmed â€” skip any line where the value is unknown, do not write "Not specified"):
-â€¢ Material: [confirmed value only]
-â€¢ Dimensions: [L x W x H in cm â€” confirmed only]
-â€¢ Weight: [confirmed only]
-â€¢ Colours available: [confirmed colours only]
+SPECIFICATIONS (only include lines where the value is confirmed — skip any line where the value is unknown, do not write "Not specified"):
+• Material: [confirmed value only]
+• Dimensions: [L x W x H in cm — confirmed only]
+• Weight: [confirmed only]
+• Colours available: [confirmed colours only]
 
 WHY BUY FROM ME:
-âœ“ Fast Singapore shipping
-âœ“ Quality checked before sending
-âœ“ Secure packaging
-âœ“ Responsive customer service
+✓ Fast Singapore shipping
+✓ Quality checked before sending
+✓ Secure packaging
+✓ Responsive customer service
 
 ---
 DM me for bulk discounts or questions!
@@ -1183,9 +1152,9 @@ CHECK BEFORE OUTPUT:
 
 function getDescSystem() {
   const inst = {
-    short:  'LENGTH â€” SHORT: Write only the opening product name line, the one-sentence benefit, and WHY YOU\'LL LOVE IT with 3 bullets max. Skip all other sections.',
-    medium: 'LENGTH â€” MEDIUM: Include all sections exactly as shown.',
-    long:   'LENGTH â€” LONG: Expand WHY YOU\'LL LOVE IT to 5â€“6 detailed bullets. Add more context to PERFECT FOR. Include every known SPECIFICATION.',
+    short:  'LENGTH — SHORT: Write only the opening product name line, the one-sentence benefit, and WHY YOU\'LL LOVE IT with 3 bullets max. Skip all other sections.',
+    medium: 'LENGTH — MEDIUM: Include all sections exactly as shown.',
+    long:   'LENGTH — LONG: Expand WHY YOU\'LL LOVE IT to 5–6 detailed bullets. Add more context to PERFECT FOR. Include every known SPECIFICATION.',
   }[descLength] || '';
   return DESC_SYSTEM + (inst ? '\n\n' + inst : '');
 }
@@ -1245,7 +1214,7 @@ async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
       });
       data = await resp.json();
     } catch (e) {
-      // Network / parse error â€” retry with backoff
+      // Network / parse error — retry with backoff
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -1308,7 +1277,7 @@ async function generateAI(mode = 'both') {
     });
     if (mode !== 'desc'  && title) aiTitle = title;
     if (mode !== 'title' && desc)  aiDesc  = desc;
-    if (!aiTitle && !aiDesc) aiError = 'No content returned â€” try again';
+    if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
     aiError = e.message || 'Unknown error';
@@ -1335,7 +1304,7 @@ function saveApiKey() {
   }
 }
 
-// NEW tab â€” fetch from Shopee URL
+// NEW tab — fetch from Shopee URL
 async function fetchShopeeData() {
   const urlEl = document.getElementById('new-shopee-fetch-url');
   const url   = (urlEl?.value || newShopeeUrl).trim();
@@ -1351,9 +1320,9 @@ async function fetchShopeeData() {
     newShopeeImages = data.images || [];
     // Pre-fill cost if Shopee price is available (as a reference)
     if (data.price && !newCost) newCost = data.price.toFixed(2);
-    toast('Fetched âœ“');
+    toast('Fetched ✓');
   } catch(e) {
-    toast('Failed â€” ' + (e.message || 'unknown error'));
+    toast('Failed — ' + (e.message || 'unknown error'));
   }
   newShopeeFetching = false;
   renderNewView();
@@ -1364,7 +1333,7 @@ async function fetchShopeeData() {
   if (newShopeeInput) generateAINew('both');
 }
 
-// FIX tab â€” fetch from Shopee URL
+// FIX tab — fetch from Shopee URL
 async function fetchShopeeDataFix() {
   const urlEl = document.getElementById('fix-shopee-fetch-url');
   const url   = urlEl?.value.trim();
@@ -1377,9 +1346,9 @@ async function fetchShopeeDataFix() {
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
     shopeeInput      = [data.title, data.description].filter(Boolean).join('\n\n');
     fixShopeeImages  = data.images || [];
-    toast('Fetched âœ“');
+    toast('Fetched ✓');
   } catch(e) {
-    toast('Failed â€” ' + (e.message || 'unknown error'));
+    toast('Failed — ' + (e.message || 'unknown error'));
   }
   fixShopeeFetching = false;
   renderFixView();
@@ -1407,7 +1376,7 @@ async function generateAINew(mode = 'both') {
     });
     if (mode !== 'desc'  && title) newTitle = title;
     if (mode !== 'title' && desc)  newDesc  = desc;
-    if (!newTitle && !newDesc) aiError = 'No content returned â€” try again';
+    if (!newTitle && !newDesc) aiError = 'No content returned — try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
     aiError = e.message || 'Unknown error';
@@ -1466,7 +1435,7 @@ function saveNewListing() {
   pushToSupabase();
   renderSessionBar();
   switchTab('done');
-  toast('Saved to Done âœ“');
+  toast('Saved to Done ✓');
 }
 
 // Sales
@@ -1474,7 +1443,7 @@ function logSale() {
   const name = document.getElementById('sale-listing').value.trim();
   const price = parseFloat(document.getElementById('sale-price').value);
   if (!name || isNaN(price) || price <= 0) { toast('Fill in name and price'); return; }
-  salesLog.unshift({ name, price, date: new Date().toISOString().slice(0, 10), ts: new Date().toISOString() });
+  salesLog.unshift({ name, price, date: getToday(), ts: new Date().toISOString() });
   document.getElementById('sale-listing').value = '';
   document.getElementById('sale-price').value = '';
   document.getElementById('sale-listing-info').style.display = 'none';
@@ -1482,7 +1451,7 @@ function logSale() {
   pushToSupabase();
   renderSalesView();
   renderSessionBar();
-  toast('Logged âœ“');
+  toast('Logged ✓');
 }
 
 function searchListings(query) {
@@ -1495,10 +1464,10 @@ function searchListings(query) {
   }
   if (matches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = matches.map(({ L, i }) => {
-    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee â†—</a>` : '';
-    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell â†—</a>` : '';
+    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
+    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
     const isDone = doneSet.has(i) || deletedSet.has(i);
-    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix â†’</span>` : '';
+    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix →</span>` : '';
     return `<div class="search-result" onmousedown="selectListing(${i})">
       <div class="search-result-name">${esc(L[0])}</div>
       <div class="search-result-meta">
@@ -1524,8 +1493,8 @@ function selectListing(idx) {
   document.getElementById('search-dropdown').style.display = 'none';
   document.getElementById('sale-price').value = L[4];
   const infoEl = document.getElementById('sale-listing-info');
-  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee â†—</a>` : '';
-  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell â†—</a>` : '';
+  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
+  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell ↗</a>` : '';
   infoEl.innerHTML = `<span class="sale-info-price">$${L[4]}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
   document.getElementById('sale-price').focus();
@@ -1539,7 +1508,7 @@ function hideDropdown() {
 }
 
 function todayRevenue() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getToday();
   return salesLog.filter(s => s.date === today).reduce((sum, s) => sum + s.price, 0);
 }
 
@@ -1563,13 +1532,13 @@ function renderFixView() {
   const processed = doneSet.size + deletedSet.size;
   const remaining = total - processed;
   document.getElementById('progress-line').textContent =
-    doneSet.size + ' done Â· ' + deletedSet.size + ' deleted Â· ' + remaining + ' remaining';
+    doneSet.size + ' done · ' + deletedSet.size + ' deleted · ' + remaining + ' remaining';
 
   const wrap = document.getElementById('listing-wrap');
   const actionRow = document.getElementById('action-row');
 
   if (currentIndex >= total || remaining === 0) {
-    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">âœ“</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
+    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
     actionRow.style.display = 'none';
     return;
   }
@@ -1581,8 +1550,8 @@ function renderFixView() {
   const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
   const cost = editedCost !== null ? editedCost : L[3];
   const sell = L[4];
-  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : 'âœ¨ Generate';
-  const loadingMsg = aiLoading ? '<div class="ai-loading">Generatingâ€¦</div>' : '';
+  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : '✨ Generate';
+  const loadingMsg = aiLoading ? '<div class="ai-loading">Generating…</div>' : '';
   const descField = (aiTitle || aiDesc) ? `
     <div class="field-header">
       <span class="field-label">Description</span>
@@ -1606,10 +1575,10 @@ function renderFixView() {
         <input class="link-edit-input" id="link-shopee-input" type="url" placeholder="Shopee URL" value="${esc(shopeeUrl)}">
         <input class="link-edit-input" id="link-caro-input" type="url" placeholder="Carousell URL" value="${esc(carousellUrl)}">
         <button class="copy-btn" onclick="saveLinkEdits()">Save</button>
-        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">âœ•</button>
+        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">✕</button>
       ` : `
-        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee â†—</a>` : ''}
-        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell â†—</a>` : ''}
+        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
+        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
         <button class="copy-btn" style="opacity:0.4;font-size:10px" onclick="linkEditing=true;renderFixView()">Edit</button>
       `}
     </div>
@@ -1621,7 +1590,7 @@ function renderFixView() {
           <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(cost))}" oninput="onCostChange(this.value)" id="cost-input">
         </div>
       </div>
-      <div class="parrow">â†’</div>
+      <div class="parrow">→</div>
       <div class="pcol">
         <div class="pcol-label">Sell</div>
         <div class="sell-display" id="sell-display">$${calcSell(cost)}</div>
@@ -1629,34 +1598,34 @@ function renderFixView() {
     </div>
     <div class="ai-section">
       <div class="field-header">
-        <span class="field-label">âœ¨ AI</span>
-        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">ðŸ”‘ Key</button>` : ''}
+        <span class="field-label">✨ AI</span>
+        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
       </div>
       ${(!localStorage.getItem('alfred_claude_key') || apiKeyVisible) ? `
         <div class="ai-key-inline">
-          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-â€¦">
+          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-…">
           <button class="copy-btn" onclick="saveApiKey()">Save</button>
-          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">âœ•</button>` : ''}
+          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
         </div>` : ''}
       ${shopeeCollapsed
-        ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content â–¼</div>`
+        ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content ▼</div>`
         : `<div class="shopee-fetch-row">
             <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
-              placeholder="shopee.sg/â€¦" value="${esc(shopeeUrl)}"
+              placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
               oninput="" style="flex:1;font-size:13px;padding:9px 12px">
             <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
-              ${fixShopeeFetching ? 'Fetchingâ€¦' : 'Fetch â†“'}
+              ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
             </button>
           </div>
           ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
             `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
               <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
-              <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">â†“</a>
+              <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
             </a>`).join('')}</div>` : ''}
           <textarea class="ai-field" id="shopee-input-ta"
             oninput="shopeeInput=this.value;autoResize(this)"
             onchange="shopeeInput=this.value;autoResize(this)"
-            placeholder="Or paste Shopee title + description hereâ€¦">${esc(shopeeInput)}</textarea>`
+            placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
       }
       ${loadingMsg}
       ${descField}
@@ -1669,8 +1638,8 @@ function renderFixView() {
       <div class="ai-row">
         <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">${genLabel}</button>
         ${(aiTitle||aiDesc) ? `
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">â†º Title</button>
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">â†º Desc</button>
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">↺ Title</button>
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">↺ Desc</button>
         ` : ''}
       </div>
     </div>
@@ -1721,7 +1690,7 @@ function addSwipeGestures() {
 function renderNewView() {
   const wrap = document.getElementById('new-wrap');
   const apiKey = localStorage.getItem('alfred_claude_key');
-  const genLabel = (newTitle || newDesc) ? 'Regenerate' : 'âœ¨ Generate';
+  const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
   const sell = calcSell(parseFloat(newCost) || 0);
 
   let html = `<div class="listing-card">`;
@@ -1730,26 +1699,26 @@ function renderNewView() {
   if (!apiKey || newApiKeyVisible) {
     html += `<div class="field-header" style="margin-bottom:8px">
       <span class="field-label">Claude API Key</span>
-      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">âœ•</button>` : ''}
+      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">✕</button>` : ''}
     </div>
     <div class="ai-key-inline">
-      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-â€¦">
+      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-…">
       <button class="copy-btn" onclick="saveApiKeyNew()">Save</button>
     </div>`;
   }
 
-  // Shopee section â€” URL fetch or manual paste
+  // Shopee section — URL fetch or manual paste
   if (newShopeeCollapsed) {
-    html += `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content â–¼</div>`;
+    html += `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`;
   } else {
     html += `<div class="field-header"><span class="field-label">Shopee</span></div>
       <div class="shopee-fetch-row">
         <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
-          placeholder="shopee.sg/â€¦" value="${esc(newShopeeUrl)}"
+          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
           oninput="newShopeeUrl=this.value"
           style="flex:1;font-size:13px;padding:9px 12px">
         <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
-          ${newShopeeFetching ? 'Fetchingâ€¦' : 'Fetch â†“'}
+          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
         </button>
       </div>`;
     if (newShopeeImages.length > 0) {
@@ -1761,10 +1730,10 @@ function renderNewView() {
     }
     html += `<textarea class="ai-field" id="new-shopee-ta"
       oninput="newShopeeInput=this.value;autoResize(this)"
-      placeholder="Or paste Shopee title + description hereâ€¦">${esc(newShopeeInput)}</textarea>`;
+      placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
   }
 
-  if (newLoading) html += `<div class="ai-loading">Generatingâ€¦</div>`;
+  if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
 
   // Title (always visible)
   html += `<div class="field-header" style="margin-top:12px">
@@ -1773,7 +1742,7 @@ function renderNewView() {
   </div>
   <textarea class="title-input" rows="1" id="new-title-ta"
     oninput="newTitle=this.value;autoResize(this);updateCharCount(this.value,'new-char-count')"
-    placeholder="Type or generate a titleâ€¦">${esc(newTitle)}</textarea>
+    placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
   <div class="char-counter ${newTitle.length>225?'danger':newTitle.length>=200?'warn':''}" id="new-char-count">${newTitle.length} / 225</div>
   <div class="field-header">
     <span class="field-label">Description</span>
@@ -1782,7 +1751,7 @@ function renderNewView() {
       <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
     </div>
   </div>
-  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a descriptionâ€¦">${esc(newDesc)}</textarea>`;
+  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
 
   // Generate button row
   html += `<div class="desc-len-row">
@@ -1794,10 +1763,10 @@ function renderNewView() {
   <div class="ai-row">
     <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">${genLabel}</button>
     ${(newTitle||newDesc) ? `
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">â†º Title</button>
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">â†º Desc</button>
+      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺ Title</button>
+      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺ Desc</button>
     ` : ''}
-    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">ðŸ”‘ Key</button>` : ''}
+    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
   </div>`;
 
   // Price calculator
@@ -1809,7 +1778,7 @@ function renderNewView() {
         <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0)" id="new-cost-input">
       </div>
     </div>
-    <div class="parrow">â†’</div>
+    <div class="parrow">→</div>
     <div class="pcol">
       <div class="pcol-label">Sell</div>
       <div class="sell-display" id="new-sell-display">$${sell}</div>
@@ -1827,7 +1796,7 @@ function renderNewView() {
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
     <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;renderNewView()">Clear</button>
-    <button class="btn-done" onclick="saveNewListing()">Save to Done â†’</button>
+    <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 
   wrap.innerHTML = html;
@@ -1890,8 +1859,8 @@ function renderDoneView() {
     const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (d.shopeeUrl || LISTINGS[d.index]?.[1] || '');
     const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (d.carousellUrl || LISTINGS[d.index]?.[2] || '');
     const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
-      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee â†—</a>` : ''}
-      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell â†—</a>` : ''}
+      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
+      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
     </div>`;
     if (editingDoneIdx === d._i) {
       const linkSection = doneLinkEditIdx === d._i ? `
@@ -1905,13 +1874,13 @@ function renderDoneView() {
         <div class="done-edit-price">
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
-          <span style="color:var(--text-tertiary)">â†’</span>
+          <span style="color:var(--text-tertiary)">→</span>
           <span class="done-edit-sell" id="edit-sell-${d._i}">$${d.sellPrice}</span>
         </div>
         ${linkSection}
         <div class="done-edit-actions">
           <button class="done-cancel-btn" onclick="editingDoneIdx=null;doneLinkEditIdx=null;renderDoneView()">Cancel</button>
-          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">âœŽ Links</button>
+          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
           <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
         </div>
         <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i},${d.index})">Delete listing</button>
@@ -1920,10 +1889,10 @@ function renderDoneView() {
     return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
       <div class="done-info">
         <div class="done-title-text">${esc(d.title)}</div>
-        <div class="done-meta">Cost $${d.sourceCost} â†’ Sell $${d.sellPrice}</div>
+        <div class="done-meta">Cost $${d.sourceCost} → Sell $${d.sellPrice}</div>
         ${linkBtns}
       </div>
-      <div class="done-edit-icon">âœŽ</div>
+      <div class="done-edit-icon">✎</div>
     </div>`;
   }).join('');
 }
@@ -1993,13 +1962,14 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
 }
 
+let _undoFn = null;
 function toastWithUndo(msg, undoFn) {
-  window._toastUndoFn = undoFn;
+  _undoFn = undoFn;
   const el = document.getElementById('toast');
-  el.innerHTML = esc(msg) + 'Â Â <button onclick="window._toastUndoFn&&window._toastUndoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
+  el.innerHTML = esc(msg) + '  <button onclick="_undoFn&&_undoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.classList.remove('show'); window._toastUndoFn = null; }, 4000);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); _undoFn = null; }, 4000);
 }
 
 // Keyboard shortcuts for FIX tab (desktop)

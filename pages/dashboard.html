@@ -31,34 +31,7 @@
     overflow-x: hidden;
   }
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
-      radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
-    filter: blur(40px);
-    animation: bgDrift 36s ease-in-out infinite alternate;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  body::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  @keyframes bgDrift {
-    0%   { transform: translate(0,0) scale(1); }
-    50%  { transform: translate(20px,-15px) scale(1.04); }
-    100% { transform: translate(-10px,10px) scale(0.97); }
-  }
+  /* body::before / body::after / @keyframes bgDrift — from shared.css */
 
   .container {
     position: relative;
@@ -140,7 +113,7 @@
   }
 
   .goal-ticker-label {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 9.5px;
     font-weight: 800;
     letter-spacing: 0.18em;
@@ -160,7 +133,7 @@
     align-items: center;
     gap: 8px;
     height: 22px;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12.5px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -207,7 +180,7 @@
   }
 
   .goal-ticker-meta {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -263,11 +236,11 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.04em;
     line-height: 1;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
   }
 
   .ring-phase {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 9.5px;
     font-weight: 800;
     letter-spacing: 0.16em;
@@ -277,7 +250,7 @@
   }
 
   .ring-clock {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 10.5px;
     color: var(--text-tertiary);
   }
@@ -296,13 +269,13 @@
   }
 
   .ring-remaining {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--text-secondary);
   }
 
   .ring-hours {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-tertiary);
   }
@@ -391,7 +364,7 @@
   }
 
   .gm-progress-total {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 18px;
     color: var(--text-tertiary);
   }
@@ -429,7 +402,7 @@
   }
 
   .streak-num {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
@@ -763,7 +736,7 @@
   }
 
   .gm-tomorrow-count {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.10em;
@@ -1017,16 +990,12 @@ function storeListKeys(prefix) {
 // ── Date helpers ──
 function pad2(n) { return String(n).padStart(2,'0'); }
 
-// TEST MODE: set DATE_OFFSET = 1 to simulate tomorrow, 0 = normal
-const DATE_OFFSET = 0;
-
 function toDateString(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
 
 function getActiveDateString() {
   const now = new Date();
-  now.setDate(now.getDate() + DATE_OFFSET);
   if (now.getHours() < 6) {
     const y = new Date(now); y.setDate(y.getDate()-1);
     return toDateString(y);
@@ -1036,7 +1005,6 @@ function getActiveDateString() {
 
 function getTomorrowDateString() {
   const now = new Date();
-  now.setDate(now.getDate() + DATE_OFFSET);
   if (now.getHours() < 6) return toDateString(now);
   const t = new Date(now); t.setDate(t.getDate()+1);
   return toDateString(t);
@@ -1143,12 +1111,13 @@ function renderStreak() {
 
 // ── Today header ──
 function renderTodayHeader() {
-  const key = 'goals:' + getActiveDateString();
+  const today = getActiveDateString();
+  const key = 'goals:' + today;
   const goals = (storeGet(key) || []).filter(g => !g.deleted);
   const total = goals.length;
   const done  = goals.filter(g => g.done).length;
 
-  document.getElementById('todayLabel').textContent = 'Today — ' + formatDate(getActiveDateString());
+  document.getElementById('todayLabel').textContent = 'Today — ' + formatDate(today);
   document.getElementById('gmProgressNum').textContent = done;
   document.getElementById('gmProgressTotal').textContent = '/ ' + total;
 
@@ -1178,11 +1147,12 @@ function renderTodayHeader() {
 
 // ── Tomorrow count ──
 function renderTomorrowCount() {
-  const key = 'goals:' + getTomorrowDateString();
+  const tomorrow = getTomorrowDateString();
+  const key = 'goals:' + tomorrow;
   const goals = storeGet(key) || [];
   const n = goals.length;
   document.getElementById('gmTomorrowCount').textContent = n + ' planned';
-  document.getElementById('tomorrowLabel').textContent = 'Plan tomorrow — ' + formatDate(getTomorrowDateString());
+  document.getElementById('tomorrowLabel').textContent = 'Plan tomorrow — ' + formatDate(tomorrow);
 }
 
 // ── Build goal row ──
