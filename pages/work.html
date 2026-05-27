@@ -260,14 +260,6 @@
   }
   .char-counter.warn   { color: var(--warning); }
   .char-counter.danger { color: var(--danger); }
-  .desc-len-row { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
-  .desc-len-lbl { font-size: 11px; color: var(--text-tertiary); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-  .desc-len-btn {
-    padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
-    background: none; border: 1px solid var(--card-border); color: var(--text-tertiary);
-    cursor: pointer; transition: all 0.15s; font-family: inherit;
-  }
-  .desc-len-btn.active { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.15); color: var(--text-primary); }
   .copy-btn {
     background: none;
     border: 1px solid var(--card-border);
@@ -832,7 +824,6 @@ let shopeeCollapsed = false;
 let apiKeyVisible = false;
 let fixShopeeImages = [];
 let fixShopeeFetching = false;
-let descLength = localStorage.getItem('carobiz_desc_length') || 'medium';
 
 // Undo / copy state
 let undoTimer = null;
@@ -1150,15 +1141,6 @@ CHECK BEFORE OUTPUT:
 - No markdown symbols like ** or ##
 - No vague superlatives ("amazing", "best", "incredible")`;
 
-function getDescSystem() {
-  const inst = {
-    short:  'LENGTH — SHORT: Write only the opening product name line, the one-sentence benefit, and WHY YOU\'LL LOVE IT with 3 bullets max. Skip all other sections.',
-    medium: 'LENGTH — MEDIUM: Include all sections exactly as shown.',
-    long:   'LENGTH — LONG: Expand WHY YOU\'LL LOVE IT to 5–6 detailed bullets. Add more context to PERFECT FOR. Include every known SPECIFICATION.',
-  }[descLength] || '';
-  return DESC_SYSTEM + (inst ? '\n\n' + inst : '');
-}
-
 function updateCharCount(val, id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -1187,10 +1169,6 @@ function saveDraft() {
   }
 }
 
-function setDescLength(len) {
-  descLength = len;
-  localStorage.setItem('carobiz_desc_length', len);
-}
 
 async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -1238,7 +1216,7 @@ async function runAIGenerate(productText, { titleOnly = false, descOnly = false 
   if (!apiKey) throw new Error('NO_KEY');
   const productContent = `Product info:\n\n${productText}`;
   const titlePromise = descOnly  ? null : callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
-  const descPromise  = titleOnly ? null : callClaude(apiKey, getDescSystem(), productContent, 1536);
+  const descPromise  = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536);
   let rawTitle = '';
   if (!descOnly) {
     let titleText = await titlePromise;
@@ -1629,12 +1607,6 @@ function renderFixView() {
       }
       ${loadingMsg}
       ${descField}
-      <div class="desc-len-row">
-        <span class="desc-len-lbl">Desc</span>
-        <button class="desc-len-btn ${descLength==='short'?'active':''}"  onclick="setDescLength('short');renderFixView()">Short</button>
-        <button class="desc-len-btn ${descLength==='medium'?'active':''}" onclick="setDescLength('medium');renderFixView()">Medium</button>
-        <button class="desc-len-btn ${descLength==='long'?'active':''}"   onclick="setDescLength('long');renderFixView()">Long</button>
-      </div>
       <div class="ai-row">
         <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">${genLabel}</button>
         ${(aiTitle||aiDesc) ? `
@@ -1754,13 +1726,7 @@ function renderNewView() {
   <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
 
   // Generate button row
-  html += `<div class="desc-len-row">
-    <span class="desc-len-lbl">Desc</span>
-    <button class="desc-len-btn ${descLength==='short'?'active':''}"  onclick="setDescLength('short');renderNewView()">Short</button>
-    <button class="desc-len-btn ${descLength==='medium'?'active':''}" onclick="setDescLength('medium');renderNewView()">Medium</button>
-    <button class="desc-len-btn ${descLength==='long'?'active':''}"   onclick="setDescLength('long');renderNewView()">Long</button>
-  </div>
-  <div class="ai-row">
+  html += `<div class="ai-row">
     <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">${genLabel}</button>
     ${(newTitle||newDesc) ? `
       <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺ Title</button>
