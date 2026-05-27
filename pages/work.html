@@ -793,7 +793,7 @@ function calcSell(cost) {
 function onCostChange(val) {
   editedCost = parseFloat(val) || 0;
   const el = document.getElementById('sell-display');
-  if (el) el.textContent = '$' + calcSell(editedCost);
+  if (el) el.textContent = '$' + calcSell(editedCost).toFixed(2);
 }
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -1550,7 +1550,7 @@ function renderFixView() {
       <div class="parrow">→</div>
       <div class="pcol">
         <div class="pcol-label">Sell</div>
-        <div class="sell-display" id="sell-display">$${calcSell(cost)}</div>
+        <div class="sell-display" id="sell-display">$${calcSell(cost).toFixed(2)}</div>
       </div>
     </div>
     <div class="ai-section">
@@ -1720,13 +1720,13 @@ function renderNewView() {
       <div class="pcol-label">Cost${newShopeePrice ? ` <span style="color:var(--text-tertiary);font-weight:500;letter-spacing:0">(Shopee $${newShopeePrice.toFixed(2)})</span>` : ''}</div>
       <div class="pcol-input-wrap">
         <span class="pcol-currency">$</span>
-        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0)" id="new-cost-input">
+        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="new-cost-input">
       </div>
     </div>
     <div class="parrow">→</div>
     <div class="pcol">
       <div class="pcol-label">Sell</div>
-      <div class="sell-display" id="new-sell-display">$${sell}</div>
+      <div class="sell-display" id="new-sell-display">$${sell.toFixed(2)}</div>
     </div>
   </div>`;
 
@@ -1820,7 +1820,7 @@ function renderDoneView() {
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
           <span style="color:var(--text-tertiary)">→</span>
-          <span class="done-edit-sell" id="edit-sell-${d._i}">$${d.sellPrice}</span>
+          <span class="done-edit-sell" id="edit-sell-${d._i}">$${parseFloat(d.sellPrice).toFixed(2)}</span>
         </div>
         ${linkSection}
         <div class="done-edit-actions">
@@ -1834,7 +1834,7 @@ function renderDoneView() {
     return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
       <div class="done-info">
         <div class="done-title-text">${esc(d.title)}</div>
-        <div class="done-meta">Cost $${d.sourceCost} → Sell $${d.sellPrice}</div>
+        <div class="done-meta">Cost $${d.sourceCost} → Sell $${parseFloat(d.sellPrice).toFixed(2)}</div>
         ${linkBtns}
       </div>
       <div class="done-edit-icon">✎</div>
@@ -1845,7 +1845,7 @@ function renderDoneView() {
 
 function updateDoneEditSell(i, val) {
   const el = document.getElementById(`edit-sell-${i}`);
-  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0);
+  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0).toFixed(2);
 }
 
 function saveDoneEdit(i) {
