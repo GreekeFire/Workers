@@ -73,7 +73,18 @@ export default async function handler(req) {
   if (!url.includes('shopee.sg') && !url.includes('sg.shp.ee')) return json({ error: 'Only shopee.sg or sg.shp.ee URLs are supported' }, 400);
 
   // Strip query params from full URLs only — short URLs (sg.shp.ee) need the path intact
-  const cleanUrl = url.includes('sg.shp.ee') ? url : url.split('?')[0];
+  let cleanUrl = url.includes('sg.shp.ee') ? url : url.split('?')[0];
+
+  // Resolve sg.shp.ee short URLs to full shopee.sg product URL first
+  if (url.includes('sg.shp.ee')) {
+    try {
+      const redir = await fetch(cleanUrl, { method: 'GET', redirect: 'manual' });
+      const location = redir.headers.get('location');
+      if (location && location.includes('shopee.sg')) {
+        cleanUrl = location.split('?')[0];
+      }
+    } catch (e) { /* fall through with original URL */ }
+  }
 
   try {
     const timeout = new Promise((_, reject) =>
