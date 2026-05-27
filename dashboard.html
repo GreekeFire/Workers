@@ -1046,7 +1046,7 @@ function storeListKeys(prefix) {
 function pad2(n) { return String(n).padStart(2,'0'); }
 
 // TEST MODE: set DATE_OFFSET = 1 to simulate tomorrow, 0 = normal
-const DATE_OFFSET = 1;
+const DATE_OFFSET = 0;
 
 function toDateString(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
