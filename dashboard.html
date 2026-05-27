@@ -750,8 +750,8 @@
       0 6px 16px rgba(0,0,0,0.35);
   }
 
-  .btn-polish {
-    padding: 11px 20px;
+  .gm-polish {
+    padding: 11px 14px;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.10);
     background: rgba(255,255,255,0.04);
@@ -760,24 +760,24 @@
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
-    transition: transform 0.15s, background 0.15s;
     white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
   }
 
-  .btn-polish:hover {
-    transform: translateY(-1px);
+  .gm-polish:hover {
     background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.18);
   }
 
-  .polish-status {
+  .gm-status {
     font-size: 11px;
     color: var(--text-tertiary);
-    min-height: 16px;
-    margin-top: 6px;
-    width: 100%;
+    min-height: 14px;
+    margin-top: 4px;
+    flex-basis: 100%;
   }
 
-  .polish-status.error { color: var(--danger); }
+  .gm-status.error { color: var(--danger); }
 
   /* ── Tomorrow card extras ── */
   .gm-card-tomorrow .gm-progress-row { display: none; }
@@ -822,9 +822,10 @@
     .ring-percent { font-size: 32px; }
     .ring-status { font-size: 13px; }
 
-    .goal-input { font-size: 16px; }
+    .goal-input { font-size: 16px; flex-basis: 100%; }
+    .btn-add, .gm-polish { flex: 1; }
     .goal-delete { opacity: 0.4; }
-    .gm-queue-btn { padding: 6px 8px; }
+    .gm-queue-btn { padding: 6px 8px; opacity: 0.55; }
     .goal-cb-wrap { width: 26px; height: 26px; }
     .goal-cb-box { width: 26px; height: 26px; }
     .goal-item { padding: 14px 16px; }
@@ -915,6 +916,8 @@
       <div class="goal-input-wrap gm-input-wrap">
         <input class="goal-input" id="goalInput" type="text" placeholder="Add a goal for today…" autocomplete="off">
         <button class="btn-add" id="goalAddBtn">+ Add</button>
+        <button class="gm-polish" id="goalAlfredBtn">✨ Alfred</button>
+        <div class="gm-status" id="polishStatus"></div>
       </div>
     </div>
 
@@ -932,6 +935,8 @@
       <div class="goal-input-wrap gm-input-wrap">
         <input class="goal-input" id="tomorrowInput" type="text" placeholder="Add a goal for tomorrow…" autocomplete="off">
         <button class="btn-add" id="tomorrowAddBtn">+ Add</button>
+        <button class="gm-polish" id="tomorrowAlfredBtn">✨ Alfred</button>
+        <div class="gm-status" id="tomorrowPolishStatus"></div>
       </div>
     </div>
   </div>
@@ -941,7 +946,7 @@
 <script>
 'use strict';
 
-// ── API Key (set to enable Polish) ──
+// ── API Key (set to enable ✨ Alfred) ──
 const ANTHROPIC_API_KEY = '';
 
 // ── Supabase credentials ──
@@ -1425,7 +1430,38 @@ function loadTomorrow() {
 }
 
 // ── Add handlers ──
-function makeAddHandlers(inputEl, addBtn, key, reload) {
+async function alfredPolish(text) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 60,
+      messages: [{
+        role: 'user',
+        content: 'Rewrite as a short action task, max 40 chars, title case. Reply with ONLY the rewritten text, nothing else.\n\nTask: ' + text
+      }]
+    })
+  });
+  const data = await res.json();
+  const content = ((data.content || [])[0] || {}).text || '';
+  if (!content.trim()) throw new Error('empty');
+  return content.trim();
+}
+
+function showStatus(el, msg, isError) {
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.textContent = ''; el.classList.remove('error'); }, 3500);
+}
+
+function makeAddHandlers(inputEl, addBtn, key, reload, alfredBtn, statusEl) {
   function doAdd(text) {
     if (!text) return;
     const goals = storeGet(key) || [];
@@ -1436,6 +1472,27 @@ function makeAddHandlers(inputEl, addBtn, key, reload) {
   }
   addBtn.addEventListener('click', () => doAdd(inputEl.value.trim()));
   inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(inputEl.value.trim()); });
+
+  if (alfredBtn) {
+    alfredBtn.addEventListener('click', async () => {
+      const text = inputEl.value.trim();
+      if (!text) return;
+      if (!ANTHROPIC_API_KEY) {
+        doAdd(text);
+        if (statusEl) showStatus(statusEl, 'Alfred needs an API key — added as-typed.', false);
+        return;
+      }
+      alfredBtn.disabled = true;
+      try {
+        doAdd(await alfredPolish(text));
+      } catch {
+        doAdd(text);
+        if (statusEl) showStatus(statusEl, 'Alfred failed — added as-typed.', true);
+      } finally {
+        alfredBtn.disabled = false;
+      }
+    });
+  }
 }
 
 // ── Push remaining ──
@@ -1650,13 +1707,17 @@ window.addEventListener('goals-changed', () => tick(true));
     document.getElementById('goalInput'),
     document.getElementById('goalAddBtn'),
     'goals:' + getActiveDateString(),
-    loadToday
+    loadToday,
+    document.getElementById('goalAlfredBtn'),
+    document.getElementById('polishStatus')
   );
   makeAddHandlers(
     document.getElementById('tomorrowInput'),
     document.getElementById('tomorrowAddBtn'),
     'goals:' + getTomorrowDateString(),
-    loadTomorrow
+    loadTomorrow,
+    document.getElementById('tomorrowAlfredBtn'),
+    document.getElementById('tomorrowPolishStatus')
   );
 
   loadToday();
