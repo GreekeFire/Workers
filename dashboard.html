@@ -964,20 +964,13 @@ function getPending() {
 }
 function setPending(p) { localStorage.setItem('_pending', JSON.stringify(p)); }
 
-// Pending delete queue — same idea: retried each session until Supabase confirms
-function getPendingDeletes() {
-  try { return JSON.parse(localStorage.getItem('_pending_del')) || {}; } catch { return {}; }
-}
-function setPendingDeletes(p) { localStorage.setItem('_pending_del', JSON.stringify(p)); }
-
 function storeSet(key, value) {
   const jsonStr = JSON.stringify(value);
   const ts = new Date().toISOString();
   localStorage.setItem(key, jsonStr);
   localStorage.setItem('_ts:' + key, ts);
+  localStorage.removeItem('_del:' + key); // cancel any deletion marker
   lastSyncedJson[key] = jsonStr;
-  // If there was a pending delete for this key, cancel it
-  const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd);
   // Mark as pending until Supabase confirms
   const p = getPending(); p[key] = ts; setPending(p);
   db.from('app_state').upsert({ key, data: value, updated_at: ts }, { onConflict: 'key' })
@@ -990,10 +983,10 @@ function storeDelete(key) {
   localStorage.removeItem(key);
   localStorage.removeItem('_ts:' + key);
   const p = getPending(); delete p[key]; setPending(p);
-  // Track pending delete — retried each session until confirmed, and sync skips this key
-  const pd = getPendingDeletes(); pd[key] = new Date().toISOString(); setPendingDeletes(pd);
-  db.from('app_state').delete().eq('key', key)
-    .then(() => { const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd); });
+  // Leave a deletion timestamp — sync will skip this key if our deletion is newer
+  // than whatever Supabase has, even if the Supabase delete hasn't landed yet
+  localStorage.setItem('_del:' + key, new Date().toISOString());
+  db.from('app_state').delete().eq('key', key).then();
 }
 
 async function syncFromSupabase() {
@@ -1008,20 +1001,14 @@ async function syncFromSupabase() {
     }
   }
 
-  // Retry any deletes that failed last session
-  const pendingDeletes = getPendingDeletes();
-  for (const key of Object.keys(pendingDeletes)) {
-    db.from('app_state').delete().eq('key', key)
-      .then(() => { const pd = getPendingDeletes(); delete pd[key]; setPendingDeletes(pd); });
-  }
-
   const { data, error } = await db.from('app_state').select('key,data,updated_at');
   if (error || !data) return;
   for (const row of data) {
     // Never overwrite a key we have a pending write for
     if (pending[row.key]) continue;
-    // Never restore a key we're trying to delete
-    if (pendingDeletes[row.key]) continue;
+    // Skip if we deleted this key after it was last written to Supabase
+    const delTs = localStorage.getItem('_del:' + row.key);
+    if (delTs && (!row.updated_at || delTs > row.updated_at)) continue;
 
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
       // Merge: done and deleted are sticky — once true they can never be reset by sync
