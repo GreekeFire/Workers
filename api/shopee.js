@@ -138,6 +138,9 @@ export default async function handler(req) {
       }
     }
 
+    // Global floor: anything below $5 is a fee/voucher field, not a product price
+    if (price !== null && price < 5) price = null;
+
     return json({ title, description, images, price });
 
   } catch (err) {

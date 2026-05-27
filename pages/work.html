@@ -887,7 +887,6 @@ function loadLocal() {
       newTitle      = d.title      || '';
       newDesc       = d.desc       || '';
       newShopeeInput= d.shopeeInput|| '';
-      newCost       = d.cost       || '';
       newShopeeUrl  = d.shopeeUrl  || '';
       newCaroUrl    = d.caroUrl    || '';
       if (newTitle || newDesc) newShopeeCollapsed = true;
@@ -1144,7 +1143,7 @@ function saveDraft() {
   if (newTitle || newDesc || newShopeeInput) {
     localStorage.setItem('carobiz_new_draft', JSON.stringify({
       title: newTitle, desc: newDesc, shopeeInput: newShopeeInput,
-      cost: newCost, shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl
+      shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl
     }));
   } else {
     localStorage.removeItem('carobiz_new_draft');
