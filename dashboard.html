@@ -969,7 +969,6 @@ function storeSet(key, value) {
   const ts = new Date().toISOString();
   localStorage.setItem(key, jsonStr);
   localStorage.setItem('_ts:' + key, ts);
-  localStorage.removeItem('_del:' + key); // cancel any deletion marker
   lastSyncedJson[key] = jsonStr;
   // Mark as pending until Supabase confirms
   const p = getPending(); p[key] = ts; setPending(p);
@@ -983,9 +982,6 @@ function storeDelete(key) {
   localStorage.removeItem(key);
   localStorage.removeItem('_ts:' + key);
   const p = getPending(); delete p[key]; setPending(p);
-  // Leave a deletion timestamp — sync will skip this key if our deletion is newer
-  // than whatever Supabase has, even if the Supabase delete hasn't landed yet
-  localStorage.setItem('_del:' + key, new Date().toISOString());
   db.from('app_state').delete().eq('key', key).then();
 }
 
@@ -1006,9 +1002,6 @@ async function syncFromSupabase() {
   for (const row of data) {
     // Never overwrite a key we have a pending write for
     if (pending[row.key]) continue;
-    // Skip if we deleted this key after it was last written to Supabase
-    const delTs = localStorage.getItem('_del:' + row.key);
-    if (delTs && (!row.updated_at || delTs > row.updated_at)) continue;
 
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
       // Merge: done and deleted are sticky — once true they can never be reset by sync
@@ -1086,12 +1079,18 @@ function runRollover() {
     if (ds >= activeDate) continue;
     const goals = storeGet(key) || [];
     const undone = goals.filter(g => !g.done && !g.deleted);
-    if (!undone.length) { storeDelete(key); continue; }
+    // Instead of storeDelete (fire-and-forget Supabase delete that can fail silently),
+    // mark all items deleted:true via storeSet, which uses the pending-write retry queue.
+    // The sync merge makes deleted sticky, so even stale Supabase data can't revive them.
+    if (!undone.length) {
+      if (goals.some(g => !g.deleted)) storeSet(key, goals.map(g => ({ ...g, deleted: true })));
+      continue;
+    }
     const todayGoals = storeGet('goals:' + activeDate) || [];
     const existing = new Set(todayGoals.map(g => g.text));
     const toAdd = undone.filter(g => !existing.has(g.text)).map(g => ({ text: g.text, done: false }));
     storeSet('goals:' + activeDate, [...toAdd, ...todayGoals]);
-    storeDelete(key);
+    storeSet(key, goals.map(g => ({ ...g, deleted: true })));
   }
 }
 
