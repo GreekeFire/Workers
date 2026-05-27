@@ -824,6 +824,7 @@ let shopeeCollapsed = false;
 let apiKeyVisible = false;
 let fixShopeeImages = [];
 let fixShopeeFetching = false;
+let fixFetchCollapsed = false;
 
 // Undo / copy state
 let undoTimer = null;
@@ -842,6 +843,7 @@ let newShopeeCollapsed = false;
 let newShopeeImages = [];
 let newShopeeFetching = false;
 let newApiKeyVisible = false;
+let newFetchCollapsed = false;
 
 // Link overrides
 let linkEditing = false;
@@ -1067,6 +1069,7 @@ function resetAI() {
   shopeeCollapsed = false;
   fixShopeeImages = [];
   fixShopeeFetching = false;
+  fixFetchCollapsed = false;
 }
 
 // AI — shared constants & helpers
@@ -1128,14 +1131,6 @@ function updateCharCount(val, id) {
   el.className = 'char-counter' + (len > 225 ? ' danger' : len >= 200 ? ' warn' : '');
 }
 
-function copyAll(titleId, descId, btnId) {
-  const title = document.getElementById(titleId)?.value || '';
-  const desc  = document.getElementById(descId)?.value  || '';
-  if (!title && !desc) return;
-  navigator.clipboard.writeText(title + (desc ? '\n\n' + desc : ''));
-  const btn = document.getElementById(btnId);
-  if (btn) { btn.textContent = 'Copied!'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = 'Copy All'; btn.classList.remove('copied'); }, 1500); }
-}
 
 function saveDraft() {
   if (newTitle || newDesc || newShopeeInput) {
@@ -1239,7 +1234,7 @@ async function generateAI(mode = 'both') {
     if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
     aiError = e.message || 'Unknown error';
   }
-  if (aiTitle || aiDesc) shopeeCollapsed = true;
+  if (aiTitle || aiDesc) { shopeeCollapsed = true; fixFetchCollapsed = true; }
   aiLoading = false;
   renderFixView();
   if (aiError) {
@@ -1330,7 +1325,7 @@ async function generateAINew(mode = 'both') {
     if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
     aiError = e.message || 'Unknown error';
   }
-  if (newTitle || newDesc) newShopeeCollapsed = true;
+  if (newTitle || newDesc) { newShopeeCollapsed = true; newFetchCollapsed = true; }
   newLoading = false;
   saveDraft();
   renderNewView();
@@ -1499,26 +1494,27 @@ function renderFixView() {
   const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
   const cost = editedCost !== null ? editedCost : L[3];
   const sell = L[4];
-  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : '✨ Generate';
-  const loadingMsg = aiLoading ? '<div class="ai-loading">Generating…</div>' : '';
-  const descField = (aiTitle || aiDesc) ? `
-    <div class="field-header">
-      <span class="field-label">Description</span>
-      <div style="display:flex;gap:6px">
-        <button class="copy-btn" id="fix-copy-all-btn" onclick="copyAll('title-ta','ai-desc-ta','fix-copy-all-btn')">Copy All</button>
-        <button class="copy-btn" id="copy-desc-btn" onclick="copyField('ai-desc-ta','copy-desc-btn')">Copy</button>
-      </div>
-    </div>
-    <textarea class="ai-field" id="ai-desc-ta" oninput="aiDesc=this.value;autoResize(this)">${esc(aiDesc)}</textarea>` : '';
-
   wrap.innerHTML = `<div class="listing-card">
     <div class="field-header">
       <span class="field-label">Title</span>
-      <button class="copy-btn" id="copy-title-btn" onclick="copyField('title-ta','copy-title-btn')">Copy</button>
+      <div style="display:flex;gap:6px">
+        ${aiTitle ? `<button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">↺</button>` : ''}
+        <button class="copy-btn" id="copy-title-btn" onclick="copyField('title-ta','copy-title-btn')">Copy</button>
+      </div>
     </div>
     <textarea class="title-input" rows="1" id="title-ta"
-    oninput="aiTitle=this.value;autoResize(this);updateCharCount(this.value,'fix-char-count')">${esc(title)}</textarea>
-  <div class="char-counter ${title.length>225?'danger':title.length>=200?'warn':''}" id="fix-char-count">${title.length} / 225</div>
+      oninput="aiTitle=this.value;autoResize(this);updateCharCount(this.value,'fix-char-count')">${esc(title)}</textarea>
+    <div class="char-counter ${title.length>225?'danger':title.length>=200?'warn':''}" id="fix-char-count">${title.length} / 225</div>
+    ${aiDesc ? `
+      <div class="field-header">
+        <span class="field-label">Description</span>
+        <div style="display:flex;gap:6px">
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">↺</button>
+          <button class="copy-btn" id="copy-desc-btn" onclick="copyField('ai-desc-ta','copy-desc-btn')">Copy</button>
+        </div>
+      </div>
+      <textarea class="ai-field" id="ai-desc-ta" oninput="aiDesc=this.value;autoResize(this)">${esc(aiDesc)}</textarea>
+    ` : ''}
     <div class="listing-links">
       ${linkEditing ? `
         <input class="link-edit-input" id="link-shopee-input" type="url" placeholder="Shopee URL" value="${esc(shopeeUrl)}">
@@ -1556,14 +1552,17 @@ function renderFixView() {
           <button class="copy-btn" onclick="saveApiKey()">Save</button>
           ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
         </div>` : ''}
-      <div class="shopee-fetch-row">
-        <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
-          placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
-          oninput="" style="flex:1;font-size:13px;padding:9px 12px">
-        <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
-          ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
-        </button>
-      </div>
+      ${fixFetchCollapsed
+        ? `<div class="shopee-collapsed" onclick="fixFetchCollapsed=false;renderFixView()">▼ Change URL</div>`
+        : `<div class="shopee-fetch-row">
+            <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
+              placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
+              oninput="" style="flex:1;font-size:13px;padding:9px 12px">
+            <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
+              ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+            </button>
+          </div>`
+      }
       ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
         `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
           <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
@@ -1578,14 +1577,11 @@ function renderFixView() {
               placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
         : ''
       }
-      ${loadingMsg}
-      ${descField}
+      ${aiLoading ? '<div class="ai-loading">Generating…</div>' : ''}
       <div class="ai-row">
-        <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">${genLabel}</button>
-        ${(aiTitle||aiDesc) ? `
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">↺ Title</button>
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">↺ Desc</button>
-        ` : ''}
+        <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">
+          ${(aiTitle||aiDesc) ? '↺ Regenerate' : '✨ Generate'}
+        </button>
       </div>
     </div>
   </div>`;
@@ -1652,16 +1648,18 @@ function renderNewView() {
     </div>`;
   }
 
-  // Shopee section — always show fetch row + images; textarea is toggleable
-  html += `<div class="shopee-fetch-row">
-    <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
-      placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
-      oninput="newShopeeUrl=this.value"
-      style="flex:1;font-size:13px;padding:9px 12px">
-    <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
-      ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
-    </button>
-  </div>`;
+  // Shopee section — fetch row collapsible after generation; images always shown; textarea toggleable
+  html += newFetchCollapsed
+    ? `<div class="shopee-collapsed" onclick="newFetchCollapsed=false;renderNewView()">▼ Change URL</div>`
+    : `<div class="shopee-fetch-row">
+        <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
+          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
+          oninput="newShopeeUrl=this.value"
+          style="flex:1;font-size:13px;padding:9px 12px">
+        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
+          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+        </button>
+      </div>`;
   if (newShopeeImages.length > 0) {
     html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
       `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
@@ -1682,7 +1680,10 @@ function renderNewView() {
   // Title (always visible)
   html += `<div class="field-header" style="margin-top:12px">
     <span class="field-label">Title</span>
-    <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
+    <div style="display:flex;gap:6px">
+      ${newTitle ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺</button>` : ''}
+      <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
+    </div>
   </div>
   <textarea class="title-input" rows="1" id="new-title-ta"
     oninput="newTitle=this.value;autoResize(this);updateCharCount(this.value,'new-char-count')"
@@ -1691,7 +1692,7 @@ function renderNewView() {
   <div class="field-header">
     <span class="field-label">Description</span>
     <div style="display:flex;gap:6px">
-      ${(newTitle||newDesc) ? `<button class="copy-btn" id="new-copy-all-btn" onclick="copyAll('new-title-ta','new-desc-ta','new-copy-all-btn')">Copy All</button>` : ''}
+      ${newDesc ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺</button>` : ''}
       <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
     </div>
   </div>
@@ -1699,11 +1700,9 @@ function renderNewView() {
 
   // Generate button row
   html += `<div class="ai-row">
-    <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">${genLabel}</button>
-    ${(newTitle||newDesc) ? `
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺ Title</button>
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺ Desc</button>
-    ` : ''}
+    <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">
+      ${(newTitle||newDesc) ? '↺ Regenerate' : '✨ Generate'}
+    </button>
     ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
   </div>`;
 
@@ -1733,7 +1732,7 @@ function renderNewView() {
 
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
-    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;renderNewView()">Clear</button>
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;newFetchCollapsed=false;renderNewView()">Clear</button>
     <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 
