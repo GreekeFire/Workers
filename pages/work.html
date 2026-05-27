@@ -1,20 +1,20 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Work — Workers</title>
+<title>Work â€” Workers</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Workers">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#050506">
 <link rel="manifest" href="/manifest.json">
-<script src="data/listings-data.js"></script>
+<script src="/data/listings-data.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="shared/shared.css">
-<script src="shared/config.js"></script>
-<script src="shared/utils.js"></script>
+<link rel="stylesheet" href="/shared/shared.css">
+<script src="/shared/config.js"></script>
+<script src="/shared/utils.js"></script>
 <style>
   :root {
     --text-primary: #FAFAFA;
@@ -822,7 +822,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="shared/nav.js"></script>
+<script src="/shared/nav.js"></script>
 
 <script>
 function calcSell(cost) {
@@ -1004,12 +1004,12 @@ function setSyncStatus(state) {
   clearTimeout(syncStatusTimer);
   el.className = 'sync-status visible ' + state;
   if (state === 'syncing') {
-    el.textContent = '⟳ Syncing…';
+    el.textContent = 'âŸ³ Syncingâ€¦';
   } else if (state === 'synced') {
-    el.textContent = '✓ Synced';
+    el.textContent = 'âœ“ Synced';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
   } else if (state === 'error') {
-    el.textContent = '✗ Sync failed';
+    el.textContent = 'âœ— Sync failed';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
   }
 }
@@ -1043,7 +1043,7 @@ function markDone() {
   saveLocal();
   pushToSupabase();
   renderAll();
-  toast('Done ✓');
+  toast('Done âœ“');
 }
 
 function markDeleted() {
@@ -1073,7 +1073,7 @@ function undoDelete() {
   currentIndex = idx;
   saveLocal();
   renderAll();
-  toast('Undo ✓');
+  toast('Undo âœ“');
 }
 
 function saveDoneLinkEdits(doneIdx, listingIndex) {
@@ -1109,67 +1109,67 @@ function resetAI() {
   fixShopeeFetching = false;
 }
 
-// AI — shared constants & helpers
+// AI â€” shared constants & helpers
 const TITLE_SYSTEM = `You are a Carousell Singapore SEO copywriter.
 
-TASK: Write a Carousell listing title for the product below. Output the title text only — no JSON, no explanation, no quotes, nothing else.
+TASK: Write a Carousell listing title for the product below. Output the title text only â€” no JSON, no explanation, no quotes, nothing else.
 
 RULES:
-1. Length: exactly 200–225 characters. Count every character. This is the strictest rule.
-2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2–4 words — never a single word alone.
+1. Length: exactly 200â€“225 characters. Count every character. This is the strictest rule.
+2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2â€“4 words â€” never a single word alone.
 3. Front-load the strongest buyer search terms in the first 50 characters.
 4. Every segment must be something a real buyer types into a search bar.
-5. Never repeat the same root word across segments. Before writing each segment, check every previous segment — if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2–end must not contain "Clean", "Cleaner", "Cleans", or any variation.
-6. Correct any spelling errors found in the source text — do not copy typos.
-7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (—).
+5. Never repeat the same root word across segments. Before writing each segment, check every previous segment â€” if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2â€“end must not contain "Clean", "Cleaner", "Cleans", or any variation.
+6. Correct any spelling errors found in the source text â€” do not copy typos.
+7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (â€”).
 
 CORRECT EXAMPLE (219 chars):
 Automatic Pet Water Dispenser | Wireless Rechargeable | Motion Sensor | 2.5L Capacity | 4000mAh Battery | Dual Power Supply | 110 Days Runtime | Smart Timing Mode | Pet Fountain | Water Bowl | Indoor Outdoor
 
 WRONG EXAMPLE:
-Wireless RGB Keyboard — 98-key compact, triple-mode connectivity  ← sentence structure, forbidden
+Wireless RGB Keyboard â€” 98-key compact, triple-mode connectivity  â† sentence structure, forbidden
 
-Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
+Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title â€” no counting, no explanation, nothing else.`;
 
 const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
 
-Rewrite the product description for a Carousell listing. Plain text only inside the JSON — no **bold**, no #headers, no markdown. Use section labels exactly as shown.
+Rewrite the product description for a Carousell listing. Plain text only inside the JSON â€” no **bold**, no #headers, no markdown. Use section labels exactly as shown.
 
 TONE:
-- Friendly and direct — speak to the buyer as "you"
+- Friendly and direct â€” speak to the buyer as "you"
 - Benefits-focused, not feature-focused
-- Specific — never say "high quality", "amazing", "best"
+- Specific â€” never say "high quality", "amazing", "best"
 - No hype words: "incredible", "must-have", "limited"
 - No multiple exclamation marks
 
 Use exactly this structure:
 
-[Product name — one clear descriptive phrase, no brand names]
+[Product name â€” one clear descriptive phrase, no brand names]
 [One sentence: what this is and the main benefit it gives the buyer]
 
 WHY YOU'LL LOVE IT:
-• [Specific benefit — what it does for them daily]
-• [Practical benefit — size, ease of use, time-saving]
-• [Emotional benefit — how it makes life better]
-• [Quality/durability note — materials or build, if known]
+â€¢ [Specific benefit â€” what it does for them daily]
+â€¢ [Practical benefit â€” size, ease of use, time-saving]
+â€¢ [Emotional benefit â€” how it makes life better]
+â€¢ [Quality/durability note â€” materials or build, if known]
 
 PERFECT FOR:
-[2–3 specific situations: who uses it and where]
+[2â€“3 specific situations: who uses it and where]
 
 WHAT'S INCLUDED:
 [Exactly what comes in the package]
 
-SPECIFICATIONS (only include lines where the value is confirmed — skip any line where the value is unknown, do not write "Not specified"):
-• Material: [confirmed value only]
-• Dimensions: [L x W x H in cm — confirmed only]
-• Weight: [confirmed only]
-• Colours available: [confirmed colours only]
+SPECIFICATIONS (only include lines where the value is confirmed â€” skip any line where the value is unknown, do not write "Not specified"):
+â€¢ Material: [confirmed value only]
+â€¢ Dimensions: [L x W x H in cm â€” confirmed only]
+â€¢ Weight: [confirmed only]
+â€¢ Colours available: [confirmed colours only]
 
 WHY BUY FROM ME:
-✓ Fast Singapore shipping
-✓ Quality checked before sending
-✓ Secure packaging
-✓ Responsive customer service
+âœ“ Fast Singapore shipping
+âœ“ Quality checked before sending
+âœ“ Secure packaging
+âœ“ Responsive customer service
 
 ---
 DM me for bulk discounts or questions!
@@ -1182,9 +1182,9 @@ CHECK BEFORE OUTPUT:
 
 function getDescSystem() {
   const inst = {
-    short:  'LENGTH — SHORT: Write only the opening product name line, the one-sentence benefit, and WHY YOU\'LL LOVE IT with 3 bullets max. Skip all other sections.',
-    medium: 'LENGTH — MEDIUM: Include all sections exactly as shown.',
-    long:   'LENGTH — LONG: Expand WHY YOU\'LL LOVE IT to 5–6 detailed bullets. Add more context to PERFECT FOR. Include every known SPECIFICATION.',
+    short:  'LENGTH â€” SHORT: Write only the opening product name line, the one-sentence benefit, and WHY YOU\'LL LOVE IT with 3 bullets max. Skip all other sections.',
+    medium: 'LENGTH â€” MEDIUM: Include all sections exactly as shown.',
+    long:   'LENGTH â€” LONG: Expand WHY YOU\'LL LOVE IT to 5â€“6 detailed bullets. Add more context to PERFECT FOR. Include every known SPECIFICATION.',
   }[descLength] || '';
   return DESC_SYSTEM + (inst ? '\n\n' + inst : '');
 }
@@ -1244,7 +1244,7 @@ async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
       });
       data = await resp.json();
     } catch (e) {
-      // Network / parse error — retry with backoff
+      // Network / parse error â€” retry with backoff
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -1307,7 +1307,7 @@ async function generateAI(mode = 'both') {
     });
     if (mode !== 'desc'  && title) aiTitle = title;
     if (mode !== 'title' && desc)  aiDesc  = desc;
-    if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
+    if (!aiTitle && !aiDesc) aiError = 'No content returned â€” try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
     aiError = e.message || 'Unknown error';
@@ -1334,7 +1334,7 @@ function saveApiKey() {
   }
 }
 
-// NEW tab — fetch from Shopee URL
+// NEW tab â€” fetch from Shopee URL
 async function fetchShopeeData() {
   const urlEl = document.getElementById('new-shopee-fetch-url');
   const url   = (urlEl?.value || newShopeeUrl).trim();
@@ -1350,9 +1350,9 @@ async function fetchShopeeData() {
     newShopeeImages = data.images || [];
     // Pre-fill cost if Shopee price is available (as a reference)
     if (data.price && !newCost) newCost = data.price.toFixed(2);
-    toast('Fetched ✓');
+    toast('Fetched âœ“');
   } catch(e) {
-    toast('Failed — ' + (e.message || 'unknown error'));
+    toast('Failed â€” ' + (e.message || 'unknown error'));
   }
   newShopeeFetching = false;
   renderNewView();
@@ -1363,7 +1363,7 @@ async function fetchShopeeData() {
   if (newShopeeInput) generateAINew('both');
 }
 
-// FIX tab — fetch from Shopee URL
+// FIX tab â€” fetch from Shopee URL
 async function fetchShopeeDataFix() {
   const urlEl = document.getElementById('fix-shopee-fetch-url');
   const url   = urlEl?.value.trim();
@@ -1376,9 +1376,9 @@ async function fetchShopeeDataFix() {
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
     shopeeInput      = [data.title, data.description].filter(Boolean).join('\n\n');
     fixShopeeImages  = data.images || [];
-    toast('Fetched ✓');
+    toast('Fetched âœ“');
   } catch(e) {
-    toast('Failed — ' + (e.message || 'unknown error'));
+    toast('Failed â€” ' + (e.message || 'unknown error'));
   }
   fixShopeeFetching = false;
   renderFixView();
@@ -1406,7 +1406,7 @@ async function generateAINew(mode = 'both') {
     });
     if (mode !== 'desc'  && title) newTitle = title;
     if (mode !== 'title' && desc)  newDesc  = desc;
-    if (!newTitle && !newDesc) aiError = 'No content returned — try again';
+    if (!newTitle && !newDesc) aiError = 'No content returned â€” try again';
   } catch (e) {
     if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
     aiError = e.message || 'Unknown error';
@@ -1465,7 +1465,7 @@ function saveNewListing() {
   pushToSupabase();
   renderSessionBar();
   switchTab('done');
-  toast('Saved to Done ✓');
+  toast('Saved to Done âœ“');
 }
 
 // Sales
@@ -1481,7 +1481,7 @@ function logSale() {
   pushToSupabase();
   renderSalesView();
   renderSessionBar();
-  toast('Logged ✓');
+  toast('Logged âœ“');
 }
 
 function searchListings(query) {
@@ -1494,10 +1494,10 @@ function searchListings(query) {
   }
   if (matches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = matches.map(({ L, i }) => {
-    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
-    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
+    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee â†—</a>` : '';
+    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell â†—</a>` : '';
     const isDone = doneSet.has(i) || deletedSet.has(i);
-    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix →</span>` : '';
+    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix â†’</span>` : '';
     return `<div class="search-result" onmousedown="selectListing(${i})">
       <div class="search-result-name">${esc(L[0])}</div>
       <div class="search-result-meta">
@@ -1523,8 +1523,8 @@ function selectListing(idx) {
   document.getElementById('search-dropdown').style.display = 'none';
   document.getElementById('sale-price').value = L[4];
   const infoEl = document.getElementById('sale-listing-info');
-  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
-  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell ↗</a>` : '';
+  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee â†—</a>` : '';
+  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell â†—</a>` : '';
   infoEl.innerHTML = `<span class="sale-info-price">$${L[4]}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
   document.getElementById('sale-price').focus();
@@ -1562,13 +1562,13 @@ function renderFixView() {
   const processed = doneSet.size + deletedSet.size;
   const remaining = total - processed;
   document.getElementById('progress-line').textContent =
-    doneSet.size + ' done · ' + deletedSet.size + ' deleted · ' + remaining + ' remaining';
+    doneSet.size + ' done Â· ' + deletedSet.size + ' deleted Â· ' + remaining + ' remaining';
 
   const wrap = document.getElementById('listing-wrap');
   const actionRow = document.getElementById('action-row');
 
   if (currentIndex >= total || remaining === 0) {
-    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
+    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">âœ“</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
     actionRow.style.display = 'none';
     return;
   }
@@ -1580,8 +1580,8 @@ function renderFixView() {
   const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
   const cost = editedCost !== null ? editedCost : L[3];
   const sell = L[4];
-  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : '✨ Generate';
-  const loadingMsg = aiLoading ? '<div class="ai-loading">Generating…</div>' : '';
+  const genLabel = (aiTitle || aiDesc) ? 'Regenerate' : 'âœ¨ Generate';
+  const loadingMsg = aiLoading ? '<div class="ai-loading">Generatingâ€¦</div>' : '';
   const descField = (aiTitle || aiDesc) ? `
     <div class="field-header">
       <span class="field-label">Description</span>
@@ -1605,10 +1605,10 @@ function renderFixView() {
         <input class="link-edit-input" id="link-shopee-input" type="url" placeholder="Shopee URL" value="${esc(shopeeUrl)}">
         <input class="link-edit-input" id="link-caro-input" type="url" placeholder="Carousell URL" value="${esc(carousellUrl)}">
         <button class="copy-btn" onclick="saveLinkEdits()">Save</button>
-        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">✕</button>
+        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">âœ•</button>
       ` : `
-        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
-        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
+        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee â†—</a>` : ''}
+        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell â†—</a>` : ''}
         <button class="copy-btn" style="opacity:0.4;font-size:10px" onclick="linkEditing=true;renderFixView()">Edit</button>
       `}
     </div>
@@ -1620,7 +1620,7 @@ function renderFixView() {
           <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(cost))}" oninput="onCostChange(this.value)" id="cost-input">
         </div>
       </div>
-      <div class="parrow">→</div>
+      <div class="parrow">â†’</div>
       <div class="pcol">
         <div class="pcol-label">Sell</div>
         <div class="sell-display" id="sell-display">$${calcSell(cost)}</div>
@@ -1628,34 +1628,34 @@ function renderFixView() {
     </div>
     <div class="ai-section">
       <div class="field-header">
-        <span class="field-label">✨ AI</span>
-        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
+        <span class="field-label">âœ¨ AI</span>
+        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">ðŸ”‘ Key</button>` : ''}
       </div>
       ${(!localStorage.getItem('alfred_claude_key') || apiKeyVisible) ? `
         <div class="ai-key-inline">
-          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-…">
+          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-â€¦">
           <button class="copy-btn" onclick="saveApiKey()">Save</button>
-          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
+          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">âœ•</button>` : ''}
         </div>` : ''}
       ${shopeeCollapsed
-        ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content ▼</div>`
+        ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">Shopee content â–¼</div>`
         : `<div class="shopee-fetch-row">
             <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
-              placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
+              placeholder="shopee.sg/â€¦" value="${esc(shopeeUrl)}"
               oninput="" style="flex:1;font-size:13px;padding:9px 12px">
             <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
-              ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+              ${fixShopeeFetching ? 'Fetchingâ€¦' : 'Fetch â†“'}
             </button>
           </div>
           ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
             `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
               <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
-              <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
+              <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">â†“</a>
             </a>`).join('')}</div>` : ''}
           <textarea class="ai-field" id="shopee-input-ta"
             oninput="shopeeInput=this.value;autoResize(this)"
             onchange="shopeeInput=this.value;autoResize(this)"
-            placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
+            placeholder="Or paste Shopee title + description hereâ€¦">${esc(shopeeInput)}</textarea>`
       }
       ${loadingMsg}
       ${descField}
@@ -1668,8 +1668,8 @@ function renderFixView() {
       <div class="ai-row">
         <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">${genLabel}</button>
         ${(aiTitle||aiDesc) ? `
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">↺ Title</button>
-          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">↺ Desc</button>
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">â†º Title</button>
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">â†º Desc</button>
         ` : ''}
       </div>
     </div>
@@ -1720,7 +1720,7 @@ function addSwipeGestures() {
 function renderNewView() {
   const wrap = document.getElementById('new-wrap');
   const apiKey = localStorage.getItem('alfred_claude_key');
-  const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
+  const genLabel = (newTitle || newDesc) ? 'Regenerate' : 'âœ¨ Generate';
   const sell = calcSell(parseFloat(newCost) || 0);
 
   let html = `<div class="listing-card">`;
@@ -1729,26 +1729,26 @@ function renderNewView() {
   if (!apiKey || newApiKeyVisible) {
     html += `<div class="field-header" style="margin-bottom:8px">
       <span class="field-label">Claude API Key</span>
-      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">✕</button>` : ''}
+      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">âœ•</button>` : ''}
     </div>
     <div class="ai-key-inline">
-      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-…">
+      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-â€¦">
       <button class="copy-btn" onclick="saveApiKeyNew()">Save</button>
     </div>`;
   }
 
-  // Shopee section — URL fetch or manual paste
+  // Shopee section â€” URL fetch or manual paste
   if (newShopeeCollapsed) {
-    html += `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content ▼</div>`;
+    html += `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">Shopee content â–¼</div>`;
   } else {
     html += `<div class="field-header"><span class="field-label">Shopee</span></div>
       <div class="shopee-fetch-row">
         <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
-          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
+          placeholder="shopee.sg/â€¦" value="${esc(newShopeeUrl)}"
           oninput="newShopeeUrl=this.value"
           style="flex:1;font-size:13px;padding:9px 12px">
         <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
-          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+          ${newShopeeFetching ? 'Fetchingâ€¦' : 'Fetch â†“'}
         </button>
       </div>`;
     if (newShopeeImages.length > 0) {
@@ -1760,10 +1760,10 @@ function renderNewView() {
     }
     html += `<textarea class="ai-field" id="new-shopee-ta"
       oninput="newShopeeInput=this.value;autoResize(this)"
-      placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+      placeholder="Or paste Shopee title + description hereâ€¦">${esc(newShopeeInput)}</textarea>`;
   }
 
-  if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
+  if (newLoading) html += `<div class="ai-loading">Generatingâ€¦</div>`;
 
   // Title (always visible)
   html += `<div class="field-header" style="margin-top:12px">
@@ -1772,7 +1772,7 @@ function renderNewView() {
   </div>
   <textarea class="title-input" rows="1" id="new-title-ta"
     oninput="newTitle=this.value;autoResize(this);updateCharCount(this.value,'new-char-count')"
-    placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
+    placeholder="Type or generate a titleâ€¦">${esc(newTitle)}</textarea>
   <div class="char-counter ${newTitle.length>225?'danger':newTitle.length>=200?'warn':''}" id="new-char-count">${newTitle.length} / 225</div>
   <div class="field-header">
     <span class="field-label">Description</span>
@@ -1781,7 +1781,7 @@ function renderNewView() {
       <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
     </div>
   </div>
-  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
+  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a descriptionâ€¦">${esc(newDesc)}</textarea>`;
 
   // Generate button row
   html += `<div class="desc-len-row">
@@ -1793,10 +1793,10 @@ function renderNewView() {
   <div class="ai-row">
     <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">${genLabel}</button>
     ${(newTitle||newDesc) ? `
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺ Title</button>
-      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺ Desc</button>
+      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">â†º Title</button>
+      <button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">â†º Desc</button>
     ` : ''}
-    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
+    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">ðŸ”‘ Key</button>` : ''}
   </div>`;
 
   // Price calculator
@@ -1808,7 +1808,7 @@ function renderNewView() {
         <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0)" id="new-cost-input">
       </div>
     </div>
-    <div class="parrow">→</div>
+    <div class="parrow">â†’</div>
     <div class="pcol">
       <div class="pcol-label">Sell</div>
       <div class="sell-display" id="new-sell-display">$${sell}</div>
@@ -1826,7 +1826,7 @@ function renderNewView() {
   // Save + Clear row
   html += `<div class="action-row" style="margin-top:16px">
     <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;renderNewView()">Clear</button>
-    <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
+    <button class="btn-done" onclick="saveNewListing()">Save to Done â†’</button>
   </div>`;
 
   wrap.innerHTML = html;
@@ -1889,8 +1889,8 @@ function renderDoneView() {
     const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (d.shopeeUrl || LISTINGS[d.index]?.[1] || '');
     const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (d.carousellUrl || LISTINGS[d.index]?.[2] || '');
     const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
-      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
-      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
+      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee â†—</a>` : ''}
+      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell â†—</a>` : ''}
     </div>`;
     if (editingDoneIdx === d._i) {
       const linkSection = doneLinkEditIdx === d._i ? `
@@ -1904,13 +1904,13 @@ function renderDoneView() {
         <div class="done-edit-price">
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
-          <span style="color:var(--text-tertiary)">→</span>
+          <span style="color:var(--text-tertiary)">â†’</span>
           <span class="done-edit-sell" id="edit-sell-${d._i}">$${d.sellPrice}</span>
         </div>
         ${linkSection}
         <div class="done-edit-actions">
           <button class="done-cancel-btn" onclick="editingDoneIdx=null;doneLinkEditIdx=null;renderDoneView()">Cancel</button>
-          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
+          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">âœŽ Links</button>
           <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
         </div>
         <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i},${d.index})">Delete listing</button>
@@ -1919,10 +1919,10 @@ function renderDoneView() {
     return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
       <div class="done-info">
         <div class="done-title-text">${esc(d.title)}</div>
-        <div class="done-meta">Cost $${d.sourceCost} → Sell $${d.sellPrice}</div>
+        <div class="done-meta">Cost $${d.sourceCost} â†’ Sell $${d.sellPrice}</div>
         ${linkBtns}
       </div>
-      <div class="done-edit-icon">✎</div>
+      <div class="done-edit-icon">âœŽ</div>
     </div>`;
   }).join('');
 }
@@ -1995,7 +1995,7 @@ function toast(msg) {
 function toastWithUndo(msg, undoFn) {
   window._toastUndoFn = undoFn;
   const el = document.getElementById('toast');
-  el.innerHTML = esc(msg) + '  <button onclick="window._toastUndoFn&&window._toastUndoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
+  el.innerHTML = esc(msg) + 'Â Â <button onclick="window._toastUndoFn&&window._toastUndoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.classList.remove('show'); window._toastUndoFn = null; }, 4000);
