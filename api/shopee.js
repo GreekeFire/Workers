@@ -102,7 +102,7 @@ export default async function handler(req) {
       }, 502);
     }
 
-    // Try to extract price — multiple strategies in order of reliability
+    // Try to extract price — strategies in order of reliability
     let price = null;
 
     // 1. JSON-LD structured data
@@ -119,30 +119,23 @@ export default async function handler(req) {
       price = parseFloat(extractMeta(html, 'og:price:amount') || extractMeta(html, 'product:price:amount')) || null;
     }
 
-    // 3. Shopee embeds price in script tags as raw JSON.
-    // Prices are stored as integers in units of 1/100000 SGD (e.g. 1990000 = $19.90).
-    // Try price_min first (lowest variant), fall back to price.
+    // 3. Shopee embeds price in script tags as raw JSON integers.
+    // Prices are in units of 1/100000 SGD (e.g. 1990000 = $19.90).
+    // Try price_min first (cheapest variant), then price.
     if (price === null) {
-      const priceKeys = ['price_min', 'price_max', '"price"'];
-      for (const key of priceKeys) {
-        const m = html.match(new RegExp(`"${key.replace(/"/g,'')}"\s*:\s*(\d{4,})`));
+      for (const key of ['price_min', 'price']) {
+        // Note: must use \\s and \\d inside new RegExp() string
+        const m = html.match(new RegExp('"' + key + '"\\s*:\\s*(\\d{5,})'));
         if (m) {
           const raw = parseInt(m[1], 10);
-          // Shopee SG uses 100000 as base unit — $19.90 is stored as 1990000
-          const candidate = raw >= 10000 ? raw / 100000 : raw / 100;
-          // Sanity check: reasonable SGD price range $0.50–$2000
-          if (candidate >= 0.5 && candidate <= 2000) {
+          const candidate = raw / 100000;
+          // Sanity check: reasonable SGD range $1–$2000
+          if (candidate >= 1 && candidate <= 2000) {
             price = Math.round(candidate * 100) / 100;
             break;
           }
         }
       }
-    }
-
-    // 4. Last resort: look for "$X.XX" or "S$X.XX" pattern in the raw HTML
-    if (price === null) {
-      const m = html.match(/S?\$\s*(\d+\.\d{2})/);
-      if (m) price = parseFloat(m[1]);
     }
 
     return json({ title, description, images, price });
