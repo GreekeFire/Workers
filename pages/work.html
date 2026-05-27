@@ -1257,8 +1257,8 @@ function saveApiKey() {
   if (val) {
     localStorage.setItem('alfred_claude_key', val);
     apiKeyVisible = false;
+    renderFixView();
     toast('Key saved');
-    generateAI();
   }
 }
 
@@ -1356,8 +1356,8 @@ function saveApiKeyNew() {
   if (val) {
     localStorage.setItem('alfred_claude_key', val);
     newApiKeyVisible = false;
+    renderNewView();
     toast('Key saved');
-    generateAINew();
   }
 }
 
