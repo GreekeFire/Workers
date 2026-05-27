@@ -1,5 +1,6 @@
-// Vercel Edge Function — scrapes Shopee product page HTML for og: meta tags
-// No auth needed; og: tags are embedded for SEO on every public listing.
+// Vercel Edge Function — scrapes Shopee product page for og: meta tags + price
+// Price is fetched from Shopee's own JSON API (/api/v4/item/get) in parallel
+// with the HTML fetch, using shopId/itemId extracted from the URL.
 export const config = { runtime: 'edge' };
 
 function json(data, status = 200) {
@@ -13,7 +14,6 @@ function json(data, status = 200) {
 }
 
 function extractMeta(html, property) {
-  // Handles both property= and name= variants
   const re = new RegExp(
     `<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`,
     'i'
@@ -26,23 +26,19 @@ function extractMeta(html, property) {
 }
 
 function extractAllImages(html) {
-  // og:image only gives one image; also look for Shopee CDN image hashes in the HTML
   const images = new Set();
 
-  // og:image tags
   const ogRe = /<meta[^>]+(?:property)=["']og:image(?::\w+)?["'][^>]+content=["']([^"']+)["']/gi;
   let m;
   while ((m = ogRe.exec(html)) !== null) {
     if (m[1] && m[1].includes('shopee')) images.add(m[1].split('?')[0]);
   }
 
-  // Shopee CDN hashes embedded in JSON/scripts: "cf.shopee.sg/file/HASH"
   const cdnRe = /https?:\/\/cf\.shopee\.sg\/file\/([a-f0-9]{32,})/gi;
   while ((m = cdnRe.exec(html)) !== null) {
     images.add(`https://cf.shopee.sg/file/${m[1]}`);
   }
 
-  // Also try sg-live CDN
   const cdn2Re = /https?:\/\/down-[a-z]+\.img\.susercontent\.com\/file\/([a-z0-9_.-]+)/gi;
   while ((m = cdn2Re.exec(html)) !== null) {
     images.add(m[0].split('?')[0]);
@@ -50,6 +46,16 @@ function extractAllImages(html) {
 
   return [...images].slice(0, 9);
 }
+
+// Extract shopId + itemId from Shopee URL patterns:
+//   shopee.sg/product/{shopId}/{itemId}
+//   shopee.sg/{slug}.i.{shopId}.{itemId}
+function extractIds(url) {
+  const m = url.match(/\/product\/(\d+)\/(\d+)/) || url.match(/\.i\.(\d+)\.(\d+)/);
+  return m ? { shopId: m[1], itemId: m[2] } : null;
+}
+
+const BROWSER_UA = 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
@@ -62,20 +68,20 @@ export default async function handler(req) {
   const { searchParams } = new URL(req.url);
   const url = searchParams.get('url');
   if (!url) return json({ error: 'url parameter is required' }, 400);
-
   if (!url.includes('shopee.sg')) return json({ error: 'Only shopee.sg URLs are supported' }, 400);
 
-  // Clean the URL — strip query params which can confuse Shopee's SSR
   const cleanUrl = url.split('?')[0];
+  const ids = extractIds(cleanUrl);
 
   try {
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Request timed out')), 12000)
     );
 
+    // Fire HTML fetch and JSON API fetch in parallel
     const fetchPage = fetch(cleanUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        'User-Agent': BROWSER_UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-SG,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
@@ -84,7 +90,28 @@ export default async function handler(req) {
       redirect: 'follow',
     });
 
-    const response = await Promise.race([fetchPage, timeout]);
+    // Shopee's own item API — returns price_min/price in 1/100000 SGD units
+    const fetchApi = ids
+      ? fetch(
+          `https://shopee.sg/api/v4/item/get?itemid=${ids.itemId}&shopid=${ids.shopId}`,
+          {
+            headers: {
+              'User-Agent': BROWSER_UA,
+              'Referer': 'https://shopee.sg/',
+              'Accept': 'application/json',
+              'Accept-Language': 'en-SG,en;q=0.9',
+              'X-Shopee-Language': 'en',
+            },
+          }
+        )
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null)
+      : Promise.resolve(null);
+
+    const [response, apiData] = await Promise.all([
+      Promise.race([fetchPage, timeout]),
+      fetchApi,
+    ]);
 
     if (!response.ok) {
       return json({ error: `Page returned HTTP ${response.status}` }, 502);
@@ -102,34 +129,41 @@ export default async function handler(req) {
       }, 502);
     }
 
-    // Try to extract price — strategies in order of reliability
     let price = null;
 
-    // 1. JSON-LD structured data
-    const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
-    if (ldMatch) {
-      try {
-        const ld = JSON.parse(ldMatch[1]);
-        price = ld?.offers?.price ?? ld?.offers?.[0]?.price ?? null;
-      } catch { /* ignore */ }
+    // Strategy 1: Shopee JSON API — most reliable, actual DB price
+    if (apiData?.data) {
+      const raw = apiData.data.price_min ?? apiData.data.price ?? null;
+      if (raw !== null) {
+        const candidate = raw / 100000;
+        if (candidate >= 1 && candidate <= 2000) {
+          price = Math.round(candidate * 100) / 100;
+        }
+      }
     }
 
-    // 2. og:price:amount or product:price:amount meta tags
+    // Strategy 2: JSON-LD structured data
+    if (price === null) {
+      const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+      if (ldMatch) {
+        try {
+          const ld = JSON.parse(ldMatch[1]);
+          price = ld?.offers?.price ?? ld?.offers?.[0]?.price ?? null;
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Strategy 3: og:price:amount / product:price:amount meta tags
     if (price === null) {
       price = parseFloat(extractMeta(html, 'og:price:amount') || extractMeta(html, 'product:price:amount')) || null;
     }
 
-    // 3. Shopee embeds price in script tags as raw JSON integers.
-    // Prices are in units of 1/100000 SGD (e.g. 1990000 = $19.90).
-    // Try price_min first (cheapest variant), then price.
+    // Strategy 4: embedded script JSON (price_min / price as raw 1/100000 integers)
     if (price === null) {
       for (const key of ['price_min', 'price']) {
-        // Note: must use \\s and \\d inside new RegExp() string
         const m = html.match(new RegExp('"' + key + '"\\s*:\\s*(\\d{5,})'));
         if (m) {
-          const raw = parseInt(m[1], 10);
-          const candidate = raw / 100000;
-          // Sanity check: reasonable SGD range $5–$2000 (below $5 is likely a fee/voucher field)
+          const candidate = parseInt(m[1], 10) / 100000;
           if (candidate >= 5 && candidate <= 2000) {
             price = Math.round(candidate * 100) / 100;
             break;
@@ -137,9 +171,6 @@ export default async function handler(req) {
         }
       }
     }
-
-    // Global floor: anything below $5 is a fee/voucher field, not a product price
-    if (price !== null && price < 5) price = null;
 
     return json({ title, description, images, price });
 
