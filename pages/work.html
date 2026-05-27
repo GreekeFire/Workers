@@ -787,7 +787,7 @@
 <script>
 function calcSell(cost) {
   const c = parseFloat(cost) || 0;
-  return Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5;
+  return Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5 - 0.1;
 }
 
 function onCostChange(val) {
@@ -1077,18 +1077,19 @@ TASK: Write a Carousell listing title for the product below. Output the title te
 
 RULES:
 1. Length: exactly 200–225 characters. Count every character. This is the strictest rule.
-2. Format: Title Case keyword phrases separated by | (pipe). Each segment is 2–4 words — never a single word alone.
-3. Front-load the strongest buyer search terms in the first 50 characters.
-4. Every segment must be something a real buyer types into a search bar.
-5. Never repeat the same root word across segments. Before writing each segment, check every previous segment — if the root word already appears anywhere, choose a completely different word. Example: if segment 1 has "Cleaning", segments 2–end must not contain "Clean", "Cleaner", "Cleans", or any variation.
-6. Correct any spelling errors found in the source text — do not copy typos.
-7. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Singapore Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best", sentences, em-dash (—).
+2. Format: pipe-separated segments using Title Case. Each segment follows the pattern [Relevant Feature(s)] + [Item Name]. Example: "RGB Mechanical Gaming Keyboard | Fast Response Gaming Keyboard | Anti Ghosting Pro Keyboard"
+3. The item name (or a close synonym) must appear in most segments — this is what drives search ranking.
+4. Each segment must be a complete phrase that a real buyer could type into the search bar.
+5. Front-load the strongest buyer search terms in the first 50 characters.
+6. Segments are 3–6 words. Never a single word alone.
+7. Correct any spelling errors in the source text — do not copy typos.
+8. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best".
 
-CORRECT EXAMPLE (219 chars):
-Automatic Pet Water Dispenser | Wireless Rechargeable | Motion Sensor | 2.5L Capacity | 4000mAh Battery | Dual Power Supply | 110 Days Runtime | Smart Timing Mode | Pet Fountain | Water Bowl | Indoor Outdoor
+CORRECT EXAMPLE (214 chars):
+Foldable Deck Chair Recliner With Headrest | Breathable Mesh Lounge Chair For Home Outdoor | Portable Folding Reclining Chair With X-Frame Support | Lightweight Camping Beach Chair 150KG Load | Space-Saving Folding Lazy Chair With Neck Pillow
 
 WRONG EXAMPLE:
-Wireless RGB Keyboard — 98-key compact, triple-mode connectivity  â† sentence structure, forbidden
+Wireless RGB Keyboard — sentence structure, forbidden
 
 Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
 
