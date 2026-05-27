@@ -1,0 +1,71 @@
+In index.html, fix the Goals ticker so the text doesn't overlap when it switches. Replace the dual-row slide animation with a single-row crossfade that swaps text in place every 5 seconds.
+
+1. In the <style> block, find this CSS:
+
+.goal-ticker-row {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.goal-ticker-row.is-leaving  { animation: ticker-leave 0.45s cubic-bezier(0.55, 0, 0.55, 1) forwards; }
+.goal-ticker-row.is-entering { animation: ticker-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes ticker-leave { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-100%); } }
+@keyframes ticker-enter { from { opacity: 0; transform: translateY(100%); } to { opacity: 1; transform: translateY(0); } }
+
+Replace it with:
+
+.goal-ticker-row {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.22s ease;
+}
+.goal-ticker-row.is-fading { opacity: 0; }
+
+2. In the JavaScript, find the tick() function (the one that builds and swaps the ticker row, uses oldRow / newRow / is-leaving / is-entering). Replace the entire function with:
+
+let firstTick = true;
+function tick() {
+  const { items, done, total } = buildTickerItems();
+  if (cycleIdx >= items.length) cycleIdx = 0;
+  const item = items[cycleIdx];
+  cycleIdx = (cycleIdx + 1) % items.length;
+  tickerMeta.textContent = done + '/' + total;
+
+  let row = tickerStage.querySelector('.goal-ticker-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'goal-ticker-row';
+    row.innerHTML =
+      '<span class="goal-ticker-status"></span>' +
+      '<span class="goal-ticker-text"></span>';
+    tickerStage.appendChild(row);
+  }
+
+  const statusEl = row.querySelector('.goal-ticker-status');
+  const textEl   = row.querySelector('.goal-ticker-text');
+
+  const apply = () => {
+    statusEl.setAttribute('data-status', item.status);
+    statusEl.textContent = statusGlyph(item.status);
+    textEl.textContent = item.text;
+    row.classList.remove('is-fading');
+  };
+
+  if (firstTick) { apply(); firstTick = false; return; }
+  row.classList.add('is-fading');
+  setTimeout(apply, 220);
+}
+
+Leave the existing setInterval(tick, 5000) alone — it already switches every 5 seconds.
+
+Then commit ("Fix goal ticker overlap: single row crossfade") and push to main.

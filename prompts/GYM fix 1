@@ -1,0 +1,65 @@
+Make my gym progress photos sync between phone and computer via Supabase Storage instead of cramming base64 images into the JSONB row.
+
+In gym.html, do all of this:
+
+1. Right after the existing photosSave() / compressPhotoDataUrl() helpers, add a new uploadPhotoToStorage helper:
+
+   async function uploadPhotoToStorage(dataUrl) {
+     if (!pcSupa) return null;
+     try {
+       const res = await fetch(dataUrl);
+       const blob = await res.blob();
+       const filename = 'photo_' + Date.now() + '_' +
+         Math.random().toString(36).slice(2, 10) + '.jpg';
+       const { error } = await pcSupa.storage
+         .from('progress-photos')
+         .upload(filename, blob, { contentType: 'image/jpeg', upsert: false });
+       if (error) return null;
+       const { data } = pcSupa.storage.from('progress-photos').getPublicUrl(filename);
+       return data ? data.publicUrl : null;
+     } catch (e) { return null; }
+   }
+
+2. At the end of photosAdd(), after photosRender(), add a background upload:
+
+   uploadPhotoToStorage(entry.dataUrl).then((url) => {
+     if (!url) return;
+     const e = photos.find(p => p.id === id);
+     if (!e) return;
+     e.url = url;
+     delete e.dataUrl;
+     photosSave();
+     photosRender();
+   });
+
+3. Replace every `p.dataUrl` / `A.dataUrl` / `B.dataUrl` in <img> src assignments with `p.url || p.dataUrl`.
+
+4. Put po_coach_photos into PC_SYNCED_KEYS so it reads:
+   const PC_SYNCED_KEYS = ['po_coach_v1', 'po_coach_workout_done', 'po_coach_weights', 'po_coach_photos'];
+
+5. In pcCollectState, when collecting `po_coach_photos`, strip dataUrl-only entries — only entries with a `url` field should be pushed:
+
+   if (k === 'po_coach_photos' && Array.isArray(val)) {
+     val = val
+       .filter((p) => p && p.url)
+       .map((p) => ({ id: p.id, url: p.url, dateKey: p.dateKey, weight: p.weight }));
+   }
+   out[k] = val;
+
+6. In pcApplyRemoteState, special-case po_coach_photos so remote URL photos are merged with local dataUrl-only photos that haven't uploaded yet:
+
+   if (k === 'po_coach_photos') {
+     let localPhotos = [];
+     try { localPhotos = JSON.parse(localStorage.getItem(k) || '[]'); } catch {}
+     const remotePhotos = Array.isArray(remote[k]) ? remote[k] : [];
+     const remoteIds = new Set(remotePhotos.map((p) => p && p.id));
+     const localOnly = localPhotos.filter((p) => p && !p.url && !remoteIds.has(p.id));
+     const merged = [...remotePhotos, ...localOnly];
+     const incoming = JSON.stringify(merged);
+     if (localStorage.getItem(k) !== incoming) {
+       try { _pcOrigSet(k, incoming); changed = true; } catch {}
+     }
+     continue;
+   }
+
+Then commit ("Sync progress photos via Supabase Storage") and push to main.

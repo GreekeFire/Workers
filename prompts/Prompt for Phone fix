@@ -1,0 +1,14 @@
+Prompt:
+
+My personal dashboard has a mobile UI bug: on iPhones with a Dynamic Island / notch, the top of the page (the tab pills row showing GOALS / STACK / WATER / GYM / FINANCE, and the page heading) is being covered by the iOS status bar and Dynamic Island, so the labels are partially unreadable.
+
+Please fix this across all pages of the dashboard (index.html, gym.html, health.html, finance.html, po-water.html) and topbar.js:
+
+Confirm every page has <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"> in its <head>. Add it if missing.
+Add iOS safe-area padding to the top-level container / sticky top bar / tab pills row so they sit below the Dynamic Island. Use:
+
+padding-top: max(12px, env(safe-area-inset-top));
+(Pick whatever the current top padding is as the floor instead of 12px if it's larger.)
+Also add safe-area insets on the left/right (env(safe-area-inset-left/right)) and bottom (env(safe-area-inset-bottom)) for any fixed/sticky elements so landscape and the home-indicator area also look right.
+If there's a sticky/fixed top nav bar, its height + top padding must clear ~59px of inset on iPhone 15/16 Pro. Test by checking the tab row "WATER" label is fully visible and not clipped by the island.
+Don't change any other styling, colors, layout, or behavior — only the safe-area padding. After editing, commit with a message like Fix iOS safe-area: don't let Dynamic Island cover top bar and push to main.
