@@ -1095,52 +1095,31 @@ Before outputting, silently count the characters. If under 200 or over 225, rewr
 
 const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
 
-Rewrite the product description for a Carousell listing. Plain text only inside the JSON — no **bold**, no #headers, no markdown. Use section labels exactly as shown.
-
-TONE:
-- Friendly and direct — speak to the buyer as "you"
-- Benefits-focused, not feature-focused
-- Specific — never say "high quality", "amazing", "best"
-- No hype words: "incredible", "must-have", "limited"
-- No multiple exclamation marks
+Plain text only inside the JSON — no **bold**, no #headers, no markdown.
 
 Use exactly this structure:
 
-[Product name — one clear descriptive phrase, no brand names]
-[One sentence: what this is and the main benefit it gives the buyer]
+[SEO keyword line — 8–12 product keywords and use cases space-separated, end with "Singapore"]
 
-WHY YOU'LL LOVE IT:
-• [Specific benefit — what it does for them daily]
-• [Practical benefit — size, ease of use, time-saving]
-• [Emotional benefit — how it makes life better]
-• [Quality/durability note — materials or build, if known]
+🚚 FREE Local Delivery | 1-3 Working Days
 
-PERFECT FOR:
-[2–3 specific situations: who uses it and where]
+[One hook sentence: what this product is + 2–3 standout features + key use cases]
 
-WHAT'S INCLUDED:
-[Exactly what comes in the package]
+✅ [Feature] — [what it means for the buyer]
+✅ [Feature] — [what it means for the buyer]
+(write 8–12 bullets covering: key features, build quality, convenience, use cases, dimensions or capacity if known)
 
-SPECIFICATIONS (only include lines where the value is confirmed — skip any line where the value is unknown, do not write "Not specified"):
-• Material: [confirmed value only]
-• Dimensions: [L x W x H in cm — confirmed only]
-• Weight: [confirmed only]
-• Colours available: [confirmed colours only]
+💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
 
-WHY BUY FROM ME:
-✓ Fast Singapore shipping
-✓ Quality checked before sending
-✓ Secure packaging
-✓ Responsive customer service
+RULES:
+- No brand names, no platform names (Shopee, Lazada, Amazon)
+- No vague words: "high quality", "amazing", "best", "incredible"
+- SEO keyword line: search terms only, no punctuation, no sentence structure
+- Each bullet: feature on the left of —, buyer benefit on the right
+- Cover use cases (home, office, outdoor etc.) as bullets where relevant
+- Include measurements, weight or capacity as a bullet if the info is available
+- Keep total length moderate — this is a fast-moving dropshipping store`;
 
----
-DM me for bulk discounts or questions!
-
-CHECK BEFORE OUTPUT:
-- No brand names anywhere
-- No platform names (Shopee, Lazada, Amazon, etc.)
-- No markdown symbols like ** or ##
-- No vague superlatives ("amazing", "best", "incredible")`;
 
 function updateCharCount(val, id) {
   const el = document.getElementById(id);
