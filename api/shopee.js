@@ -59,6 +59,25 @@ function cleanDescription(raw) {
   return raw.replace(/\s*-\s*Buy\s+.{0,120}$/, '').trim();
 }
 
+// Fallback: extract product name + description from JSON-LD structured data
+// Shopee embeds this even when SSR og: tags are absent
+function extractJsonLD(html) {
+  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(m[1]);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item['@type'] === 'Product' && item.name) {
+          return { name: item.name || '', description: item.description || '' };
+        }
+      }
+    } catch (e) { /* skip malformed blocks */ }
+  }
+  return { name: '', description: '' };
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -110,9 +129,17 @@ export default async function handler(req) {
 
     const html = await response.text();
 
-    const title       = cleanTitle(extractMeta(html, 'og:title'));
-    const description = cleanDescription(extractMeta(html, 'og:description'));
-    const images      = extractAllImages(html);
+    let title       = cleanTitle(extractMeta(html, 'og:title'));
+    let description = cleanDescription(extractMeta(html, 'og:description'));
+    const images    = extractAllImages(html);
+
+    // If og: tags returned the Shopee homepage title or nothing, fall back to JSON-LD
+    const isHomepage = !title || /^Shopee Singapore\b/i.test(title);
+    if (isHomepage || !description) {
+      const ld = extractJsonLD(html);
+      if (ld.name)        title       = ld.name;
+      if (ld.description) description = ld.description;
+    }
 
     if (!title && !description && images.length === 0) {
       return json({
