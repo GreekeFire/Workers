@@ -1,5 +1,9 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/dashboard.html" }
+    { "source": "/", "destination": "/pages/dashboard.html" },
+    { "source": "/work", "destination": "/pages/work.html" },
+    { "source": "/finance", "destination": "/pages/finance.html" },
+    { "source": "/po-coach", "destination": "/pages/po-coach.html" },
+    { "source": "/master-sop", "destination": "/pages/master-sop.html" }
   ]
 }
