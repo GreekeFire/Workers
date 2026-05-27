@@ -1011,21 +1011,17 @@ async function syncFromSupabase() {
     if (row.key.startsWith('goals:') && row.key.slice(6) < activeDate && rolledOver[row.key]) continue;
 
     if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
-      // Merge: done and deleted are sticky — once true they can never be reset by sync
       const localData = storeGet(row.key);
-      const base = Array.isArray(localData) ? localData : [];
-      const localMap = new Map(base.map(g => [g.text, g]));
-      const merged = row.data.map(g => {
-        const local = localMap.get(g.text);
-        return { ...g,
-          done:    g.done    || (local?.done    ?? false),
-          deleted: g.deleted || (local?.deleted ?? false),
-        };
-      });
-      // Keep any local items not yet in remote
-      for (const lg of base) {
-        if (!row.data.find(g => g.text === lg.text)) merged.push(lg);
-      }
+      const isPastDate = row.key.slice(6) < activeDate;
+
+      // Past dates: local state is authoritative — it has gone through delete/rollover ops.
+      // Only restore from Supabase if local is empty (e.g. fresh device with no history).
+      // This prevents stale Supabase records from resurrecting deleted tasks on first load
+      // before _rolled has been populated by runRollover().
+      if (isPastDate && Array.isArray(localData) && localData.length > 0) continue;
+
+      // Today / tomorrow, or empty past dates: merge so done/deleted/doneAt stay sticky.
+      const merged = mergeGoals(row.data, localData);
       localStorage.setItem(row.key, JSON.stringify(merged));
       if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
       continue;
@@ -1049,12 +1045,16 @@ function storeListKeys(prefix) {
 // ── Date helpers ──
 function pad2(n) { return String(n).padStart(2,'0'); }
 
+// TEST MODE: set DATE_OFFSET = 1 to simulate tomorrow, 0 = normal
+const DATE_OFFSET = 0;
+
 function toDateString(d) {
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
 
 function getActiveDateString() {
   const now = new Date();
+  now.setDate(now.getDate() + DATE_OFFSET);
   if (now.getHours() < 6) {
     const y = new Date(now); y.setDate(y.getDate()-1);
     return toDateString(y);
@@ -1064,6 +1064,7 @@ function getActiveDateString() {
 
 function getTomorrowDateString() {
   const now = new Date();
+  now.setDate(now.getDate() + DATE_OFFSET);
   if (now.getHours() < 6) return toDateString(now);
   const t = new Date(now); t.setDate(t.getDate()+1);
   return toDateString(t);
@@ -1077,6 +1078,27 @@ function formatDate(ds) {
   return `${days[dt.getDay()]}, ${months[dt.getMonth()]} ${d}`;
 }
 
+// ── Goals merge helper ──
+// Merges remote goals into local, keeping done/deleted/doneAt sticky on the local side.
+// Used by both the initial sync and the realtime subscription so the logic lives in one place.
+function mergeGoals(remoteList, localList) {
+  const localMap = new Map((localList || []).map(g => [g.text, g]));
+  const merged = remoteList.map(g => {
+    const local = localMap.get(g.text);
+    return {
+      ...g,
+      done:    g.done    || (local?.done    ?? false),
+      deleted: g.deleted || (local?.deleted ?? false),
+      doneAt:  g.doneAt  ?? local?.doneAt,
+    };
+  });
+  // Keep any local items not yet present in the remote list
+  for (const lg of (localList || [])) {
+    if (!remoteList.find(g => g.text === lg.text)) merged.push(lg);
+  }
+  return merged;
+}
+
 // ── Rollover ──
 function runRollover() {
   const activeDate = getActiveDateString();
@@ -1085,6 +1107,18 @@ function runRollover() {
   // Prune entries older than 60 days
   const cutoff = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
   for (const k of Object.keys(rolledOver)) { if (k.slice(6) < cutoff) delete rolledOver[k]; }
+
+  // Strip done tasks from today's slot that were completed on a previous date.
+  // Prevents stale Supabase sync data from showing yesterday's completed tasks as today's goals.
+  const todayK = 'goals:' + activeDate;
+  const todayRaw = storeGet(todayK) || [];
+  const todayClean = todayRaw.filter(g => {
+    if (g.deleted) return true;                                     // soft-deleted marker → keep
+    if (!g.done) return true;                                       // undone → keep
+    if (!g.doneAt) return false;                                    // done but no timestamp → drop
+    return toDateString(new Date(g.doneAt)) === activeDate;         // done today → keep
+  });
+  if (todayClean.length !== todayRaw.length) storeSet(todayK, todayClean);
 
   for (const key of keys) {
     const ds = key.slice(6);
@@ -1642,13 +1676,21 @@ window.addEventListener('goals-changed', () => tick(true));
       const incomingJson = JSON.stringify(row.data);
       if (lastSyncedJson[row.key] === incomingJson) return; // echo from our own write
       lastSyncedJson[row.key] = incomingJson;
-      localStorage.setItem(row.key, incomingJson);
-      if (row.key.startsWith('goals:')) {
+
+      // Goals: merge so local done/deleted/doneAt flags are never clobbered by a remote write.
+      // This prevents deleted goals from reappearing when another device syncs.
+      if (row.key.startsWith('goals:') && Array.isArray(row.data)) {
+        const merged = mergeGoals(row.data, storeGet(row.key));
+        localStorage.setItem(row.key, JSON.stringify(merged));
+        if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
         loadToday();
         loadTomorrow();
         window.dispatchEvent(new CustomEvent('goals-changed'));
+      } else {
+        localStorage.setItem(row.key, incomingJson);
+        if (row.updated_at) localStorage.setItem('_ts:' + row.key, row.updated_at);
+        if (row.key === 'goal_streak_v1') renderStreak();
       }
-      if (row.key === 'goal_streak_v1') renderStreak();
     })
     .subscribe();
 })();
