@@ -70,9 +70,10 @@ export default async function handler(req) {
   const { searchParams } = new URL(req.url);
   const url = searchParams.get('url');
   if (!url) return json({ error: 'url parameter is required' }, 400);
-  if (!url.includes('shopee.sg')) return json({ error: 'Only shopee.sg URLs are supported' }, 400);
+  if (!url.includes('shopee.sg') && !url.includes('sg.shp.ee')) return json({ error: 'Only shopee.sg or sg.shp.ee URLs are supported' }, 400);
 
-  const cleanUrl = url.split('?')[0];
+  // Strip query params from full URLs only — short URLs (sg.shp.ee) need the path intact
+  const cleanUrl = url.includes('sg.shp.ee') ? url : url.split('?')[0];
 
   try {
     const timeout = new Promise((_, reject) =>
