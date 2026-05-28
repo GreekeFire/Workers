@@ -1,6 +1,6 @@
 // Vercel Edge Function — scrapes Shopee product page HTML for og: meta tags
 // Price extraction is not possible server-side (Shopee loads prices via JS/API with session cookies).
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', regions: ['sin1'] };
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
