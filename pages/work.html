@@ -1112,6 +1112,8 @@ Use exactly this structure:
 💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
 
 RULES:
+- CRITICAL: '🚚 FREE Local Delivery | 1-3 Working Days' must be the very first line — nothing before it
+- CRITICAL: '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂' must be the very last line — nothing after it
 - No brand names, no platform names (Shopee, Lazada, Amazon)
 - No vague words: "high quality", "amazing", "best", "incredible"
 - Each bullet: feature on the left of —, buyer benefit on the right
@@ -1119,6 +1121,36 @@ RULES:
 - Include measurements, weight or capacity as a bullet if the info is available
 - Keep total length moderate — this is a fast-moving dropshipping store`;
 
+
+function normalizeDesc(text) {
+  if (!text) return text;
+  const DELIVERY = '🚚 FREE Local Delivery | 1-3 Working Days';
+  const PAYMENT  = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
+  let lines = text.split('\n');
+
+  // Delivery line must be first
+  if (!lines[0].trim().startsWith('🚚')) {
+    const idx = lines.findIndex(l => l.includes('🚚') || l.includes('FREE Local Delivery'));
+    if (idx > 0) {
+      const [found] = lines.splice(idx, 1);
+      while (lines.length && !lines[0].trim()) lines.shift();
+      lines = [found.trim(), '', ...lines];
+    } else if (idx === -1) {
+      lines = [DELIVERY, '', ...lines];
+    }
+  }
+
+  // Payment line must be last
+  const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
+  if (lastNonEmptyIdx === undefined || lines[lastNonEmptyIdx].trim() !== PAYMENT) {
+    const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
+    if (idx !== -1) lines.splice(idx, 1);
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    lines.push('', PAYMENT);
+  }
+
+  return lines.join('\n');
+}
 
 function updateCharCount(val, id) {
   const el = document.getElementById(id);
@@ -1205,7 +1237,7 @@ async function runAIGenerate(productText, { titleOnly = false, descOnly = false 
   if (titleOnly) return { title: rawTitle, desc: '' };
   const descText = await descPromise;
   const descMatch = descText.match(/\{[\s\S]*\}/);
-  const desc = descMatch ? (JSON.parse(descMatch[0]).description || '') : '';
+  const desc = normalizeDesc(descMatch ? (JSON.parse(descMatch[0]).description || '') : '');
   return { title: rawTitle, desc };
 }
 
