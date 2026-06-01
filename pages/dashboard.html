@@ -755,9 +755,21 @@
   /* Push content above the tab bar */
   .container { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
+  /* ── Greeting subtitle ── */
+  .dash-subtitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    margin-bottom: 14px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 480px) {
     .dash-title { font-size: 22px; }
+    .dash-subtitle { font-size: 12px; margin-bottom: 12px; }
 
     .goal-ticker { padding: 9px 12px; }
     .goal-ticker-label { font-size: 9px; letter-spacing: 0.14em; }
@@ -777,13 +789,29 @@
     .goal-item { padding: 14px 16px; }
     .btn-add { padding: 13px 20px; }
   }
+
+  /* ── Touch devices: make affordances always visible ── */
+  @media (hover: none) {
+    /* Drag handle — always faintly visible */
+    .drag-handle { opacity: 0.35; }
+
+    /* Delete button — always visible at low opacity, easier to tap */
+    .goal-delete {
+      opacity: 0.45;
+      padding: 6px 8px; /* larger tap target */
+    }
+
+    /* Queue (⚡) button — always visible */
+    .gm-queue-btn { opacity: 0.55; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
 
   <!-- Component 1: Page Title -->
-  <h1 class="dash-title">Workers</h1>
+  <h1 class="dash-title" id="dashTitle">Workers</h1>
+  <div class="dash-subtitle" id="dashSubtitle"></div>
 
   <!-- Component 2: Goal Ticker -->
   <div class="ticker-row">
@@ -1578,10 +1606,29 @@ function startTicker() {
 
 window.addEventListener('goals-changed', () => tick(true));
 
+// ── Greeting ──
+function renderGreeting() {
+  const now = new Date();
+  const h = now.getHours();
+  let greeting;
+  if (h < 6)       greeting = 'Still up';
+  else if (h < 12) greeting = 'Good morning';
+  else if (h < 17) greeting = 'Good afternoon';
+  else if (h < 21) greeting = 'Good evening';
+  else              greeting = 'Good night';
+
+  const days  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
+
+  document.getElementById('dashSubtitle').textContent = `${greeting} · ${dateStr}`;
+}
+
 // ── Init ──
 (async function init() {
   // Render immediately from localStorage — don't block on network
   runStreakCheck();
+  renderGreeting();
 
   // Wire labels
   document.getElementById('todayLabel').textContent    = 'Today — ' + formatDate(getActiveDateString());
