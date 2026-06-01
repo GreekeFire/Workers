@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#050506">
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
-<script src="/data/listings-data.js"></script>
+<script src="/data/listings-data.js" onerror="window._listingsLoadFailed=true"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/shared/shared.css">
 <script src="/shared/config.js"></script>
@@ -840,6 +840,7 @@ let fixFetchCollapsed = false;
 // Undo / copy state
 let undoTimer = null;
 let pendingDeleteUndo = null;
+let pendingDeletes = new Set();
 const copyTimers = {};
 
 // NEW tab state
@@ -997,6 +998,8 @@ function findNext(from) {
 
 function markDone() {
   const idx = currentIndex;
+  const costVal = editedCost !== null ? editedCost : LISTINGS[idx][3];
+  if (!costVal || costVal <= 0) { toast('Enter a cost before marking Done'); return; }
   if (!doneSet.has(idx) && !deletedSet.has(idx)) {
     const L = LISTINGS[idx];
     doneSet.add(idx);
@@ -1030,10 +1033,11 @@ function markDeleted() {
   currentIndex = findNext(idx + 1);
   saveLocal();
   renderAll();
-  // Hold Supabase push for 4s so user can undo
+  // Hold Supabase push for 4s so user can undo; accumulate multiple deletes
   pendingDeleteUndo = { idx };
+  pendingDeletes.add(idx);
   clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => { pendingDeleteUndo = null; pushToSupabase(); }, 4000);
+  undoTimer = setTimeout(() => { pendingDeleteUndo = null; pendingDeletes.clear(); pushToSupabase(); }, 4000);
   toastWithUndo('Deleted', undoDelete);
 }
 
@@ -1041,7 +1045,12 @@ function undoDelete() {
   if (!pendingDeleteUndo) return;
   const { idx } = pendingDeleteUndo;
   pendingDeleteUndo = null;
+  pendingDeletes.delete(idx);
+  // Reset timer to push remaining pending deletes (if any) after 4s
   clearTimeout(undoTimer);
+  if (pendingDeletes.size > 0) {
+    undoTimer = setTimeout(() => { pendingDeletes.clear(); pushToSupabase(); }, 4000);
+  }
   deletedSet.delete(idx);
   deletedTodayCount = Math.max(0, deletedTodayCount - 1);
   currentIndex = idx;
@@ -1358,8 +1367,6 @@ async function fetchShopeeDataFix() {
 
 // NEW tab AI
 async function generateAINew(mode = 'both') {
-  const apiKey = localStorage.getItem('alfred_claude_key');
-  if (!apiKey) { newApiKeyVisible = true; renderNewView(); return; }
   const taEl = document.getElementById('new-shopee-ta');
   if (taEl) newShopeeInput = taEl.value;
   if (!newShopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
@@ -1451,29 +1458,42 @@ function logSale() {
   toast('Logged ✓');
 }
 
+let _searchMatches = [];
+
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
-  if (!query.trim()) { dropdown.style.display = 'none'; return; }
+  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
   const q = query.toLowerCase();
-  const matches = [];
-  for (let i = 0; i < LISTINGS.length && matches.length < 6; i++) {
-    if (LISTINGS[i][0].toLowerCase().includes(q)) matches.push({ L: LISTINGS[i], i });
+  _searchMatches = [];
+  for (let i = 0; i < LISTINGS.length && _searchMatches.length < 6; i++) {
+    if (LISTINGS[i][0].toLowerCase().includes(q))
+      _searchMatches.push({ name: LISTINGS[i][0], price: LISTINGS[i][4], shopee: LISTINGS[i][1], caro: LISTINGS[i][2], listingIdx: i });
   }
-  if (matches.length === 0) { dropdown.style.display = 'none'; return; }
-  dropdown.innerHTML = matches.map(({ L, i }) => {
-    const shopeeLink = L[1] ? `<a class="search-result-link" href="${esc(L[1])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
-    const caroLink  = L[2] ? `<a class="search-result-link" href="${esc(L[2])}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
-    const isDone = doneSet.has(i) || deletedSet.has(i);
-    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${i})">Go to Fix →</span>` : '';
-    return `<div class="search-result" onmousedown="selectListing(${i})">
-      <div class="search-result-name">${esc(L[0])}</div>
+  for (const d of doneData) {
+    if (d.index === null && d.title.toLowerCase().includes(q) && _searchMatches.length < 8)
+      _searchMatches.push({ name: d.title, price: d.sellPrice, shopee: d.shopeeUrl, caro: d.carousellUrl, listingIdx: null });
+  }
+  if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = _searchMatches.map((m, mi) => {
+    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
+    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
+    const isDone = m.listingIdx === null || doneSet.has(m.listingIdx) || deletedSet.has(m.listingIdx);
+    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${m.listingIdx})">Go to Fix →</span>` : '';
+    return `<div class="search-result" onmousedown="selectMatch(${mi})">
+      <div class="search-result-name">${esc(m.name)}</div>
       <div class="search-result-meta">
-        <span class="search-result-price">Sell $${L[4]}</span>
+        <span class="search-result-price">Sell $${m.price}</span>
         ${shopeeLink}${caroLink}${fixBtn}
       </div>
     </div>`;
   }).join('');
   dropdown.style.display = 'block';
+}
+
+function selectMatch(mi) {
+  const m = _searchMatches[mi];
+  if (!m) return;
+  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro);
 }
 
 function jumpToFix(idx) {
@@ -1483,16 +1503,20 @@ function jumpToFix(idx) {
   switchTab('fix');
 }
 
-function selectListing(idx) {
-  const L = LISTINGS[idx];
-  if (!L) return;
-  document.getElementById('sale-listing').value = L[0];
+function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride) {
+  const L = idx !== null ? LISTINGS[idx] : null;
+  const name   = nameOverride  ?? L?.[0] ?? '';
+  const price  = priceOverride ?? L?.[4] ?? '';
+  const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.[1] || '');
+  const caro   = caroOverride  !== undefined ? caroOverride  : (L?.[2] || '');
+  if (!name) return;
+  document.getElementById('sale-listing').value = name;
   document.getElementById('search-dropdown').style.display = 'none';
-  document.getElementById('sale-price').value = L[4];
+  document.getElementById('sale-price').value = price;
   const infoEl = document.getElementById('sale-listing-info');
-  const shopeeLink = L[1] ? `<a class="sale-info-link" href="${esc(L[1])}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
-  const caroLink  = L[2] ? `<a class="sale-info-link" href="${esc(L[2])}" target="_blank" rel="noopener">Carousell ↗</a>` : '';
-  infoEl.innerHTML = `<span class="sale-info-price">$${L[4]}</span>${shopeeLink}${caroLink}`;
+  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
+  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell ↗</a>` : '';
+  infoEl.innerHTML = `<span class="sale-info-price">$${price}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
   document.getElementById('sale-price').focus();
 }
@@ -1619,10 +1643,10 @@ function renderFixView() {
           </div>`
       }
       ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
-        `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
+        `<div class="shopee-img-thumb" onclick="window.open('${esc(src)}','_blank')">
           <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
           <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
-        </a>`).join('')}</div>` : ''}
+        </div>`).join('')}</div>` : ''}
       ${shopeeInput
         ? shopeeCollapsed
           ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">▼ Shopee source</div>`
@@ -1973,7 +1997,23 @@ document.addEventListener('keydown', e => {
   if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') { e.preventDefault(); markDeleted(); }
 });
 
-init();
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && getToday() !== todayDate) {
+    todayDate = getToday();
+    doneTodayCount = 0;
+    deletedTodayCount = 0;
+    saveLocal();
+    renderAll();
+  }
+});
+
+if (window._listingsLoadFailed || typeof LISTINGS === 'undefined') {
+  document.getElementById('listing-wrap').innerHTML =
+    '<div class="queue-complete"><div class="big-check">⚠️</div><h2>Failed to load listings</h2><p>Check your connection and refresh the page.</p></div>';
+  document.getElementById('action-row').style.display = 'none';
+} else {
+  init();
+}
 </script>
 </body>
 </html>
