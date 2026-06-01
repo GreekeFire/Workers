@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json">
 <script src="/data/listings-data.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/shared/shared.css">
 <script src="/shared/config.js"></script>
 <script src="/shared/utils.js"></script>
@@ -793,6 +793,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="/shared/nav.js"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 
 <script>
 function calcSell(cost) {
@@ -1183,29 +1184,20 @@ function saveDraft() {
 }
 
 
-async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
+// Routes through /api/claude so the Anthropic key never touches the browser.
+// Falls back to a direct browser call if the server key isn't configured
+// (backwards-compatible for local dev with a saved key).
+async function callClaude(_unusedKey, system, userContent, maxTokens, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     let resp, data;
     try {
-      resp = await fetch('https://api.anthropic.com/v1/messages', {
+      resp = await fetch('/api/claude', {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: maxTokens,
-          temperature: 0.3,
-          system,
-          messages: [{ role: 'user', content: userContent }]
-        })
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ system, userContent, maxTokens, temperature: 0.3 })
       });
       data = await resp.json();
     } catch (e) {
-      // Network / parse error — retry with backoff
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -1213,20 +1205,44 @@ async function callClaude(apiKey, system, userContent, maxTokens, retries = 2) {
       throw e;
     }
     if (data.error) {
-      const isOverload = data.error.type === 'overloaded_error' || resp.status === 529;
+      // Server says key not configured — fall back to direct browser call
+      if (resp.status === 500 && data.error.includes('not configured')) {
+        const apiKey = localStorage.getItem('alfred_claude_key');
+        if (!apiKey) throw new Error('NO_KEY');
+        const directResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: maxTokens,
+            temperature: 0.3,
+            system,
+            messages: [{ role: 'user', content: userContent }]
+          })
+        });
+        const directData = await directResp.json();
+        if (directData.error) throw new Error(directData.error.message);
+        return directData.content?.[0]?.text || '';
+      }
+      const isOverload = resp.status === 529;
       if (isOverload && attempt < retries) {
         await new Promise(r => setTimeout(r, 3000));
         continue;
       }
-      throw new Error(data.error.message);
+      throw new Error(data.error);
     }
-    return data.content?.[0]?.text || '';
+    return data.text || '';
   }
 }
 
 async function runAIGenerate(productText, { titleOnly = false, descOnly = false } = {}) {
+  // Key param kept for fallback path inside callClaude — server route doesn't need it
   const apiKey = localStorage.getItem('alfred_claude_key');
-  if (!apiKey) throw new Error('NO_KEY');
   const productContent = `Product info:\n\n${productText}`;
   const titlePromise = descOnly  ? null : callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
   const descPromise  = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536);
@@ -1253,8 +1269,6 @@ async function runAIGenerate(productText, { titleOnly = false, descOnly = false 
 
 // FIX tab AI
 async function generateAI(mode = 'both') {
-  const apiKey = localStorage.getItem('alfred_claude_key');
-  if (!apiKey) { apiKeyVisible = true; renderFixView(); return; }
   const taEl = document.getElementById('shopee-input-ta');
   if (taEl) shopeeInput = taEl.value;
   if (!shopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
@@ -1523,6 +1537,8 @@ function renderFixView() {
   if (currentIndex >= total || remaining === 0) {
     wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
     actionRow.style.display = 'none';
+    // Signal to dashboard that queue is done today
+    if (doneTodayCount > 0) localStorage.setItem('workers_queue_done:' + getToday(), '1');
     return;
   }
 

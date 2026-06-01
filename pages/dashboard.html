@@ -13,7 +13,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="prefetch" href="/po-coach">
 <link rel="prefetch" href="/finance">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/shared/shared.css">
 <script src="/shared/config.js"></script>
 <script src="/shared/utils.js"></script>
@@ -1539,20 +1539,31 @@ function getTickerItems() {
   const total = goals.length;
   const done  = goals.filter(g => g.done).length;
 
-  if (total === 0) {
+  const extras = [];
+  // Work queue complete badge
+  if (localStorage.getItem('workers_queue_done:' + getActiveDateString())) {
+    extras.push({ status: 'done', text: '🛒 Work queue complete for today.' });
+  }
+  // Gym session logged today
+  if (localStorage.getItem('gym_session:' + getActiveDateString())) {
+    extras.push({ status: 'done', text: '💪 Gym session logged today.' });
+  }
+
+  if (total === 0 && extras.length === 0) {
     return {
       items: [{ status: 'empty', text: 'No goals set for today — add one to get rolling.' }],
       done, total
     };
   }
-  if (done === total) {
+  if (total > 0 && done === total) {
     return {
-      items: [{ status: 'done', text: '✓ All goals done — solid day.' }],
+      items: [{ status: 'done', text: '✓ All goals done — solid day.' }, ...extras],
       done, total
     };
   }
+  const pendingItems = goals.filter(g => !g.done).map(g => ({ status: 'pending', text: g.text }));
   return {
-    items: goals.filter(g => !g.done).map(g => ({ status: 'pending', text: g.text })),
+    items: [...pendingItems, ...extras],
     done, total
   };
 }
@@ -1686,6 +1697,7 @@ function renderGreeting() {
 </script>
 
 <script src="/shared/nav.js"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 </body>
 </html>
 

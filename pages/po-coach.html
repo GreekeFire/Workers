@@ -1215,7 +1215,7 @@ img, video, canvas, svg { max-width: 100%; }
 
 .hidden { display: none !important; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -1635,6 +1635,7 @@ img, video, canvas, svg { max-width: 100%; }
 
 <!-- Tab bar -->
 <script src="/shared/nav.js"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 
 <script>
 (function() {
@@ -2229,7 +2230,10 @@ img, video, canvas, svg { max-width: 100%; }
     const arr = state.logs[ex.id] || [];
     arr.push({ weight: w, reps: reps, date: new Date().toISOString() });
     state.logs[ex.id] = arr;
-    saveState(); renderAll();
+    saveState();
+    // Signal to dashboard that a gym session happened today
+    localStorage.setItem('gym_session:' + new Date().toISOString().slice(0, 10), '1');
+    renderAll();
     // Strength changed → composition estimate may shift
     if (typeof wtRender === 'function') wtRender();
     // Tiny pulse on the button so the user feels the save

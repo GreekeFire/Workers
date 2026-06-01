@@ -14,7 +14,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="prefetch" href="/">
 <link rel="prefetch" href="/po-coach">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
 <link rel="stylesheet" href="/shared/shared.css">
 <script src="/shared/config.js"></script>
 <script src="/shared/utils.js"></script>
@@ -2115,6 +2115,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 <!-- ===== PAGE NAV TAB BAR ===== -->
 <script src="/shared/nav.js"></script>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 
 <script>
 (function() {
@@ -3683,10 +3684,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     });
     filtered.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.ts || 0) - (a.ts || 0));
 
+    // ── Pull Work tab sales for the viewed month as read-only income lines ──
+    const workSales = (function() {
+      try { return JSON.parse(localStorage.getItem('carobiz_sales') || '[]'); } catch { return []; }
+    })();
+    const workFiltered = workSales.filter(s => {
+      const d = new Date((s.date || s.ts || '').slice(0, 10) + 'T00:00');
+      return d.getFullYear() === expViewYear && d.getMonth() === expViewMonth;
+    });
+    // Group by day so we don't show every individual sale as a line
+    const workByDay = {};
+    workFiltered.forEach(s => {
+      const day = (s.date || (s.ts || '').slice(0, 10));
+      workByDay[day] = (workByDay[day] || 0) + (Number(s.price) || 0);
+    });
+    const workIncomeLines = Object.entries(workByDay).map(([date, total]) => ({
+      _workEntry: true, date, amount: total,
+      name: 'Dropshipping Sales', type: 'income'
+    }));
+    const workIncomeTotal = workIncomeLines.reduce((s, e) => s + e.amount, 0);
+
     const expenses = filtered.filter(e => e.type !== 'income');
     const incomes  = filtered.filter(e => e.type === 'income');
     const totalSpent  = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const totalIncome = incomes.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalIncome = incomes.reduce((s, e) => s + (Number(e.amount) || 0), 0) + workIncomeTotal;
     const net = totalIncome - totalSpent;
 
     if (incomeEl) incomeEl.textContent = expFmtSGD(totalIncome);
@@ -3722,35 +3743,43 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     }
 
     listEl.innerHTML = '';
-    if (!filtered.length) {
+    const allRows = [...filtered, ...workIncomeLines];
+    allRows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.ts || 0) - (a.ts || 0));
+
+    if (!allRows.length) {
       if (emptyEl) emptyEl.style.display = '';
       return;
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    filtered.forEach(exp => {
+    allRows.forEach(exp => {
       const isIncome = exp.type === 'income';
-      const meta = isIncome ? { icon: '💰', label: 'Income', color: '#6BE3A4' } : (EXP_CATS[exp.category] || EXP_CATS.other);
+      const isWork   = !!exp._workEntry;
+      const meta = isWork
+        ? { icon: '🛒', label: 'Work · Dropshipping', color: '#6BE3A4' }
+        : isIncome
+          ? { icon: '💰', label: 'Income', color: '#6BE3A4' }
+          : (EXP_CATS[exp.category] || EXP_CATS.other);
       const dateStr = exp.date
         ? new Date(exp.date + 'T00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
         : '—';
-      const showOriginal = exp.entered_currency && exp.entered_currency !== 'SGD';
+      const showOriginal = !isWork && exp.entered_currency && exp.entered_currency !== 'SGD';
       const amtDisplay = showOriginal
         ? exp.entered_currency + ' ' + Number(exp.entered_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : expFmtSGD(exp.amount);
       const row = document.createElement('div');
-      row.className = 'exp-row' + (isIncome ? ' is-income' : '');
+      row.className = 'exp-row' + (isIncome || isWork ? ' is-income' : '');
       row.innerHTML =
           '<div class="exp-row-dot" style="background:' + meta.color + '"></div>'
         + '<div class="exp-row-body">'
-        +   '<div class="exp-row-name">' + escapeHtml(exp.name) + '</div>'
+        +   '<div class="exp-row-name">' + escapeHtml(exp.name) + (isWork ? ' <span style="font-size:10px;opacity:0.5;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;margin-left:6px">auto</span>' : '') + '</div>'
         +   '<div class="exp-row-meta">' + meta.icon + ' ' + meta.label + ' · ' + dateStr + '</div>'
         + '</div>'
         + '<div class="exp-row-right">'
-        +   '<div class="exp-row-amt">' + (isIncome ? '+' : '') + amtDisplay + '</div>'
-        +   (showOriginal ? '<div class="exp-row-sgd">' + (isIncome ? '+' : '') + expFmtSGD(exp.amount) + '</div>' : '')
+        +   '<div class="exp-row-amt">+' + amtDisplay + '</div>'
+        +   (showOriginal ? '<div class="exp-row-sgd">+' + expFmtSGD(exp.amount) + '</div>' : '')
         + '</div>'
-        + '<button class="exp-row-del" data-id="' + exp.id + '" aria-label="Delete">×</button>';
+        + (isWork ? '' : '<button class="exp-row-del" data-id="' + exp.id + '" aria-label="Delete">×</button>');
       listEl.appendChild(row);
     });
     listEl.querySelectorAll('.exp-row-del').forEach(b => {
