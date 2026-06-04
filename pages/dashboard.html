@@ -955,7 +955,7 @@ function storeDelete(key) {
   localStorage.removeItem(key);
   localStorage.removeItem('_ts:' + key);
   const p = getPending(); delete p[key]; setPending(p);
-  db.from('app_state').delete().eq('key', key).catch(e => console.warn('Delete failed:', e));
+  db.from('app_state').delete().eq('key', key).catch(e => console.error(`Delete failed for key "${key}":`, e));
 }
 
 async function syncFromSupabase() {
