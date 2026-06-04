@@ -839,9 +839,11 @@ let fixFetchCollapsed = false;
 
 // Undo / copy state
 let undoTimer = null;
-let pendingDeleteUndo = null;
-let pendingDeletes = new Set();
+let undoStack = [];
 const copyTimers = {};
+
+// API key (lifted out of render to avoid repeated localStorage reads)
+let savedApiKey = localStorage.getItem('alfred_claude_key') || '';
 
 // NEW tab state
 let newTitle = '';
@@ -917,8 +919,8 @@ async function syncFromSupabase() {
 
     if (pRes.data?.data) {
       const p = pRes.data.data;
-      for (const i of (p.doneIndexes || [])) doneSet.add(i);
-      for (const i of (p.deletedIndexes || [])) deletedSet.add(i);
+      if (Array.isArray(p.doneIndexes)) for (const i of p.doneIndexes) doneSet.add(i);
+      if (Array.isArray(p.deletedIndexes)) for (const i of p.deletedIndexes) deletedSet.add(i);
       if ((p.currentIndex || 0) > currentIndex) currentIndex = p.currentIndex;
       if (p.todayDate === today) {
         doneTodayCount = Math.max(doneTodayCount, p.doneTodayCount || 0);
@@ -928,7 +930,19 @@ async function syncFromSupabase() {
     }
 
     if (dRes.data?.data) {
-      doneData = dRes.data.data;
+      const remote = dRes.data.data;
+      const localByIndex = new Map(doneData.filter(d => d.index !== null).map(d => [d.index, d]));
+      const localNullEntries = doneData.filter(d => d.index === null);
+      for (const r of remote) {
+        if (r.index !== null) localByIndex.set(r.index, r);
+      }
+      const remoteNullKeys = new Set(remote.filter(d => d.index === null).map(d => d.doneAt));
+      const mergedNulls = [
+        ...remote.filter(d => d.index === null),
+        ...localNullEntries.filter(d => !remoteNullKeys.has(d.doneAt))
+      ];
+      doneData = [...localByIndex.values(), ...mergedNulls]
+        .sort((a, b) => (a.doneAt > b.doneAt ? 1 : -1));
     }
 
     if (sRes.data?.data) {
@@ -958,7 +972,7 @@ async function pushToSupabase() {
   const now = new Date().toISOString();
   const today = getToday();
   setSyncStatus('syncing');
-  Promise.all([
+  await Promise.all([
     sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
       currentIndex,
       doneIndexes: [...doneSet],
@@ -1028,35 +1042,31 @@ function markDeleted() {
   if (!doneSet.has(idx) && !deletedSet.has(idx)) {
     deletedSet.add(idx);
     deletedTodayCount++;
+    undoStack.push(idx);
   }
   resetAI();
   currentIndex = findNext(idx + 1);
   saveLocal();
   renderAll();
-  // Hold Supabase push for 4s so user can undo; accumulate multiple deletes
-  pendingDeleteUndo = { idx };
-  pendingDeletes.add(idx);
   clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => { pendingDeleteUndo = null; pendingDeletes.clear(); pushToSupabase(); }, 4000);
+  undoTimer = setTimeout(() => { undoStack = []; pushToSupabase(); }, 4000);
   toastWithUndo('Deleted', undoDelete);
 }
 
 function undoDelete() {
-  if (!pendingDeleteUndo) return;
-  const { idx } = pendingDeleteUndo;
-  pendingDeleteUndo = null;
-  pendingDeletes.delete(idx);
-  // Reset timer to push remaining pending deletes (if any) after 4s
-  clearTimeout(undoTimer);
-  if (pendingDeletes.size > 0) {
-    undoTimer = setTimeout(() => { pendingDeletes.clear(); pushToSupabase(); }, 4000);
-  }
+  const idx = undoStack.pop();
+  if (idx === undefined) return;
   deletedSet.delete(idx);
   deletedTodayCount = Math.max(0, deletedTodayCount - 1);
   currentIndex = idx;
+  clearTimeout(undoTimer);
+  if (undoStack.length > 0) {
+    undoTimer = setTimeout(() => { undoStack = []; pushToSupabase(); }, 4000);
+  }
   saveLocal();
   renderAll();
-  toast('Undo ✓');
+  const remaining = undoStack.length;
+  toast(remaining > 0 ? `Undo ✓ (${remaining} pending)` : 'Undo ✓');
 }
 
 function saveDoneLinkEdits(doneIdx, listingIndex) {
@@ -1162,7 +1172,8 @@ function normalizeDesc(text) {
 
   // Payment line must be last
   const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
-  if (lastNonEmptyIdx === undefined || lines[lastNonEmptyIdx].trim() !== PAYMENT) {
+  const hasPaymentAtEnd = lastNonEmptyIdx !== undefined && lines[lastNonEmptyIdx].trim() === PAYMENT;
+  if (!hasPaymentAtEnd) {
     const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
     if (idx !== -1) lines.splice(idx, 1);
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
@@ -1216,7 +1227,7 @@ async function callClaude(_unusedKey, system, userContent, maxTokens, retries = 
     if (data.error) {
       // Server says key not configured — fall back to direct browser call
       if (resp.status === 500 && data.error.includes('not configured')) {
-        const apiKey = localStorage.getItem('alfred_claude_key');
+        const apiKey = savedApiKey;
         if (!apiKey) throw new Error('NO_KEY');
         const directResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
@@ -1251,7 +1262,7 @@ async function callClaude(_unusedKey, system, userContent, maxTokens, retries = 
 
 async function runAIGenerate(productText, { titleOnly = false, descOnly = false } = {}) {
   // Key param kept for fallback path inside callClaude — server route doesn't need it
-  const apiKey = localStorage.getItem('alfred_claude_key');
+  const apiKey = savedApiKey;
   const productContent = `Product info:\n\n${productText}`;
   const titlePromise = descOnly  ? null : callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
   const descPromise  = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536);
@@ -1272,7 +1283,17 @@ async function runAIGenerate(productText, { titleOnly = false, descOnly = false 
   if (titleOnly) return { title: rawTitle, desc: '' };
   const descText = await descPromise;
   const descMatch = descText.match(/\{[\s\S]*\}/);
-  const desc = normalizeDesc(descMatch ? (JSON.parse(descMatch[0]).description || '') : '');
+  let desc = '';
+  if (descMatch) {
+    try {
+      desc = normalizeDesc(JSON.parse(descMatch[0]).description || '');
+    } catch {
+      // Claude returned malformed JSON — strip wrapper and use raw text
+      const raw = descText.replace(/^\s*\{[^"]*"description"\s*:\s*"/, '').replace(/"\s*\}\s*$/, '');
+      desc = normalizeDesc(raw);
+      if (!desc) throw new Error('AI returned malformed JSON — try again');
+    }
+  }
   return { title: rawTitle, desc };
 }
 
@@ -1311,6 +1332,7 @@ async function generateAI(mode = 'both') {
 function saveApiKey() {
   const val = document.getElementById('api-key-input').value.trim();
   if (val) {
+    savedApiKey = val;
     localStorage.setItem('alfred_claude_key', val);
     apiKeyVisible = false;
     renderFixView();
@@ -1400,6 +1422,7 @@ async function generateAINew(mode = 'both') {
 function saveApiKeyNew() {
   const val = document.getElementById('new-api-key-input').value.trim();
   if (val) {
+    savedApiKey = val;
     localStorage.setItem('alfred_claude_key', val);
     newApiKeyVisible = false;
     renderNewView();
@@ -1465,13 +1488,24 @@ function searchListings(query) {
   if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
   const q = query.toLowerCase();
   _searchMatches = [];
-  for (let i = 0; i < LISTINGS.length && _searchMatches.length < 6; i++) {
-    if (LISTINGS[i][0].toLowerCase().includes(q))
-      _searchMatches.push({ name: LISTINGS[i][0], price: LISTINGS[i][4], shopee: LISTINGS[i][1], caro: LISTINGS[i][2], listingIdx: i });
-  }
+  // Search done listings first — uses AI-rewritten titles
   for (const d of doneData) {
-    if (d.index === null && d.title.toLowerCase().includes(q) && _searchMatches.length < 8)
-      _searchMatches.push({ name: d.title, price: d.sellPrice, shopee: d.shopeeUrl, caro: d.carousellUrl, listingIdx: null });
+    if (_searchMatches.length >= 8) break;
+    if (!d.title.toLowerCase().includes(q)) continue;
+    const ov = urlOverrides[d.index] || {};
+    _searchMatches.push({
+      name: d.title,
+      price: d.sellPrice,
+      shopee: ov.shopeeUrl ?? d.shopeeUrl ?? LISTINGS[d.index]?.[1] ?? '',
+      caro:   ov.carousellUrl ?? d.carousellUrl ?? LISTINGS[d.index]?.[2] ?? '',
+      listingIdx: d.index
+    });
+  }
+  // Fall back to unprocessed LISTINGS by original title
+  for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
+    if (doneSet.has(i) || deletedSet.has(i)) continue;
+    if (!LISTINGS[i][0].toLowerCase().includes(q)) continue;
+    _searchMatches.push({ name: LISTINGS[i][0], price: LISTINGS[i][4], shopee: LISTINGS[i][1], caro: LISTINGS[i][2], listingIdx: i });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = _searchMatches.map((m, mi) => {
@@ -1533,6 +1567,21 @@ function todayRevenue() {
   return salesLog.filter(s => s.date === today).reduce((sum, s) => sum + s.price, 0);
 }
 
+// Preserve focused element across innerHTML re-renders
+function withFocusPreserved(renderFn) {
+  const focused = document.activeElement;
+  const id = focused?.id;
+  const sel = (focused?.tagName === 'TEXTAREA' || focused?.tagName === 'INPUT') ? focused.selectionStart : null;
+  renderFn();
+  if (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.focus();
+      if (sel != null) { try { el.setSelectionRange(sel, sel); } catch(e) {} }
+    }
+  }
+}
+
 // Render
 function renderAll() {
   renderSessionBar();
@@ -1548,7 +1597,8 @@ function renderSessionBar() {
   document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
 }
 
-function renderFixView() {
+function renderFixView() { withFocusPreserved(_renderFixView); }
+function _renderFixView() {
   const total = LISTINGS.length;
   const processed = doneSet.size + deletedSet.size;
   const remaining = total - processed;
@@ -1623,13 +1673,13 @@ function renderFixView() {
     <div class="ai-section">
       <div class="field-header">
         <span class="field-label">✨ AI</span>
-        ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
+        ${savedApiKey ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
       </div>
-      ${(!localStorage.getItem('alfred_claude_key') || apiKeyVisible) ? `
+      ${(!savedApiKey || apiKeyVisible) ? `
         <div class="ai-key-inline">
           <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-…">
           <button class="copy-btn" onclick="saveApiKey()">Save</button>
-          ${localStorage.getItem('alfred_claude_key') ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
+          ${savedApiKey ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
         </div>` : ''}
       ${fixFetchCollapsed
         ? `<div class="shopee-collapsed" onclick="fixFetchCollapsed=false;renderFixView()">▼ Change URL</div>`
@@ -1707,9 +1757,10 @@ function addSwipeGestures() {
   }, { passive: true });
 }
 
-function renderNewView() {
+function renderNewView() { withFocusPreserved(_renderNewView); }
+function _renderNewView() {
   const wrap = document.getElementById('new-wrap');
-  const apiKey = localStorage.getItem('alfred_claude_key');
+  const apiKey = savedApiKey;
   const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
   const sell = calcSell(parseFloat(newCost) || 0);
 
@@ -1827,6 +1878,21 @@ function renderNewView() {
   });
 }
 
+function deleteSale(idx) {
+  const removed = salesLog.splice(idx, 1)[0];
+  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+  pushToSupabase();
+  renderSalesView();
+  renderSessionBar();
+  toastWithUndo('Sale removed', () => {
+    salesLog.splice(idx, 0, removed);
+    localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+    pushToSupabase();
+    renderSalesView();
+    renderSessionBar();
+  });
+}
+
 function renderSalesView() {
   document.getElementById('revenue-display').textContent = '$' + todayRevenue().toFixed(2);
   const list = document.getElementById('sales-list');
@@ -1834,13 +1900,25 @@ function renderSalesView() {
     list.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);font-size:13px;padding:24px 0">No sales yet</p>';
     return;
   }
-  list.innerHTML = salesLog.map(s => `<div class="sale-entry">
-    <div class="sale-info">
-      <div class="sale-name">${esc(s.name)}</div>
-      <div class="sale-meta">${esc(s.date)}</div>
-    </div>
-    <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
-  </div>`).join('');
+  const today = getToday();
+  let lastDate = null;
+  list.innerHTML = salesLog.map((s, idx) => {
+    let header = '';
+    if (s.date !== lastDate) {
+      lastDate = s.date;
+      header = `<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 4px 4px">${s.date === today ? 'Today' : esc(s.date)}</div>`;
+    }
+    return header + `<div class="sale-entry">
+      <div class="sale-info">
+        <div class="sale-name">${esc(s.name)}</div>
+        <div class="sale-meta">${esc(s.date)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
+        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function switchTab(tab) {
@@ -1859,7 +1937,8 @@ function switchTab(tab) {
   else renderDoneView();
 }
 
-function renderDoneView() {
+function renderDoneView() { withFocusPreserved(_renderDoneView); }
+function _renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').toLowerCase();
   const list = document.getElementById('done-list');
   const filtered = doneData.map((d, i) => ({ ...d, _i: i }))
@@ -1899,7 +1978,7 @@ function renderDoneView() {
           <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
           <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
         </div>
-        <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i},${d.index})">Delete listing</button>
+        <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i})">Delete listing</button>
       </div>`;
     }
     return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
@@ -1933,16 +2012,22 @@ function saveDoneEdit(i) {
   toast('Saved');
 }
 
-function deleteDoneEntry(i, listingIndex) {
+function deleteDoneEntry(i) {
   if (!confirm('Remove this listing from Done? This also removes it from your processed count.')) return;
+  const entry = doneData[i];
+  if (!entry) return;
+  if (entry.doneAt?.startsWith(getToday())) {
+    doneTodayCount = Math.max(0, doneTodayCount - 1);
+  }
   doneData.splice(i, 1);
-  doneSet.delete(listingIndex);
+  if (entry.index !== null) doneSet.delete(entry.index);
   editingDoneIdx = null;
   doneLinkEditIdx = null;
   saveLocal();
   pushToSupabase();
   renderDoneView();
   renderFixView();
+  renderSessionBar();
   toast('Listing removed');
 }
 
