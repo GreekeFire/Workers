@@ -1,10 +1,8 @@
 {
   "outputDirectory": ".",
   "rewrites": [
-    { "source": "/", "destination": "/pages/dashboard.html" },
-    { "source": "/work", "destination": "/pages/work.html" },
-    { "source": "/finance", "destination": "/pages/finance.html" },
-    { "source": "/po-coach", "destination": "/pages/po-coach.html" },
-    { "source": "/master-sop", "destination": "/pages/master-sop.html" }
+    { "source": "/", "destination": "/work.html" },
+    { "source": "/research", "destination": "/research.html" },
+    { "source": "/test-shopee", "destination": "/test-shopee.html" }
   ]
 }

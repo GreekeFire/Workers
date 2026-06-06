@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Wormhole Scraper",
+  "version": "1.0",
+  "description": "Private Shopee image hash extractor — isolated tabs, no interference",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "debugger",
+    "storage",
+    "notifications",
+    "windows"
+  ],
+  "host_permissions": [
+    "https://shopee.sg/*",
+    "http://localhost:7771/*",
+    "https://workers-v1.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Wormhole Scraper"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://shopee.sg/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://workers-v1.vercel.app/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

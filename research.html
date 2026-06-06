@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Research — 1st Affiliate</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #050506; --text: #FAFAFA; --sub: #B8B6B0; --muted: #76746E;
+    --card: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.06);
+    --green: #6BE3A4; --coral: #E07658; --danger: #E05858;
+    --radius: 12px;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; padding: 24px 20px 40px; max-width: 560px; margin: 0 auto; }
+
+  h1 { font-size: 16px; font-weight: 700; color: var(--coral); margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+
+  .search-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  input { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; padding: 12px 14px; font-family: inherit; }
+  input:focus { outline: none; border-color: rgba(255,255,255,0.2); }
+  button { padding: 12px 18px; border-radius: 10px; border: 1px solid rgba(224,118,88,0.3); background: rgba(224,118,88,0.1); color: var(--coral); font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: rgba(224,118,88,0.18); }
+
+  .stats-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; flex: 1; min-width: 80px; text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 700; }
+  .stat-val.green { color: var(--green); }
+  .stat-label { font-size: 10px; color: var(--muted); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 2px; }
+
+  .listing { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; display: flex; gap: 12px; align-items: flex-start; }
+  .listing-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+  .listing-body { flex: 1; min-width: 0; }
+  .listing-title { font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .listing-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .listing-price { font-size: 15px; font-weight: 700; color: var(--green); }
+  .listing-sold { font-size: 11px; color: var(--danger); font-weight: 600; }
+  .listing-seller { font-size: 11px; color: var(--muted); }
+  .listing-link { font-size: 11px; color: var(--coral); text-decoration: none; }
+  .listing-link:hover { text-decoration: underline; }
+
+  .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 8px 4px 6px; }
+  .error { background: rgba(224,88,88,0.1); border: 1px solid rgba(224,88,88,0.2); border-radius: 10px; padding: 14px; color: var(--danger); font-size: 13px; }
+  .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 32px 0; }
+
+  .raw-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 16px; }
+  .raw-toggle { font-size: 12px; color: var(--muted); cursor: pointer; margin-bottom: 6px; }
+  .raw-toggle:hover { color: var(--text); }
+  pre { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; display: none; }
+  pre.open { display: block; }
+</style>
+</head>
+<body>
+
+<h1>Research</h1>
+<p class="subtitle">Public Carousell search — no account needed</p>
+
+<div class="search-row">
+  <input type="text" id="q" placeholder="e.g. mechanical keyboard" autocomplete="off">
+  <button id="btn" onclick="search()">Search</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+async function search() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('btn');
+  const out = document.getElementById('output');
+  btn.disabled = true; btn.textContent = 'Searching…'; out.innerHTML = '';
+
+  try {
+    const res  = await fetch(`/api/carousell-search?q=${encodeURIComponent(q)}&count=30`);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) {
+      out.innerHTML = `<div class="error">API returned non-JSON:<br><pre style="margin-top:8px;font-size:11px;color:#aaa;white-space:pre-wrap">${esc(text.slice(0,500))}</pre></div>`;
+      return;
+    }
+
+    if (data.error && !data.listings) {
+      out.innerHTML = `<div class="error">${esc(data.error)}<div class="raw-card"><div class="raw-toggle" onclick="toggleRaw(this)">▶ Raw JSON</div><pre>${esc(JSON.stringify(data.raw,null,2))}</pre></div></div>`;
+      return;
+    }
+
+    const listings = data.listings || [];
+    const available = listings.filter(l => !l.sold);
+    const sold      = listings.filter(l => l.sold);
+    const prices    = available.map(l => parseFloat(l.price)).filter(Boolean);
+    const avgPrice  = prices.length ? (prices.reduce((a,b) => a+b,0) / prices.length).toFixed(2) : '—';
+    const minPrice  = prices.length ? Math.min(...prices).toFixed(2) : '—';
+
+    let html = `<div class="stats-row">
+      <div class="stat"><div class="stat-val">${listings.length}</div><div class="stat-label">Listed</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--danger)">${sold.length}</div><div class="stat-label">Sold</div></div>
+      <div class="stat"><div class="stat-val green">$${avgPrice}</div><div class="stat-label">Avg Price</div></div>
+      <div class="stat"><div class="stat-val">$${minPrice}</div><div class="stat-label">Min Price</div></div>
+    </div>`;
+
+    if (listings.length === 0) {
+      html += `<div class="empty">No results for "${esc(q)}"</div>`;
+    } else {
+      html += `<div class="section-label">${listings.length} listings</div>`;
+      html += listings.map(l => {
+        const img = l.image ? `<img class="listing-img" src="${esc(l.image)}" onerror="this.style.display='none'">` : `<div class="listing-img"></div>`;
+        const price = l.price ? `<span class="listing-price">$${parseFloat(l.price).toFixed(2)}</span>` : '';
+        const soldBadge = l.sold ? `<span class="listing-sold">SOLD</span>` : '';
+        const seller = l.seller ? `<span class="listing-seller">@${esc(l.seller)}</span>` : '';
+        const link = l.url ? `<a class="listing-link" href="${esc(l.url)}" target="_blank" rel="noopener">View ↗</a>` : '';
+        return `<div class="listing">
+          ${img}
+          <div class="listing-body">
+            <div class="listing-title">${esc(l.title)}</div>
+            <div class="listing-meta">${price}${soldBadge}${seller}${link}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    html += `<div class="raw-card"><div class="raw-toggle" onclick="toggleRaw(this)">▶ Raw JSON</div><pre>${esc(JSON.stringify(data.raw,null,2))}</pre></div>`;
+    out.innerHTML = html;
+
+  } catch (e) {
+    out.innerHTML = `<div class="error">Request failed: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Search';
+  }
+}
+
+function toggleRaw(el) {
+  const pre = el.nextElementSibling;
+  pre.classList.toggle('open');
+  el.textContent = pre.classList.contains('open') ? '▼ Hide JSON' : '▶ Raw JSON';
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+</script>
+</body>
+</html>
