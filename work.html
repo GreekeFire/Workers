@@ -2114,6 +2114,7 @@ function switchTab(tab) {
 
 // ── CLEAN tab ──────────────────────────────────────────────────────────────────
 let cleanListings = [];
+let cleanEditingId = null;
 
 async function renderCleanView() {
   const progress = document.getElementById('clean-progress');
@@ -2124,7 +2125,7 @@ async function renderCleanView() {
   try {
     const { data, error } = await sb
       .from('listings')
-      .select('id,title,carousell_url,source_cost')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price')
       .eq('status', 'to_delete')
       .order('id');
     if (error) throw error;
@@ -2134,25 +2135,68 @@ async function renderCleanView() {
     return;
   }
 
-  progress.textContent = `${cleanListings.length} listings to delete on Carousell`;
+  progress.textContent = `${cleanListings.length} listings to clean up`;
 
   if (cleanListings.length === 0) {
     list.innerHTML = '<div class="queue-complete"><div class="big-check">✓</div><h2>All cleaned up</h2><p>Nothing left to delete.</p></div>';
     return;
   }
 
-  list.innerHTML = cleanListings.map((l, i) =>
-    `<div class="done-entry" id="clean-entry-${l.id}">
+  list.innerHTML = cleanListings.map(l => {
+    const cost = parseFloat(l.source_cost) || 0;
+    const sell = parseFloat(l.sell_price) || 0;
+    if (cleanEditingId === l.id) {
+      return `<div class="done-entry editing" id="clean-entry-${l.id}">
+        <input class="done-edit-title" type="text" id="clean-title-${l.id}" value="${esc(l.title)}" placeholder="Title">
+        <div class="done-edit-price">
+          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
+          <input class="done-edit-cost" type="number" step="0.01" id="clean-cost-${l.id}" value="${cost}" oninput="updateCleanSell(${l.id},this.value)">
+          <span style="color:var(--text-tertiary)">→</span>
+          <span class="done-edit-sell" id="clean-sell-${l.id}">$${sell.toFixed(2)}</span>
+        </div>
+        <input class="link-edit-input" type="url" id="clean-shopee-${l.id}" placeholder="Shopee URL" value="${esc(l.shopee_url||'')}" style="margin-top:8px">
+        <input class="link-edit-input" type="url" id="clean-caro-${l.id}" placeholder="Carousell URL" value="${esc(l.carousell_url||'')}" style="margin-top:6px">
+        <div class="done-edit-actions" style="margin-top:10px">
+          <button class="done-cancel-btn" onclick="cleanEditingId=null;renderCleanView()">Cancel</button>
+          <button class="done-save-btn" onclick="cleanKeepEntry(${l.id})">Move to Active ✓</button>
+        </div>
+        <button onclick="cleanDeleteEntry(${l.id})" style="width:100%;margin-top:8px;padding:14px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.12);color:var(--danger);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.03em">Delete from Carousell ✕</button>
+      </div>`;
+    }
+    return `<div class="done-entry" id="clean-entry-${l.id}" onclick="cleanEditingId=${l.id};renderCleanView()">
       <div class="done-info">
         <div class="done-title-text">${esc(l.title)}</div>
-        <div class="done-meta">Cost $${parseFloat(l.source_cost).toFixed(2)}</div>
+        <div class="done-meta">Cost $${cost.toFixed(2)} · Under $15 minimum</div>
         <div style="display:flex;gap:8px;margin-top:6px">
-          ${l.carousell_url ? `<a class="link-btn" href="${esc(l.carousell_url)}" target="_blank" rel="noopener">Open on Carousell ↗</a>` : '<span style="color:var(--text-tertiary);font-size:12px">No Carousell link</span>'}
+          ${l.carousell_url ? `<a class="link-btn" href="${esc(l.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : '<span style="color:var(--text-tertiary);font-size:12px">No link</span>'}
         </div>
       </div>
-      <button onclick="cleanDeleteEntry(${l.id})" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:12px;font-weight:700;cursor:pointer">Done</button>
-    </div>`
-  ).join('');
+      <div class="done-edit-icon">✎</div>
+    </div>`;
+  }).join('');
+}
+
+function updateCleanSell(id, val) {
+  const el = document.getElementById(`clean-sell-${id}`);
+  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0).toFixed(2);
+}
+
+async function cleanKeepEntry(id) {
+  const title    = document.getElementById(`clean-title-${id}`)?.value?.trim();
+  const cost     = parseFloat(document.getElementById(`clean-cost-${id}`)?.value) || 0;
+  const shopeeUrl  = document.getElementById(`clean-shopee-${id}`)?.value?.trim() || '';
+  const carousellUrl = document.getElementById(`clean-caro-${id}`)?.value?.trim() || '';
+  if (!title) { toast('Title cannot be empty'); return; }
+  const sell = calcSell(cost);
+  const { error } = await sb.from('listings').update({
+    title, shopee_url: shopeeUrl, carousell_url: carousellUrl,
+    source_cost: cost, sell_price: sell, status: 'active'
+  }).eq('id', id);
+  if (error) { toast('Save failed'); return; }
+  cleanListings = cleanListings.filter(l => l.id !== id);
+  cleanEditingId = null;
+  toast('Moved to active ✓');
+  renderCleanView();
 }
 
 async function cleanDeleteEntry(id) {
@@ -2164,13 +2208,10 @@ async function cleanDeleteEntry(id) {
     toast('Delete failed');
     return;
   }
-  if (el) el.remove();
   cleanListings = cleanListings.filter(l => l.id !== id);
-  const progress = document.getElementById('clean-progress');
-  if (progress) progress.textContent = `${cleanListings.length} listings to delete on Carousell`;
-  if (cleanListings.length === 0) {
-    document.getElementById('clean-list').innerHTML = '<div class="queue-complete"><div class="big-check">✓</div><h2>All cleaned up</h2><p>Nothing left to delete.</p></div>';
-  }
+  cleanEditingId = null;
+  toast('Deleted ✓');
+  renderCleanView();
 }
 
 function renderDoneView() { withFocusPreserved(_renderDoneView); }
