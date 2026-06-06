@@ -1,0 +1,2383 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>1st Affiliate</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="1st Affiliate">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050506">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="manifest" href="/manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL = 'https://tzwzmzabjmsocnxdtxqx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
+</script>
+<style>
+  :root {
+    --bg-deep: #050506;
+    --text-primary: #FAFAFA;
+    --text-secondary: #B8B6B0;
+    --text-tertiary: #76746E;
+    --success: #6BE3A4;
+    --warning: #F2C063;
+    --accent: #E07658;
+    --card-bg: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.06);
+    --card-radius: 16px;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --coral: var(--accent);
+    --danger: #E05858;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
+    filter: blur(40px);
+    animation: bgDrift 36s ease-in-out infinite alternate;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes bgDrift {
+    0%   { transform: translate(0,0) scale(1); }
+    50%  { transform: translate(20px,-15px) scale(1.04); }
+    100% { transform: translate(-10px,10px) scale(0.97); }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: #050506;
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* body::before / body::after / @keyframes bgDrift — from shared.css */
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top, 24px) 20px calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* Session bar */
+  .session-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .sess-item {
+    flex: 1;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .sess-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .sess-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .sess-val.green { color: var(--success); }
+  .sess-val.coral { color: var(--coral); }
+
+  /* Segmented toggle */
+  .seg-toggle {
+    display: flex;
+    background: rgba(20,20,22,0.72);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+  .seg-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .seg-btn.active {
+    background: rgba(255,255,255,0.10);
+    color: var(--text-primary);
+    box-shadow: inset 0 -2px 0 var(--coral);
+  }
+
+  /* Progress line */
+  .progress-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 999px;
+    padding: 5px 12px;
+    margin-bottom: 16px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Listing card */
+  .listing-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 24px 20px;
+    margin-bottom: 16px;
+  }
+  .title-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 10px 12px;
+    resize: none;
+    font-family: inherit;
+    margin-bottom: 16px;
+    display: block;
+  }
+  .title-input:focus { outline: none; border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+  .title-input { overflow: hidden; }
+  .listing-links {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .link-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.03);
+    transition: all 0.15s;
+  }
+  .link-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.07); }
+  .link-edit-input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 10px;
+    font-family: inherit;
+    min-width: 0;
+  }
+  .link-edit-input:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .listing-price {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .price-sell {
+    color: var(--success);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .price-arrow { color: var(--text-tertiary); }
+
+  /* AI section */
+  .ai-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+  }
+  .ai-loading { font-size: 13px; color: var(--text-tertiary); padding: 8px 0; }
+  .ai-field {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .ai-field:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .ai-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .ai-key-inline { display: flex; gap: 8px; margin-bottom: 8px; }
+  .ai-key-input {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+  }
+  .ai-key-input:focus { outline: none; border-color: rgba(255,255,255,0.18); }
+  .shopee-collapsed {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 6px 0;
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .shopee-collapsed:hover { color: var(--text-secondary); }
+  .shopee-fetch-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .shopee-fetch-btn {
+    white-space: nowrap; padding: 9px 14px; flex-shrink: 0;
+    border-radius: 8px; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12); color: var(--text-primary);
+    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .shopee-fetch-btn:hover    { background: rgba(255,255,255,0.11); }
+  .shopee-fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .shopee-img-grid {
+    display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .shopee-img-grid::-webkit-scrollbar { display: none; }
+  .shopee-img-thumb {
+    flex-shrink: 0; width: 76px; height: 76px; border-radius: 9px; overflow: hidden;
+    display: block; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+  }
+  .shopee-img-thumb { position: relative; }
+  .shopee-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .shopee-img-dl {
+    position: absolute; bottom: 3px; right: 3px;
+    background: rgba(0,0,0,0.65); color: #fff;
+    border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 700;
+    text-decoration: none; line-height: 1.4; pointer-events: auto;
+  }
+  .char-counter {
+    font-size: 11px; color: var(--text-tertiary);
+    text-align: right; margin-top: -8px; margin-bottom: 10px;
+  }
+  .char-counter.warn   { color: var(--warning); }
+  .char-counter.danger { color: var(--danger); }
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+  .copy-btn.copied { color: var(--success); border-color: var(--success); }
+  .field-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .field-label { font-size: 11px; color: var(--text-tertiary); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+  .ai-gen-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: rgba(224,118,88,0.12);
+    border: 1px solid rgba(224,118,88,0.25);
+    color: var(--coral);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ai-gen-btn:hover { background: rgba(224,118,88,0.2); }
+  .ai-gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .api-key-section { margin-top: 10px; }
+  .api-key-row { display: flex; gap: 8px; }
+  .api-key-input {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+  }
+  .api-key-input:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .api-key-save-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Action row */
+  .action-row { display: flex; gap: 12px; }
+  .btn-delete {
+    flex: 1;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(224,88,88,0.25);
+    background: rgba(224,88,88,0.08);
+    color: var(--danger);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-delete:hover { background: rgba(224,88,88,0.15); }
+  .btn-done {
+    flex: 2;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(107,227,164,0.25);
+    background: rgba(107,227,164,0.08);
+    color: var(--success);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-done:hover { background: rgba(107,227,164,0.15); }
+
+  /* Queue complete */
+  .queue-complete {
+    text-align: center;
+    padding: 48px 24px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    margin-bottom: 16px;
+  }
+  .queue-complete .big-check { font-size: 48px; margin-bottom: 16px; }
+  .queue-complete h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .queue-complete p { font-size: 14px; color: var(--text-tertiary); }
+
+  /* Sales section */
+  .revenue-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .revenue-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+  .revenue-amount {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--success);
+  }
+  .log-form-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+    padding: 12px 14px;
+    font-family: inherit;
+  }
+  .form-input:focus { outline: none; border-color: rgba(255,255,255,0.15); }
+  .btn-log {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(224,118,88,0.25);
+    background: rgba(224,118,88,0.1);
+    color: var(--coral);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-log:hover { background: rgba(224,118,88,0.18); }
+  .sales-list { display: flex; flex-direction: column; gap: 8px; }
+  .sale-entry {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sale-info { flex: 1; min-width: 0; }
+  .sale-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sale-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .sale-price {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--success);
+    margin-left: 12px;
+    flex-shrink: 0;
+  }
+
+  /* Attribution select */
+  select.form-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2376746E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+  select.form-input option { background: #141416; }
+
+  /* Breakdown */
+  .breakdown-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .breakdown-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 12px;
+  }
+  .breakdown-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .breakdown-row:last-child { border-bottom: none; }
+  .breakdown-cat { font-size: 13px; font-weight: 600; }
+  .breakdown-stats { display: flex; gap: 10px; font-size: 11px; color: var(--text-tertiary); }
+  .breakdown-profit { color: var(--success); font-weight: 700; }
+
+  /* Search dropdown */
+  .search-wrap { position: relative; }
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0; right: 0;
+    background: rgba(18,18,20,0.98);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 20;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  }
+  .search-result {
+    padding: 12px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover, .search-result:active { background: rgba(255,255,255,0.06); }
+  .search-result-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .search-result-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .search-result-price { font-size: 11px; color: var(--text-tertiary); }
+  .search-result-link { font-size: 11px; color: var(--coral); text-decoration: none; }
+  .search-result-link:hover { text-decoration: underline; }
+  .sale-listing-info {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .sale-info-price { font-size: 13px; color: var(--success); font-weight: 700; }
+  .sale-info-link { font-size: 12px; color: var(--coral); text-decoration: none; }
+  .sale-info-link:hover { text-decoration: underline; }
+
+  /* Price calculator in Fix */
+  .price-calc {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+  }
+  .pcol { flex: 1; }
+  .pcol-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+  .pcol-input-wrap { display: flex; align-items: center; gap: 4px; }
+  .pcol-currency { font-size: 14px; color: var(--text-tertiary); }
+  .cost-input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 10px;
+    font-family: inherit;
+    width: 100%;
+  }
+  .cost-input:focus { outline: none; border-color: rgba(255,255,255,0.28); }
+  .cost-input::-webkit-inner-spin-button,
+  .cost-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .cost-input { -moz-appearance: textfield; }
+  .parrow { font-size: 18px; color: var(--text-tertiary); padding-top: 18px; flex-shrink: 0; }
+  .sell-display {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--success);
+    margin-top: 2px;
+  }
+
+  /* Done list */
+  .done-search-wrap { margin-bottom: 12px; }
+  .done-list { display: flex; flex-direction: column; gap: 8px; }
+  .done-entry {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .done-entry:hover { background: rgba(255,255,255,0.06); }
+  .done-entry.editing { cursor: default; flex-direction: column; align-items: stretch; gap: 10px; }
+  .done-entry.editing:hover { background: var(--card-bg); }
+  .done-info { flex: 1; min-width: 0; }
+  .done-title-text {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .done-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .done-edit-icon { font-size: 14px; color: var(--text-tertiary); margin-left: 12px; flex-shrink: 0; }
+  .done-edit-title {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 12px;
+    font-family: inherit;
+  }
+  .done-edit-title:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .done-edit-price {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .done-edit-cost {
+    width: 90px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 7px 10px;
+    font-family: inherit;
+  }
+  .done-edit-cost:focus { outline: none; border-color: rgba(255,255,255,0.25); }
+  .done-edit-cost::-webkit-inner-spin-button,
+  .done-edit-cost::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .done-edit-cost { -moz-appearance: textfield; }
+  .done-edit-sell { font-size: 16px; font-weight: 700; color: var(--success); }
+  .done-edit-actions { display: flex; gap: 8px; }
+  .done-cancel-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-link-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(224,118,88,0.25);
+    background: rgba(224,118,88,0.08);
+    color: var(--coral);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-link-inputs { display: flex; flex-direction: column; gap: 6px; }
+  .done-save-btn {
+    flex: 2;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(107,227,164,0.25);
+    background: rgba(107,227,164,0.08);
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .done-empty { text-align: center; color: var(--text-tertiary); font-size: 13px; padding: 24px 0; }
+
+  /* API key bar */
+  .api-key-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .api-key-bar-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 5px 10px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .api-key-bar-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.12); }
+  .api-key-bar-btn.set { color: var(--success); border-color: rgba(107,227,164,0.25); }
+  .api-key-bar-row { display: flex; gap: 8px; flex: 1; max-width: 320px; }
+  .api-key-bar-field {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 12px;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+  }
+  .api-key-bar-field:focus { outline: none; border-color: rgba(255,255,255,0.18); }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: calc(80px + env(safe-area-inset-bottom) + 12px);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(20,20,22,0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: all 0.25s ease;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+
+  /* Sync status */
+  .sync-status {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-align: right;
+    padding: 4px 2px 8px;
+    min-height: 20px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    color: var(--text-tertiary);
+  }
+  .sync-status.visible { opacity: 1; }
+  .sync-status.synced { color: var(--success); }
+  .sync-status.error { color: var(--danger); }
+
+  /* tab bar from shared.css */
+
+  @media (max-width: 600px) {
+    .ai-field { font-size: 16px; }
+    .form-input { font-size: 16px; }
+    .ai-gen-btn { padding: 10px 18px; font-size: 14px; }
+    .copy-btn { padding: 8px 12px; font-size: 12px; }
+    .link-btn { padding: 10px 16px; font-size: 13px; }
+    .shopee-collapsed { padding: 12px 0; font-size: 14px; }
+    .seg-btn { padding: 12px; font-size: 14px; }
+    .done-cancel-btn, .done-link-btn, .done-save-btn { padding: 14px; font-size: 14px; }
+    .search-result { padding: 16px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+
+  <!-- Session bar -->
+  <div class="session-bar">
+    <div class="sess-item">
+      <span class="sess-label">Done</span>
+      <span class="sess-val green" id="cnt-done">0</span>
+    </div>
+    <div class="sess-item">
+      <span class="sess-label">Deleted</span>
+      <span class="sess-val" id="cnt-deleted">0</span>
+    </div>
+    <div class="sess-item">
+      <span class="sess-label">Revenue</span>
+      <span class="sess-val coral" id="cnt-revenue">$0</span>
+    </div>
+  </div>
+  <div class="sync-status" id="sync-status"></div>
+
+  <!-- Segmented toggle -->
+  <div class="seg-toggle">
+    <button class="seg-btn active" id="btn-fix" onclick="switchTab('fix')">FIX</button>
+    <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
+    <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
+    <button class="seg-btn" id="btn-done" onclick="switchTab('done')">DONE</button>
+    <button class="seg-btn" id="btn-clean" onclick="switchTab('clean')">CLEAN</button>
+  </div>
+
+  <!-- FIX view -->
+  <div id="view-fix">
+    <div class="progress-line" id="progress-line">Loading&hellip;</div>
+    <div id="listing-wrap"></div>
+    <div class="action-row" id="action-row" style="display:none">
+      <button class="btn-delete" onclick="markDeleted()">Delete</button>
+      <button class="btn-done" onclick="markDone()">Done</button>
+    </div>
+  </div>
+
+  <!-- NEW view -->
+  <div id="view-new" style="display:none">
+    <div id="new-wrap"></div>
+  </div>
+
+  <!-- SALES view -->
+  <div id="view-sales" style="display:none">
+    <div class="revenue-card">
+      <div class="revenue-label">Revenue Today</div>
+      <div class="revenue-amount" id="revenue-display">$0</div>
+    </div>
+    <div class="log-form-card">
+      <div class="search-wrap">
+        <input type="text" class="form-input" id="sale-listing" placeholder="Search listing..." autocomplete="off" oninput="searchListings(this.value)" onblur="hideDropdown()">
+        <div class="search-dropdown" id="search-dropdown" style="display:none"></div>
+      </div>
+      <div class="sale-listing-info" id="sale-listing-info" style="display:none"></div>
+      <select class="form-input" id="sale-category">
+        <option value="">Category…</option>
+        <option value="Electronics">Electronics</option>
+        <option value="Home">Home & Living</option>
+        <option value="Fashion">Fashion</option>
+        <option value="Sports">Sports & Outdoors</option>
+        <option value="Beauty">Beauty</option>
+        <option value="Other">Other</option>
+      </select>
+      <div style="display:flex;gap:8px">
+        <input type="number" class="form-input" id="sale-cost" placeholder="Source cost ($)" step="0.01" min="0" style="flex:1">
+        <input type="number" class="form-input" id="sale-price" placeholder="Sell price ($)" step="0.01" min="0" style="flex:1">
+      </div>
+      <button class="btn-log" onclick="logSale()">Log Sale</button>
+    </div>
+    <div class="sales-list" id="sales-list"></div>
+    <div id="sales-breakdown"></div>
+  </div>
+
+  <!-- DONE view -->
+  <div id="view-done" style="display:none">
+    <div class="done-search-wrap">
+      <input type="text" class="form-input" id="done-search" placeholder="Search done listings..." autocomplete="off" oninput="editingDoneIdx=null;renderDoneView()">
+    </div>
+    <div class="done-list" id="done-list"></div>
+  </div>
+
+  <!-- CLEAN view -->
+  <div id="view-clean" style="display:none">
+    <div class="progress-line" id="clean-progress">Loading…</div>
+    <div id="clean-list"></div>
+  </div>
+
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
+
+<script>
+function calcSell(cost) {
+  const c = parseFloat(cost) || 0;
+  return Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5 - 0.1;
+}
+
+function onCostChange(val) {
+  editedCost = parseFloat(val) || 0;
+  const el = document.getElementById('sell-display');
+  if (el) el.textContent = '$' + calcSell(editedCost).toFixed(2);
+}
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Returns today's date string YYYY-MM-DD (recomputed each call so midnight rollovers work)
+function getToday() { return new Date().toISOString().slice(0, 10); }
+
+// Listings (loaded from Supabase)
+let LISTINGS = [];      // [[title, shopeeUrl, carousellUrl, sourceCost, sellPrice], ...]
+let LISTING_IDS = [];   // [supabase_id, ...] parallel array
+
+// State
+let currentIndex = 0;
+let doneSet = new Set();
+let deletedSet = new Set();
+let doneData = [];
+let doneTodayCount = 0;
+let deletedTodayCount = 0;
+let todayDate = getToday();
+let salesLog = [];
+let activeTab = 'fix';
+let editingDoneIdx = null;
+
+// AI state
+let aiExpanded = false;
+let aiLoading = false;
+let aiTitle = '';
+let aiDesc = '';
+let editedCost = null;
+let shopeeInput = '';
+let shopeeCollapsed = false;
+let apiKeyVisible = false;
+let fixShopeeImages = [];
+let fixShopeeFetching = false;
+let fixFetchCollapsed = false;
+
+// Undo / copy state
+let undoTimer = null;
+let undoStack = [];
+const copyTimers = {};
+
+// API key (lifted out of render to avoid repeated localStorage reads)
+let savedApiKey = localStorage.getItem('alfred_claude_key') || '';
+
+// NEW tab state
+let newTitle = '';
+let newDesc = '';
+let newShopeeInput = '';
+let newCost = '';
+let newShopeeUrl = '';
+let newCaroUrl = '';
+let newLoading = false;
+let newShopeeCollapsed = false;
+let newShopeeImages = [];
+let newShopeeFetching = false;
+let newApiKeyVisible = false;
+let newFetchCollapsed = false;
+
+// Link overrides
+let linkEditing = false;
+let doneLinkEditIdx = null;
+let urlOverrides = {};
+
+// Init
+async function init() {
+  loadLocal();
+  renderAll();
+  await loadListingsFromSupabase();
+  await syncFromSupabase();
+  currentIndex = findNext(currentIndex);
+  renderAll();
+}
+
+async function loadListingsFromSupabase() {
+  try {
+    const { data, error } = await sb
+      .from('listings')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price')
+      .eq('status', 'active')
+      .order('id');
+    if (error) throw error;
+    LISTINGS    = data.map(r => [r.title, r.shopee_url, r.carousell_url, String(r.source_cost), String(r.sell_price)]);
+    LISTING_IDS = data.map(r => r.id);
+  } catch (e) {
+    console.error('Failed to load listings from Supabase:', e);
+  }
+}
+
+function loadLocal() {
+  const today = getToday();
+  const raw = localStorage.getItem('carobiz_work');
+  if (raw) {
+    const s = JSON.parse(raw);
+    currentIndex = s.currentIndex || 0;
+    doneSet = new Set(s.doneIndexes || []);
+    deletedSet = new Set(s.deletedIndexes || []);
+    doneData = s.doneData || [];
+    if (s.todayDate === today) {
+      doneTodayCount = s.doneTodayCount || 0;
+      deletedTodayCount = s.deletedTodayCount || 0;
+    }
+    todayDate = today;
+  }
+  const rawSales = localStorage.getItem('carobiz_sales');
+  if (rawSales) salesLog = JSON.parse(rawSales);
+  const rawOverrides = localStorage.getItem('carobiz_url_overrides');
+  if (rawOverrides) urlOverrides = JSON.parse(rawOverrides);
+  // Restore NEW tab draft
+  try {
+    const rawDraft = localStorage.getItem('carobiz_new_draft');
+    if (rawDraft) {
+      const d = JSON.parse(rawDraft);
+      newTitle      = d.title      || '';
+      newDesc       = d.desc       || '';
+      newShopeeInput= d.shopeeInput|| '';
+      newShopeeUrl  = d.shopeeUrl  || '';
+      newCaroUrl    = d.caroUrl    || '';
+      if (newTitle || newDesc) newShopeeCollapsed = true;
+    }
+  } catch(e) {}
+}
+
+async function syncFromSupabase() {
+  try {
+    const today = getToday();
+    const [pRes, dRes, sRes] = await Promise.all([
+      sb.from('app_state').select('data').eq('key', 'carobiz_work_progress').single(),
+      sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
+      sb.from('app_state').select('data').eq('key', 'carobiz_sales').single()
+    ]);
+
+    if (pRes.data?.data) {
+      const p = pRes.data.data;
+      if (Array.isArray(p.doneIndexes)) for (const i of p.doneIndexes) doneSet.add(i);
+      if (Array.isArray(p.deletedIndexes)) for (const i of p.deletedIndexes) deletedSet.add(i);
+      if ((p.currentIndex || 0) > currentIndex) currentIndex = p.currentIndex;
+      if (p.todayDate === today) {
+        doneTodayCount = Math.max(doneTodayCount, p.doneTodayCount || 0);
+        deletedTodayCount = Math.max(deletedTodayCount, p.deletedTodayCount || 0);
+      }
+      todayDate = today;
+    }
+
+    if (dRes.data?.data) {
+      const remote = dRes.data.data;
+      const localByIndex = new Map(doneData.filter(d => d.index !== null).map(d => [d.index, d]));
+      const localNullEntries = doneData.filter(d => d.index === null);
+      for (const r of remote) {
+        if (r.index !== null) localByIndex.set(r.index, r);
+      }
+      const remoteNullKeys = new Set(remote.filter(d => d.index === null).map(d => d.doneAt));
+      const mergedNulls = [
+        ...remote.filter(d => d.index === null),
+        ...localNullEntries.filter(d => !remoteNullKeys.has(d.doneAt))
+      ];
+      doneData = [...localByIndex.values(), ...mergedNulls]
+        .sort((a, b) => (a.doneAt > b.doneAt ? 1 : -1));
+    }
+
+    if (sRes.data?.data) {
+      salesLog = sRes.data.data;
+      localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+    }
+
+    saveLocal();
+  } catch (e) {
+    console.warn('Supabase sync error:', e);
+  }
+}
+
+function saveLocal() {
+  localStorage.setItem('carobiz_work', JSON.stringify({
+    currentIndex,
+    doneIndexes: [...doneSet],
+    deletedIndexes: [...deletedSet],
+    doneData,
+    doneTodayCount,
+    deletedTodayCount,
+    todayDate
+  }));
+}
+
+async function pushToSupabase() {
+  const now = new Date().toISOString();
+  const today = getToday();
+  setSyncStatus('syncing');
+  await Promise.all([
+    sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
+      currentIndex,
+      doneIndexes: [...doneSet],
+      deletedIndexes: [...deletedSet],
+      doneTodayCount,
+      deletedTodayCount,
+      todayDate: today
+    }, updated_at: now }),
+    sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
+    sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
+  ]).then(() => setSyncStatus('synced')).catch(e => { console.warn('Supabase push error:', e); setSyncStatus('error'); });
+}
+
+let syncStatusTimer = null;
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  clearTimeout(syncStatusTimer);
+  el.className = 'sync-status visible ' + state;
+  if (state === 'syncing') {
+    el.textContent = '⟳ Syncing…';
+  } else if (state === 'synced') {
+    el.textContent = '✓ Synced';
+    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
+  } else if (state === 'error') {
+    el.textContent = '✗ Sync failed';
+    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
+  }
+}
+
+// Queue
+function findNext(from) {
+  let i = from;
+  while (i < LISTINGS.length && (doneSet.has(i) || deletedSet.has(i))) i++;
+  return i;
+}
+
+function markDone() {
+  const idx = currentIndex;
+  const costVal = editedCost !== null ? editedCost : LISTINGS[idx][3];
+  if (!costVal || costVal <= 0) { toast('Enter a cost before marking Done'); return; }
+  if (!doneSet.has(idx) && !deletedSet.has(idx)) {
+    const L = LISTINGS[idx];
+    const sbId = LISTING_IDS[idx];
+    doneSet.add(idx);
+    doneTodayCount++;
+    doneData.push({
+      index: idx,
+      title: aiTitle || L[0],
+      description: aiDesc,
+      shopeeUrl: L[1],
+      carousellUrl: L[2],
+      sourceCost: editedCost !== null ? editedCost : L[3],
+      sellPrice: calcSell(editedCost !== null ? editedCost : L[3]),
+      doneAt: new Date().toISOString()
+    });
+    // Mark as done in Supabase
+    if (sbId) sb.from('listings').update({ status: 'done' }).eq('id', sbId).then(() => {});
+  }
+  resetAI();
+  currentIndex = findNext(idx + 1);
+  saveLocal();
+  pushToSupabase();
+  renderAll();
+  toast('Done ✓');
+}
+
+function markDeleted() {
+  const idx = currentIndex;
+  if (!doneSet.has(idx) && !deletedSet.has(idx)) {
+    deletedSet.add(idx);
+    deletedTodayCount++;
+    undoStack.push({ idx, sbId: LISTING_IDS[idx] });
+  }
+  resetAI();
+  currentIndex = findNext(idx + 1);
+  saveLocal();
+  renderAll();
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => {
+    // Hard delete from Supabase after undo window
+    for (const { sbId } of undoStack) {
+      if (sbId) sb.from('listings').delete().eq('id', sbId).then(() => {});
+    }
+    undoStack = [];
+    pushToSupabase();
+  }, 4000);
+  toastWithUndo('Deleted', undoDelete);
+}
+
+function undoDelete() {
+  const entry = undoStack.pop();
+  if (entry === undefined) return;
+  const idx = entry.idx ?? entry; // handle old format
+  deletedSet.delete(idx);
+  deletedTodayCount = Math.max(0, deletedTodayCount - 1);
+  currentIndex = idx;
+  clearTimeout(undoTimer);
+  if (undoStack.length > 0) {
+    undoTimer = setTimeout(() => {
+      for (const { sbId } of undoStack) {
+        if (sbId) sb.from('listings').delete().eq('id', sbId).then(() => {});
+      }
+      undoStack = [];
+      pushToSupabase();
+    }, 4000);
+  }
+  saveLocal();
+  renderAll();
+  const remaining = undoStack.length;
+  toast(remaining > 0 ? `Undo ✓ (${remaining} pending)` : 'Undo ✓');
+}
+
+function saveDoneLinkEdits(doneIdx, listingIndex) {
+  const s = document.getElementById(`done-link-shopee-${doneIdx}`)?.value.trim() || '';
+  const c = document.getElementById(`done-link-caro-${doneIdx}`)?.value.trim() || '';
+  urlOverrides[listingIndex] = { shopeeUrl: s, carousellUrl: c };
+  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
+  doneLinkEditIdx = null;
+  renderDoneView();
+  toast('Links saved');
+}
+
+function saveLinkEdits() {
+  const s = document.getElementById('link-shopee-input')?.value.trim() || '';
+  const c = document.getElementById('link-caro-input')?.value.trim() || '';
+  urlOverrides[currentIndex] = { shopeeUrl: s, carousellUrl: c };
+  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
+  linkEditing = false;
+  renderFixView();
+  toast('Links saved');
+}
+
+function resetAI() {
+  aiLoading = false;
+  aiTitle = '';
+  aiDesc = '';
+  editedCost = null;
+  shopeeInput = '';
+  linkEditing = false;
+  shopeeCollapsed = false;
+  fixShopeeImages = [];
+  fixShopeeFetching = false;
+  fixFetchCollapsed = false;
+}
+
+// AI — shared constants & helpers
+const TITLE_SYSTEM = `You are a Carousell Singapore SEO copywriter.
+
+TASK: Write a Carousell listing title for the product below. Output the title text only — no JSON, no explanation, no quotes, nothing else.
+
+RULES:
+1. Length: exactly 200–225 characters. Count every character. This is the strictest rule.
+2. Format: pipe-separated segments using Title Case. Each segment follows the pattern [Relevant Feature(s)] + [Item Name]. Example: "RGB Mechanical Gaming Keyboard | Fast Response Gaming Keyboard | Anti Ghosting Pro Keyboard"
+3. The item name (or a close synonym) must appear in most segments — this is what drives search ranking.
+4. Each segment must be a complete phrase that a real buyer could type into the search bar.
+5. Front-load the strongest buyer search terms in the first 50 characters.
+6. Segments are 3–6 words. Never a single word alone.
+7. Correct any spelling errors in the source text — do not copy typos.
+8. Never use: brand names, model numbers or SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Fast Delivery"), !, @, #, $, %, *, &, emojis, "Brand New", "Free Shipping", "nice", "cheap", "best".
+
+CORRECT EXAMPLE (214 chars):
+Foldable Deck Chair Recliner With Headrest | Breathable Mesh Lounge Chair For Home Outdoor | Portable Folding Reclining Chair With X-Frame Support | Lightweight Camping Beach Chair 150KG Load | Space-Saving Folding Lazy Chair With Neck Pillow
+
+WRONG EXAMPLE:
+Wireless RGB Keyboard — sentence structure, forbidden
+
+Before outputting, silently count the characters. If under 200 or over 225, rewrite. Output only the final title — no counting, no explanation, nothing else.`;
+
+const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object with one key: {"description":"..."}
+
+Plain text only inside the JSON — no **bold**, no #headers, no markdown.
+
+Use exactly this structure:
+
+🚚 FREE Local Delivery | 1-3 Working Days
+
+[One hook sentence: what this product is + 2–3 standout features + key use cases]
+
+✅ [Feature] — [what it means for the buyer]
+✅ [Feature] — [what it means for the buyer]
+(write 8–12 bullets covering: key features, build quality, convenience, use cases, dimensions or capacity if known)
+
+💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
+
+RULES:
+- CRITICAL: '🚚 FREE Local Delivery | 1-3 Working Days' must be the very first line — nothing before it
+- CRITICAL: '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂' must be the very last line — nothing after it
+- No brand names, no platform names (Shopee, Lazada, Amazon)
+- No vague words: "high quality", "amazing", "best", "incredible"
+- Each bullet: feature on the left of —, buyer benefit on the right
+- Cover use cases (home, office, outdoor etc.) as bullets where relevant
+- Include measurements, weight or capacity as a bullet if the info is available
+- Keep total length moderate — this is a fast-moving dropshipping store`;
+
+
+function normalizeDesc(text) {
+  if (!text) return text;
+  const DELIVERY = '🚚 FREE Local Delivery | 1-3 Working Days';
+  const PAYMENT  = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
+  let lines = text.split('\n');
+
+  // Delivery line must be first
+  if (!lines[0].trim().startsWith('🚚')) {
+    const idx = lines.findIndex(l => l.includes('🚚') || l.includes('FREE Local Delivery'));
+    if (idx > 0) {
+      const [found] = lines.splice(idx, 1);
+      while (lines.length && !lines[0].trim()) lines.shift();
+      lines = [found.trim(), '', ...lines];
+    } else if (idx === -1) {
+      lines = [DELIVERY, '', ...lines];
+    }
+  }
+
+  // Payment line must be last
+  const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
+  const hasPaymentAtEnd = lastNonEmptyIdx !== undefined && lines[lastNonEmptyIdx].trim() === PAYMENT;
+  if (!hasPaymentAtEnd) {
+    const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
+    if (idx !== -1) lines.splice(idx, 1);
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    lines.push('', PAYMENT);
+  }
+
+  return lines.join('\n');
+}
+
+function updateCharCount(val, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const len = val.length;
+  el.textContent = len + ' / 225';
+  el.className = 'char-counter' + (len > 225 ? ' danger' : len >= 200 ? ' warn' : '');
+}
+
+
+function saveDraft() {
+  if (newTitle || newDesc || newShopeeInput) {
+    localStorage.setItem('carobiz_new_draft', JSON.stringify({
+      title: newTitle, desc: newDesc, shopeeInput: newShopeeInput,
+      shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl
+    }));
+  } else {
+    localStorage.removeItem('carobiz_new_draft');
+  }
+}
+
+
+// Routes through /api/claude so the Anthropic key never touches the browser.
+// Falls back to a direct browser call if the server key isn't configured
+// (backwards-compatible for local dev with a saved key).
+async function callClaude(_unusedKey, system, userContent, maxTokens, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    let resp, data;
+    try {
+      resp = await fetch('/api/claude', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ system, userContent, maxTokens, temperature: 0.3 })
+      });
+      data = await resp.json();
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
+    if (data.error) {
+      // Server says key not configured — fall back to direct browser call
+      if (resp.status === 500 && data.error.includes('not configured')) {
+        const apiKey = savedApiKey;
+        if (!apiKey) throw new Error('NO_KEY');
+        const directResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'anthropic-dangerous-direct-browser-access': 'true',
+            'content-type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: maxTokens,
+            temperature: 0.3,
+            system,
+            messages: [{ role: 'user', content: userContent }]
+          })
+        });
+        const directData = await directResp.json();
+        if (directData.error) throw new Error(directData.error.message);
+        return directData.content?.[0]?.text || '';
+      }
+      const isOverload = resp.status === 529;
+      if (isOverload && attempt < retries) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw new Error(data.error);
+    }
+    return data.text || '';
+  }
+}
+
+async function runAIGenerate(productText, { titleOnly = false, descOnly = false } = {}) {
+  // Key param kept for fallback path inside callClaude — server route doesn't need it
+  const apiKey = savedApiKey;
+  const productContent = `Product info:\n\n${productText}`;
+  const titlePromise = descOnly  ? null : callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
+  const descPromise  = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536);
+  let rawTitle = '';
+  if (!descOnly) {
+    let titleText = await titlePromise;
+    rawTitle = titleText.trim().split('\n')[0].trim();
+    if (rawTitle.length < 200) {
+      const retry = await callClaude(apiKey, TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. You MUST reach at least 200 characters. Add more keyword segments.', 512);
+      rawTitle = retry.trim().split('\n')[0].trim();
+    }
+    if (rawTitle.length > 225) {
+      const parts = rawTitle.split(' | ');
+      while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
+      rawTitle = parts.join(' | ');
+    }
+  }
+  if (titleOnly) return { title: rawTitle, desc: '' };
+  const descText = await descPromise;
+  const descMatch = descText.match(/\{[\s\S]*\}/);
+  let desc = '';
+  if (descMatch) {
+    try {
+      desc = normalizeDesc(JSON.parse(descMatch[0]).description || '');
+    } catch {
+      // Claude returned malformed JSON — strip wrapper and use raw text
+      const raw = descText.replace(/^\s*\{[^"]*"description"\s*:\s*"/, '').replace(/"\s*\}\s*$/, '');
+      desc = normalizeDesc(raw);
+      if (!desc) throw new Error('AI returned malformed JSON — try again');
+    }
+  }
+  return { title: rawTitle, desc };
+}
+
+// FIX tab AI
+async function generateAI(mode = 'both') {
+  const taEl = document.getElementById('shopee-input-ta');
+  if (taEl) shopeeInput = taEl.value;
+  if (!shopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
+  aiLoading = true;
+  renderFixView();
+  let aiError = null;
+  try {
+    const { title, desc } = await runAIGenerate(shopeeInput, {
+      titleOnly: mode === 'title',
+      descOnly:  mode === 'desc',
+    });
+    if (mode !== 'desc'  && title) aiTitle = title;
+    if (mode !== 'title' && desc)  aiDesc  = desc;
+    if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
+  } catch (e) {
+    if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
+    aiError = e.message || 'Unknown error';
+  }
+  if (aiTitle || aiDesc) { shopeeCollapsed = true; fixFetchCollapsed = true; }
+  aiLoading = false;
+  renderFixView();
+  if (aiError) {
+    const errEl = document.createElement('div');
+    errEl.style.cssText = 'background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13px;word-break:break-all';
+    errEl.textContent = 'Error: ' + aiError;
+    const aiSection = document.querySelector('.ai-section');
+    if (aiSection) aiSection.prepend(errEl);
+  }
+}
+
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (val) {
+    savedApiKey = val;
+    localStorage.setItem('alfred_claude_key', val);
+    apiKeyVisible = false;
+    renderFixView();
+    toast('Key saved');
+  }
+}
+
+// NEW tab — fetch from Shopee URL
+async function fetchShopeeData() {
+  const urlEl = document.getElementById('new-shopee-fetch-url');
+  const url   = (urlEl?.value || newShopeeUrl).trim();
+  if (!url) { toast('Paste a Shopee URL first'); return; }
+  newShopeeUrl      = url;
+  newShopeeFetching = true;
+  renderNewView();
+  try {
+    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    newShopeeInput     = [data.title, data.description].filter(Boolean).join('\n\n');
+    newShopeeImages    = data.images || [];
+    newShopeeCollapsed = true;   // hide raw text; images stay visible
+    toast('Fetched ✓');
+  } catch(e) {
+    toast('Failed — ' + (e.message || 'unknown error'));
+  }
+  newShopeeFetching = false;
+  renderNewView();
+  if (newShopeeInput) generateAINew('both');
+}
+
+// Extension bridge — send a postMessage and wait for the reply
+function fetchViaExtension(url) {
+  return new Promise((resolve, reject) => {
+    const reqId = Math.random().toString(36).slice(2);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', handler);
+      reject(new Error('Extension timeout'));
+    }, 35000);
+    function handler(e) {
+      if (e.data?.type === 'SM_RESULT' && e.data?.reqId === reqId) {
+        clearTimeout(timeout);
+        window.removeEventListener('message', handler);
+        if (e.data.ok) resolve(e.data.product);
+        else reject(new Error(e.data.error || 'Extension error'));
+      }
+    }
+    window.addEventListener('message', handler);
+    window.postMessage({ type: 'SM_SCRAPE', url, reqId }, '*');
+  });
+}
+
+// Check if Wormhole extension is installed
+function checkExtension() {
+  return new Promise(resolve => {
+    const t = setTimeout(() => { window.removeEventListener('message', h); resolve(false); }, 500);
+    function h(e) { if (e.data?.type === 'SM_PONG') { clearTimeout(t); window.removeEventListener('message', h); resolve(true); } }
+    window.addEventListener('message', h);
+    window.postMessage({ type: 'SM_PING' }, '*');
+  });
+}
+
+// FIX tab — fetch from Shopee URL
+// Tries extension first (full data: price, sold, rating, images),
+// falls back to /api/shopee (title + description only via og: tags).
+async function fetchShopeeDataFix() {
+  const urlEl = document.getElementById('fix-shopee-fetch-url');
+  const url   = urlEl?.value.trim();
+  if (!url) { toast('Paste a Shopee URL first'); return; }
+  fixShopeeFetching = true;
+  renderFixView();
+  try {
+    const hasExt = await checkExtension();
+    if (hasExt) {
+      // Extension path — full structured data
+      const p = await fetchViaExtension(url);
+      shopeeInput     = [p.name, p.description].filter(Boolean).join('\n\n');
+      fixShopeeImages = (p.images || []).map(h => `https://down-sg.img.susercontent.com/file/${h}`);
+      shopeeCollapsed = true;
+      // Auto-fill source cost if price came back
+      if (p.price_min_sgd) {
+        const costEl = document.getElementById('fix-cost-input');
+        if (costEl && !costEl.value) costEl.value = p.price_min_sgd;
+      }
+      toast('Fetched via extension ✓');
+    } else {
+      // Fallback — og: tag scrape (title + description, no live price)
+      const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Fetch failed');
+      shopeeInput     = [data.title, data.description].filter(Boolean).join('\n\n');
+      fixShopeeImages = data.images || [];
+      shopeeCollapsed = true;
+      toast('Fetched ✓');
+    }
+  } catch(e) {
+    toast('Failed — ' + (e.message || 'unknown error'));
+  }
+  fixShopeeFetching = false;
+  renderFixView();
+  if (shopeeInput) generateAI('both');
+}
+
+// NEW tab AI
+async function generateAINew(mode = 'both') {
+  const taEl = document.getElementById('new-shopee-ta');
+  if (taEl) newShopeeInput = taEl.value;
+  if (!newShopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
+  newLoading = true;
+  renderNewView();
+  let aiError = null;
+  try {
+    const { title, desc } = await runAIGenerate(newShopeeInput, {
+      titleOnly: mode === 'title',
+      descOnly:  mode === 'desc',
+    });
+    if (mode !== 'desc'  && title) newTitle = title;
+    if (mode !== 'title' && desc)  newDesc  = desc;
+    if (!newTitle && !newDesc) aiError = 'No content returned — try again';
+  } catch (e) {
+    if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
+    aiError = e.message || 'Unknown error';
+  }
+  if (newTitle || newDesc) { newShopeeCollapsed = true; newFetchCollapsed = true; }
+  newLoading = false;
+  saveDraft();
+  renderNewView();
+  if (aiError) {
+    const errEl = document.createElement('div');
+    errEl.style.cssText = 'background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13px;word-break:break-all';
+    errEl.textContent = 'Error: ' + aiError;
+    document.getElementById('new-wrap')?.prepend(errEl);
+  }
+}
+
+function saveApiKeyNew() {
+  const val = document.getElementById('new-api-key-input').value.trim();
+  if (val) {
+    savedApiKey = val;
+    localStorage.setItem('alfred_claude_key', val);
+    newApiKeyVisible = false;
+    renderNewView();
+    toast('Key saved');
+  }
+}
+
+function saveNewListing() {
+  const titleEl  = document.getElementById('new-title-ta');
+  const costEl   = document.getElementById('new-cost-input');
+  const shopeeEl = document.getElementById('new-shopee-fetch-url');
+  const caroEl   = document.getElementById('new-caro-url');
+  const descEl   = document.getElementById('new-desc-ta');
+  if (titleEl)  newTitle     = titleEl.value.trim();
+  if (descEl)   newDesc      = descEl.value.trim();
+  if (costEl)   newCost      = costEl.value;
+  if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
+  if (caroEl)   newCaroUrl   = caroEl.value.trim();
+  if (!newTitle) { toast('Add a title first'); return; }
+  const cost = parseFloat(newCost) || 0;
+  doneData.push({
+    index: null,
+    title: newTitle,
+    description: newDesc,
+    shopeeUrl: newShopeeUrl,
+    carousellUrl: newCaroUrl,
+    sourceCost: cost,
+    sellPrice: calcSell(cost),
+    doneAt: new Date().toISOString()
+  });
+  // Reset new tab
+  newTitle = ''; newDesc = ''; newShopeeInput = ''; newCost = '';
+  newShopeeUrl = ''; newCaroUrl = ''; newShopeeCollapsed = false;
+  newShopeeImages = []; newShopeeFetching = false;
+  localStorage.removeItem('carobiz_new_draft');
+  saveLocal();
+  pushToSupabase();
+  renderSessionBar();
+  switchTab('done');
+  toast('Saved to Done ✓');
+}
+
+// Sales
+function logSale() {
+  const name = document.getElementById('sale-listing').value.trim();
+  const price = parseFloat(document.getElementById('sale-price').value);
+  if (!name || isNaN(price) || price <= 0) { toast('Fill in listing and sell price'); return; }
+  const category   = document.getElementById('sale-category').value;
+  const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
+  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: new Date().toISOString() });
+  document.getElementById('sale-listing').value = '';
+  document.getElementById('sale-price').value = '';
+  document.getElementById('sale-cost').value = '';
+  document.getElementById('sale-category').value = '';
+  document.getElementById('sale-listing-info').style.display = 'none';
+  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+  pushToSupabase();
+  renderSalesView();
+  renderSessionBar();
+  toast('Logged ✓');
+}
+
+let _searchMatches = [];
+
+function searchListings(query) {
+  const dropdown = document.getElementById('search-dropdown');
+  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
+  const q = query.toLowerCase();
+  _searchMatches = [];
+  // Search done listings first — uses AI-rewritten titles
+  for (const d of doneData) {
+    if (_searchMatches.length >= 8) break;
+    if (!d.title.toLowerCase().includes(q)) continue;
+    const ov = urlOverrides[d.index] || {};
+    _searchMatches.push({
+      name: d.title,
+      price: d.sellPrice,
+      shopee: ov.shopeeUrl ?? d.shopeeUrl ?? LISTINGS[d.index]?.[1] ?? '',
+      caro:   ov.carousellUrl ?? d.carousellUrl ?? LISTINGS[d.index]?.[2] ?? '',
+      listingIdx: d.index
+    });
+  }
+  // Fall back to unprocessed LISTINGS by original title
+  for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
+    if (doneSet.has(i) || deletedSet.has(i)) continue;
+    if (!LISTINGS[i][0].toLowerCase().includes(q)) continue;
+    _searchMatches.push({ name: LISTINGS[i][0], price: LISTINGS[i][4], shopee: LISTINGS[i][1], caro: LISTINGS[i][2], listingIdx: i });
+  }
+  if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = _searchMatches.map((m, mi) => {
+    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
+    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
+    const isDone = m.listingIdx === null || doneSet.has(m.listingIdx) || deletedSet.has(m.listingIdx);
+    const fixBtn = !isDone ? `<span class="search-result-link" style="cursor:pointer" onmousedown="event.stopPropagation();jumpToFix(${m.listingIdx})">Go to Fix →</span>` : '';
+    return `<div class="search-result" onmousedown="selectMatch(${mi})">
+      <div class="search-result-name">${esc(m.name)}</div>
+      <div class="search-result-meta">
+        <span class="search-result-price">Sell $${m.price}</span>
+        ${shopeeLink}${caroLink}${fixBtn}
+      </div>
+    </div>`;
+  }).join('');
+  dropdown.style.display = 'block';
+}
+
+function selectMatch(mi) {
+  const m = _searchMatches[mi];
+  if (!m) return;
+  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro);
+}
+
+function jumpToFix(idx) {
+  currentIndex = idx;
+  document.getElementById('search-dropdown').style.display = 'none';
+  document.getElementById('sale-listing').value = '';
+  switchTab('fix');
+}
+
+function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride) {
+  const L = idx !== null ? LISTINGS[idx] : null;
+  const name   = nameOverride  ?? L?.[0] ?? '';
+  const price  = priceOverride ?? L?.[4] ?? '';
+  const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.[1] || '');
+  const caro   = caroOverride  !== undefined ? caroOverride  : (L?.[2] || '');
+  if (!name) return;
+  document.getElementById('sale-listing').value = name;
+  document.getElementById('search-dropdown').style.display = 'none';
+  document.getElementById('sale-price').value = price;
+  const costEl = document.getElementById('sale-cost');
+  if (costEl) {
+    const doneCost = doneData.find(d => d.index === idx)?.sourceCost;
+    const rawCost  = doneCost ?? L?.[3] ?? '';
+    costEl.value   = rawCost || '';
+  }
+  const infoEl = document.getElementById('sale-listing-info');
+  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
+  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell ↗</a>` : '';
+  infoEl.innerHTML = `<span class="sale-info-price">$${price}</span>${shopeeLink}${caroLink}`;
+  infoEl.style.display = 'flex';
+  document.getElementById('sale-category').focus();
+}
+
+function hideDropdown() {
+  setTimeout(() => {
+    const el = document.getElementById('search-dropdown');
+    if (el) el.style.display = 'none';
+  }, 150);
+}
+
+function todayRevenue() {
+  const today = getToday();
+  return salesLog.filter(s => s.date === today).reduce((sum, s) => sum + s.price, 0);
+}
+
+// Preserve focused element across innerHTML re-renders
+function withFocusPreserved(renderFn) {
+  const focused = document.activeElement;
+  const id = focused?.id;
+  const sel = (focused?.tagName === 'TEXTAREA' || focused?.tagName === 'INPUT') ? focused.selectionStart : null;
+  renderFn();
+  if (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.focus();
+      if (sel != null) { try { el.setSelectionRange(sel, sel); } catch(e) {} }
+    }
+  }
+}
+
+// Render
+function renderAll() {
+  renderSessionBar();
+  if (activeTab === 'fix') renderFixView();
+  else if (activeTab === 'new') renderNewView();
+  else if (activeTab === 'sales') renderSalesView();
+  else renderDoneView();
+}
+
+function renderSessionBar() {
+  document.getElementById('cnt-done').textContent = doneTodayCount;
+  document.getElementById('cnt-deleted').textContent = deletedTodayCount;
+  document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
+}
+
+function renderFixView() { withFocusPreserved(_renderFixView); }
+function _renderFixView() {
+  const total = LISTINGS.length;
+  const processed = doneSet.size + deletedSet.size;
+  const remaining = total - processed;
+  document.getElementById('progress-line').textContent =
+    doneSet.size + ' done · ' + deletedSet.size + ' deleted · ' + remaining + ' remaining';
+
+  const wrap = document.getElementById('listing-wrap');
+  const actionRow = document.getElementById('action-row');
+
+  if (currentIndex >= total || remaining === 0) {
+    wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
+    actionRow.style.display = 'none';
+    // Signal to dashboard that queue is done today
+    if (doneTodayCount > 0) localStorage.setItem('workers_queue_done:' + getToday(), '1');
+    return;
+  }
+
+  const L = LISTINGS[currentIndex];
+  const title = aiTitle || L[0];
+  const ov = urlOverrides[currentIndex] || {};
+  const shopeeUrl = ov.shopeeUrl !== undefined ? ov.shopeeUrl : L[1];
+  const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
+  const cost = editedCost !== null ? editedCost : L[3];
+  const sell = L[4];
+  wrap.innerHTML = `<div class="listing-card">
+    <div class="field-header">
+      <span class="field-label">Title</span>
+      <div style="display:flex;gap:6px">
+        ${aiTitle ? `<button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('title')">↺</button>` : ''}
+        <button class="copy-btn" id="copy-title-btn" onclick="copyField('title-ta','copy-title-btn')">Copy</button>
+      </div>
+    </div>
+    <textarea class="title-input" rows="1" id="title-ta"
+      oninput="aiTitle=this.value;autoResize(this);updateCharCount(this.value,'fix-char-count')">${esc(title)}</textarea>
+    <div class="char-counter ${title.length>225?'danger':title.length>=200?'warn':''}" id="fix-char-count">${title.length} / 225</div>
+    ${aiDesc ? `
+      <div class="field-header">
+        <span class="field-label">Description</span>
+        <div style="display:flex;gap:6px">
+          <button class="copy-btn" style="font-size:11px" ${aiLoading?'disabled':''} onclick="generateAI('desc')">↺</button>
+          <button class="copy-btn" id="copy-desc-btn" onclick="copyField('ai-desc-ta','copy-desc-btn')">Copy</button>
+        </div>
+      </div>
+      <textarea class="ai-field" id="ai-desc-ta" oninput="aiDesc=this.value;autoResize(this)">${esc(aiDesc)}</textarea>
+    ` : ''}
+    <div class="listing-links">
+      ${linkEditing ? `
+        <input class="link-edit-input" id="link-shopee-input" type="url" placeholder="Shopee URL" value="${esc(shopeeUrl)}">
+        <input class="link-edit-input" id="link-caro-input" type="url" placeholder="Carousell URL" value="${esc(carousellUrl)}">
+        <button class="copy-btn" onclick="saveLinkEdits()">Save</button>
+        <button class="copy-btn" onclick="linkEditing=false;renderFixView()">✕</button>
+      ` : `
+        ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
+        ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
+        <button class="copy-btn" style="opacity:0.4;font-size:10px" onclick="linkEditing=true;renderFixView()">Edit</button>
+      `}
+    </div>
+    <div class="price-calc">
+      <div class="pcol">
+        <div class="pcol-label">Cost</div>
+        <div class="pcol-input-wrap">
+          <span class="pcol-currency">$</span>
+          <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(cost))}" oninput="onCostChange(this.value)" id="cost-input">
+        </div>
+      </div>
+      <div class="parrow">→</div>
+      <div class="pcol">
+        <div class="pcol-label">Sell</div>
+        <div class="sell-display" id="sell-display">$${calcSell(cost).toFixed(2)}</div>
+      </div>
+    </div>
+    <div class="ai-section">
+      <div class="field-header">
+        <span class="field-label">✨ AI</span>
+        ${savedApiKey ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="apiKeyVisible=!apiKeyVisible;renderFixView()">🔑 Key</button>` : ''}
+      </div>
+      ${(!savedApiKey || apiKeyVisible) ? `
+        <div class="ai-key-inline">
+          <input class="ai-key-input" id="api-key-input" type="password" placeholder="sk-ant-api03-…">
+          <button class="copy-btn" onclick="saveApiKey()">Save</button>
+          ${savedApiKey ? `<button class="copy-btn" onclick="apiKeyVisible=false;renderFixView()">✕</button>` : ''}
+        </div>` : ''}
+      ${fixFetchCollapsed
+        ? `<div class="shopee-collapsed" onclick="fixFetchCollapsed=false;renderFixView()">▼ Change URL</div>`
+        : `<div class="shopee-fetch-row">
+            <input class="link-edit-input" id="fix-shopee-fetch-url" type="url"
+              placeholder="shopee.sg/…" value="${esc(shopeeUrl)}"
+              oninput="" style="flex:1;font-size:13px;padding:9px 12px">
+            <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
+              ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+            </button>
+          </div>`
+      }
+      ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
+        `<div class="shopee-img-thumb" onclick="window.open('${esc(src)}','_blank')">
+          <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+          <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
+        </div>`).join('')}</div>` : ''}
+      ${shopeeInput
+        ? shopeeCollapsed
+          ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">▼ Shopee source</div>`
+          : `<textarea class="ai-field" id="shopee-input-ta"
+              oninput="shopeeInput=this.value;autoResize(this)"
+              onchange="shopeeInput=this.value;autoResize(this)"
+              placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
+        : ''
+      }
+      ${aiLoading ? '<div class="ai-loading">Generating…</div>' : ''}
+      <div class="ai-row">
+        <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">
+          ${(aiTitle||aiDesc) ? '↺ Regenerate' : '✨ Generate'}
+        </button>
+      </div>
+    </div>
+  </div>`;
+
+  actionRow.style.display = 'flex';
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('title-ta');
+    if (ta) autoResize(ta);
+    const da = document.getElementById('ai-desc-ta');
+    if (da) autoResize(da);
+    const sa = document.getElementById('shopee-input-ta');
+    if (sa) autoResize(sa);
+  });
+  addSwipeGestures();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function addSwipeGestures() {
+  const card = document.querySelector('#listing-wrap .listing-card');
+  if (!card) return;
+  let startX = 0, startY = 0, swiping = false;
+  card.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = true;
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (!swiping) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) swiping = false; // cancel if mostly vertical
+  }, { passive: true });
+  card.addEventListener('touchend', e => {
+    if (!swiping) return;
+    swiping = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+    if (dx > 0) markDone(); else markDeleted();
+  }, { passive: true });
+}
+
+function renderNewView() { withFocusPreserved(_renderNewView); }
+function _renderNewView() {
+  const wrap = document.getElementById('new-wrap');
+  const apiKey = savedApiKey;
+  const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
+  const sell = calcSell(parseFloat(newCost) || 0);
+
+  let html = `<div class="listing-card">`;
+
+  // API key section
+  if (!apiKey || newApiKeyVisible) {
+    html += `<div class="field-header" style="margin-bottom:8px">
+      <span class="field-label">Claude API Key</span>
+      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">✕</button>` : ''}
+    </div>
+    <div class="ai-key-inline">
+      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-…">
+      <button class="copy-btn" onclick="saveApiKeyNew()">Save</button>
+    </div>`;
+  }
+
+  // Shopee section — fetch row collapsible after generation; images always shown; textarea toggleable
+  html += newFetchCollapsed
+    ? `<div class="shopee-collapsed" onclick="newFetchCollapsed=false;renderNewView()">▼ Change URL</div>`
+    : `<div class="shopee-fetch-row">
+        <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
+          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
+          oninput="newShopeeUrl=this.value"
+          style="flex:1;font-size:13px;padding:9px 12px">
+        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
+          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
+        </button>
+      </div>`;
+  if (newShopeeImages.length > 0) {
+    html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
+      `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
+        <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+      </a>`
+    ).join('')}</div>`;
+  }
+  if (newShopeeInput) {
+    html += newShopeeCollapsed
+      ? `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">▼ Shopee source</div>`
+      : `<textarea class="ai-field" id="new-shopee-ta"
+          oninput="newShopeeInput=this.value;autoResize(this)"
+          placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
+  }
+
+  if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
+
+  // Title (always visible)
+  html += `<div class="field-header" style="margin-top:12px">
+    <span class="field-label">Title</span>
+    <div style="display:flex;gap:6px">
+      ${newTitle ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺</button>` : ''}
+      <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
+    </div>
+  </div>
+  <textarea class="title-input" rows="1" id="new-title-ta"
+    oninput="newTitle=this.value;autoResize(this);updateCharCount(this.value,'new-char-count')"
+    placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
+  <div class="char-counter ${newTitle.length>225?'danger':newTitle.length>=200?'warn':''}" id="new-char-count">${newTitle.length} / 225</div>
+  <div class="field-header">
+    <span class="field-label">Description</span>
+    <div style="display:flex;gap:6px">
+      ${newDesc ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺</button>` : ''}
+      <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
+    </div>
+  </div>
+  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
+
+  // Generate button row
+  html += `<div class="ai-row">
+    <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">
+      ${(newTitle||newDesc) ? '↺ Regenerate' : '✨ Generate'}
+    </button>
+    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
+  </div>`;
+
+  // Price calculator
+  html += `<div class="price-calc">
+    <div class="pcol">
+      <div class="pcol-label">Cost</div>
+      <div class="pcol-input-wrap">
+        <span class="pcol-currency">$</span>
+        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="new-cost-input">
+      </div>
+    </div>
+    <div class="parrow">→</div>
+    <div class="pcol">
+      <div class="pcol-label">Sell</div>
+      <div class="sell-display" id="new-sell-display">$${sell.toFixed(2)}</div>
+    </div>
+  </div>`;
+
+  // URL inputs
+  html += `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
+    <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
+    <input class="link-edit-input" id="new-caro-url" type="url" placeholder="Carousell URL" value="${esc(newCaroUrl)}" oninput="newCaroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
+  </div>`;
+
+  html += `</div>`; // close listing-card
+
+  // Save + Clear row
+  html += `<div class="action-row" style="margin-top:16px">
+    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;newFetchCollapsed=false;renderNewView()">Clear</button>
+    <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
+  </div>`;
+
+  wrap.innerHTML = html;
+
+  requestAnimationFrame(() => {
+    const ta = document.getElementById('new-title-ta');
+    if (ta) autoResize(ta);
+    const da = document.getElementById('new-desc-ta');
+    if (da) autoResize(da);
+    const sa = document.getElementById('new-shopee-ta');
+    if (sa) autoResize(sa);
+  });
+}
+
+function deleteSale(idx) {
+  const removed = salesLog.splice(idx, 1)[0];
+  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+  pushToSupabase();
+  renderSalesView();
+  renderSessionBar();
+  toastWithUndo('Sale removed', () => {
+    salesLog.splice(idx, 0, removed);
+    localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+    pushToSupabase();
+    renderSalesView();
+    renderSessionBar();
+  });
+}
+
+function renderSalesView() {
+  document.getElementById('revenue-display').textContent = '$' + todayRevenue().toFixed(2);
+  const list = document.getElementById('sales-list');
+  if (salesLog.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);font-size:13px;padding:24px 0">No sales yet</p>';
+    renderBreakdown();
+    return;
+  }
+  const today = getToday();
+  let lastDate = null;
+  list.innerHTML = salesLog.map((s, idx) => {
+    let header = '';
+    if (s.date !== lastDate) {
+      lastDate = s.date;
+      header = `<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 4px 4px">${s.date === today ? 'Today' : esc(s.date)}</div>`;
+    }
+    const profit = s.sourceCost ? (s.price - s.sourceCost) : null;
+    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' · ');
+    return header + `<div class="sale-entry">
+      <div class="sale-info">
+        <div class="sale-name">${esc(s.name)}</div>
+        <div class="sale-meta">${meta || esc(s.date)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
+        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+  renderBreakdown();
+}
+
+function renderBreakdown() {
+  const el = document.getElementById('sales-breakdown');
+  if (!el) return;
+  const withCat = salesLog.filter(s => s.category);
+  if (withCat.length === 0) { el.innerHTML = ''; return; }
+  const groups = {};
+  for (const s of withCat) {
+    if (!groups[s.category]) groups[s.category] = { count: 0, profit: 0 };
+    groups[s.category].count++;
+    groups[s.category].profit += s.price - (s.sourceCost || 0);
+  }
+  const rows = Object.entries(groups)
+    .sort((a, b) => b[1].profit - a[1].profit)
+    .map(([cat, g]) => `<div class="breakdown-row">
+      <div class="breakdown-cat">${esc(cat)}</div>
+      <div class="breakdown-stats">
+        <span>${g.count} sale${g.count > 1 ? 's' : ''}</span>
+        <span class="breakdown-profit">+$${g.profit.toFixed(0)}</span>
+        <span>avg $${(g.profit / g.count).toFixed(0)}/sale</span>
+      </div>
+    </div>`).join('');
+  el.innerHTML = `<div class="breakdown-card"><div class="breakdown-title">What's Selling</div>${rows}</div>`;
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('view-fix').style.display   = tab === 'fix'   ? 'block' : 'none';
+  document.getElementById('view-new').style.display   = tab === 'new'   ? 'block' : 'none';
+  document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
+  document.getElementById('view-done').style.display  = tab === 'done'  ? 'block' : 'none';
+  document.getElementById('view-clean').style.display = tab === 'clean' ? 'block' : 'none';
+  document.getElementById('btn-fix').classList.toggle('active',   tab === 'fix');
+  document.getElementById('btn-new').classList.toggle('active',   tab === 'new');
+  document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
+  document.getElementById('btn-done').classList.toggle('active',  tab === 'done');
+  document.getElementById('btn-clean').classList.toggle('active', tab === 'clean');
+  if (tab === 'fix') renderFixView();
+  else if (tab === 'new') renderNewView();
+  else if (tab === 'sales') renderSalesView();
+  else if (tab === 'done') renderDoneView();
+  else if (tab === 'clean') renderCleanView();
+}
+
+// ── CLEAN tab ──────────────────────────────────────────────────────────────────
+let cleanListings = [];
+
+async function renderCleanView() {
+  const progress = document.getElementById('clean-progress');
+  const list     = document.getElementById('clean-list');
+  progress.textContent = 'Loading…';
+  list.innerHTML = '';
+
+  try {
+    const { data, error } = await sb
+      .from('listings')
+      .select('id,title,carousell_url,source_cost')
+      .eq('status', 'to_delete')
+      .order('id');
+    if (error) throw error;
+    cleanListings = data || [];
+  } catch (e) {
+    progress.textContent = 'Failed to load';
+    return;
+  }
+
+  progress.textContent = `${cleanListings.length} listings to delete on Carousell`;
+
+  if (cleanListings.length === 0) {
+    list.innerHTML = '<div class="queue-complete"><div class="big-check">✓</div><h2>All cleaned up</h2><p>Nothing left to delete.</p></div>';
+    return;
+  }
+
+  list.innerHTML = cleanListings.map((l, i) =>
+    `<div class="done-entry" id="clean-entry-${l.id}">
+      <div class="done-info">
+        <div class="done-title-text">${esc(l.title)}</div>
+        <div class="done-meta">Cost $${parseFloat(l.source_cost).toFixed(2)}</div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          ${l.carousell_url ? `<a class="link-btn" href="${esc(l.carousell_url)}" target="_blank" rel="noopener">Open on Carousell ↗</a>` : '<span style="color:var(--text-tertiary);font-size:12px">No Carousell link</span>'}
+        </div>
+      </div>
+      <button onclick="cleanDeleteEntry(${l.id})" style="flex-shrink:0;padding:8px 12px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:12px;font-weight:700;cursor:pointer">Done</button>
+    </div>`
+  ).join('');
+}
+
+async function cleanDeleteEntry(id) {
+  const el = document.getElementById(`clean-entry-${id}`);
+  if (el) el.style.opacity = '0.4';
+  const { error } = await sb.from('listings').delete().eq('id', id);
+  if (error) {
+    if (el) el.style.opacity = '1';
+    toast('Delete failed');
+    return;
+  }
+  if (el) el.remove();
+  cleanListings = cleanListings.filter(l => l.id !== id);
+  const progress = document.getElementById('clean-progress');
+  if (progress) progress.textContent = `${cleanListings.length} listings to delete on Carousell`;
+  if (cleanListings.length === 0) {
+    document.getElementById('clean-list').innerHTML = '<div class="queue-complete"><div class="big-check">✓</div><h2>All cleaned up</h2><p>Nothing left to delete.</p></div>';
+  }
+}
+
+function renderDoneView() { withFocusPreserved(_renderDoneView); }
+function _renderDoneView() {
+  const query = (document.getElementById('done-search')?.value || '').toLowerCase();
+  const list = document.getElementById('done-list');
+  const filtered = doneData.map((d, i) => ({ ...d, _i: i }))
+    .filter(d => !query || d.title.toLowerCase().includes(query));
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="done-empty">${doneData.length === 0 ? 'No done listings yet' : 'No matches'}</p>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(d => {
+    const ov = urlOverrides[d.index] || {};
+    const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (d.shopeeUrl || LISTINGS[d.index]?.[1] || '');
+    const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (d.carousellUrl || LISTINGS[d.index]?.[2] || '');
+    const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
+      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
+      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
+    </div>`;
+    if (editingDoneIdx === d._i) {
+      const linkSection = doneLinkEditIdx === d._i ? `
+        <div class="done-link-inputs">
+          <input class="link-edit-input" id="done-link-shopee-${d._i}" type="url" placeholder="Shopee URL" value="${esc(dShopee)}">
+          <input class="link-edit-input" id="done-link-caro-${d._i}" type="url" placeholder="Carousell URL" value="${esc(dCaro)}">
+          <button class="done-save-btn" onclick="saveDoneLinkEdits(${d._i},${d.index})">Save Links</button>
+        </div>` : linkBtns;
+      return `<div class="done-entry editing">
+        <input class="done-edit-title" type="text" value="${esc(d.title)}" id="edit-title-${d._i}" placeholder="Title">
+        <div class="done-edit-price">
+          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
+          <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
+          <span style="color:var(--text-tertiary)">→</span>
+          <span class="done-edit-sell" id="edit-sell-${d._i}">$${parseFloat(d.sellPrice).toFixed(2)}</span>
+        </div>
+        ${linkSection}
+        <div class="done-edit-actions">
+          <button class="done-cancel-btn" onclick="editingDoneIdx=null;doneLinkEditIdx=null;renderDoneView()">Cancel</button>
+          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
+          <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
+        </div>
+        <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i})">Delete listing</button>
+      </div>`;
+    }
+    return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
+      <div class="done-info">
+        <div class="done-title-text">${esc(d.title)}</div>
+        <div class="done-meta">Cost $${d.sourceCost} → Sell $${parseFloat(d.sellPrice).toFixed(2)}</div>
+        ${linkBtns}
+      </div>
+      <div class="done-edit-icon">✎</div>
+    </div>`;
+  }).join('');
+}
+
+
+function updateDoneEditSell(i, val) {
+  const el = document.getElementById(`edit-sell-${i}`);
+  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0).toFixed(2);
+}
+
+function saveDoneEdit(i) {
+  const title = document.getElementById(`edit-title-${i}`)?.value?.trim();
+  const cost = parseFloat(document.getElementById(`edit-cost-${i}`)?.value) || 0;
+  if (!title) { toast('Title cannot be empty'); return; }
+  doneData[i].title = title;
+  doneData[i].sourceCost = cost;
+  doneData[i].sellPrice = calcSell(cost);
+  editingDoneIdx = null;
+  saveLocal();
+  pushToSupabase();
+  renderDoneView();
+  toast('Saved');
+}
+
+function deleteDoneEntry(i) {
+  if (!confirm('Remove this listing from Done? This also removes it from your processed count.')) return;
+  const entry = doneData[i];
+  if (!entry) return;
+  if (entry.doneAt?.startsWith(getToday())) {
+    doneTodayCount = Math.max(0, doneTodayCount - 1);
+  }
+  doneData.splice(i, 1);
+  if (entry.index !== null) doneSet.delete(entry.index);
+  editingDoneIdx = null;
+  doneLinkEditIdx = null;
+  saveLocal();
+  pushToSupabase();
+  renderDoneView();
+  renderFixView();
+  renderSessionBar();
+  toast('Listing removed');
+}
+
+function copyField(fieldId, btnId) {
+  const el = document.getElementById(fieldId);
+  if (!el) return;
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      clearTimeout(copyTimers[btnId]);
+      copyTimers[btnId] = setTimeout(() => {
+        const b = document.getElementById(btnId);
+        if (b) { b.textContent = 'Copy'; b.classList.remove('copied'); }
+        delete copyTimers[btnId];
+      }, 1500);
+    }
+  });
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+let _undoFn = null;
+function toastWithUndo(msg, undoFn) {
+  _undoFn = undoFn;
+  const el = document.getElementById('toast');
+  el.innerHTML = esc(msg) + '  <button onclick="_undoFn&&_undoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); _undoFn = null; }, 4000);
+}
+
+// Keyboard shortcuts for FIX tab (desktop)
+document.addEventListener('keydown', e => {
+  if (activeTab !== 'fix') return;
+  if (e.target.matches('input, textarea, select')) return;
+  if (currentIndex >= LISTINGS.length) return;
+  if (e.key === 'd' || e.key === 'D') { e.preventDefault(); markDone(); }
+  if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') { e.preventDefault(); markDeleted(); }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && getToday() !== todayDate) {
+    todayDate = getToday();
+    doneTodayCount = 0;
+    deletedTodayCount = 0;
+    saveLocal();
+    renderAll();
+  }
+});
+
+init();
+</script>
+</body>
+</html>
