@@ -822,7 +822,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <button class="seg-btn active" id="btn-fix" onclick="switchTab('fix')">FIX</button>
     <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
     <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
-    <button class="seg-btn" id="btn-done" onclick="switchTab('done')">DONE</button>
+    <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
     <button class="seg-btn" id="btn-clean" onclick="switchTab('clean')">CLEAN</button>
   </div>
 
@@ -2172,7 +2172,7 @@ async function renderCleanView() {
         </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-        <button onclick="event.stopPropagation();cleanEditingId=${l.id};renderCleanView()" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.06);color:var(--text-secondary);font-size:12px;font-weight:700;cursor:pointer">Edit</button>
+        <button onclick="event.stopPropagation();cleanKeepEntry(${l.id})" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:12px;font-weight:700;cursor:pointer">Keep</button>
         <button onclick="event.stopPropagation();cleanDeleteEntry(${l.id})" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.12);color:var(--danger);font-size:12px;font-weight:700;cursor:pointer">Delete</button>
       </div>
     </div>`;
@@ -2185,20 +2185,16 @@ function updateCleanSell(id, val) {
 }
 
 async function cleanKeepEntry(id) {
-  const title    = document.getElementById(`clean-title-${id}`)?.value?.trim();
-  const cost     = parseFloat(document.getElementById(`clean-cost-${id}`)?.value) || 0;
-  const shopeeUrl  = document.getElementById(`clean-shopee-${id}`)?.value?.trim() || '';
-  const carousellUrl = document.getElementById(`clean-caro-${id}`)?.value?.trim() || '';
-  if (!title) { toast('Title cannot be empty'); return; }
-  const sell = calcSell(cost);
-  const { error } = await sb.from('listings').update({
-    title, shopee_url: shopeeUrl, carousell_url: carousellUrl,
-    source_cost: cost, sell_price: sell, status: 'active'
-  }).eq('id', id);
-  if (error) { toast('Save failed'); return; }
+  const el = document.getElementById(`clean-entry-${id}`);
+  if (el) el.style.opacity = '0.4';
+  const { error } = await sb.from('listings').update({ status: 'active' }).eq('id', id);
+  if (error) {
+    if (el) el.style.opacity = '1';
+    toast('Failed'); return;
+  }
   cleanListings = cleanListings.filter(l => l.id !== id);
   cleanEditingId = null;
-  toast('Moved to active ✓');
+  toast('Moved to FIX queue ✓');
   renderCleanView();
 }
 
