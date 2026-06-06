@@ -993,19 +993,9 @@ async function loadListingsFromSupabase() {
 
 function loadLocal() {
   const today = getToday();
-  const raw = localStorage.getItem('carobiz_work');
-  if (raw) {
-    const s = JSON.parse(raw);
-    currentIndex = s.currentIndex || 0;
-    doneSet = new Set(s.doneIndexes || []);
-    deletedSet = new Set(s.deletedIndexes || []);
-    doneData = s.doneData || [];
-    if (s.todayDate === today) {
-      doneTodayCount = s.doneTodayCount || 0;
-      deletedTodayCount = s.deletedTodayCount || 0;
-    }
-    todayDate = today;
-  }
+  // Clear stale localStorage — Supabase is now source of truth for listings state
+  localStorage.removeItem('carobiz_work');
+  todayDate = today;
   const rawSales = localStorage.getItem('carobiz_sales');
   if (rawSales) salesLog = JSON.parse(rawSales);
   const rawOverrides = localStorage.getItem('carobiz_url_overrides');
@@ -1027,47 +1017,22 @@ function loadLocal() {
 
 async function syncFromSupabase() {
   try {
-    const today = getToday();
-    const [pRes, dRes, sRes] = await Promise.all([
-      sb.from('app_state').select('data').eq('key', 'carobiz_work_progress').single(),
+    const [dRes, sRes] = await Promise.all([
       sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
       sb.from('app_state').select('data').eq('key', 'carobiz_sales').single()
     ]);
 
-    if (pRes.data?.data) {
-      const p = pRes.data.data;
-      if (Array.isArray(p.doneIndexes)) for (const i of p.doneIndexes) doneSet.add(i);
-      if (Array.isArray(p.deletedIndexes)) for (const i of p.deletedIndexes) deletedSet.add(i);
-      if ((p.currentIndex || 0) > currentIndex) currentIndex = p.currentIndex;
-      if (p.todayDate === today) {
-        doneTodayCount = Math.max(doneTodayCount, p.doneTodayCount || 0);
-        deletedTodayCount = Math.max(deletedTodayCount, p.deletedTodayCount || 0);
-      }
-      todayDate = today;
-    }
-
     if (dRes.data?.data) {
-      const remote = dRes.data.data;
-      const localByIndex = new Map(doneData.filter(d => d.index !== null).map(d => [d.index, d]));
-      const localNullEntries = doneData.filter(d => d.index === null);
-      for (const r of remote) {
-        if (r.index !== null) localByIndex.set(r.index, r);
-      }
-      const remoteNullKeys = new Set(remote.filter(d => d.index === null).map(d => d.doneAt));
-      const mergedNulls = [
-        ...remote.filter(d => d.index === null),
-        ...localNullEntries.filter(d => !remoteNullKeys.has(d.doneAt))
-      ];
-      doneData = [...localByIndex.values(), ...mergedNulls]
-        .sort((a, b) => (a.doneAt > b.doneAt ? 1 : -1));
+      doneData = dRes.data.data;
+      // Rebuild doneSet from doneData indexes
+      doneSet = new Set(doneData.filter(d => d.index !== null).map(d => d.index));
+      doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
     }
 
     if (sRes.data?.data) {
       salesLog = sRes.data.data;
       localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
     }
-
-    saveLocal();
   } catch (e) {
     console.warn('Supabase sync error:', e);
   }
@@ -1075,12 +1040,6 @@ async function syncFromSupabase() {
 
 function saveLocal() {
   localStorage.setItem('carobiz_work', JSON.stringify({
-    currentIndex,
-    doneIndexes: [...doneSet],
-    deletedIndexes: [...deletedSet],
-    doneData,
-    doneTodayCount,
-    deletedTodayCount,
     todayDate
   }));
 }
@@ -1090,14 +1049,6 @@ async function pushToSupabase() {
   const today = getToday();
   setSyncStatus('syncing');
   await Promise.all([
-    sb.from('app_state').upsert({ key: 'carobiz_work_progress', data: {
-      currentIndex,
-      doneIndexes: [...doneSet],
-      deletedIndexes: [...deletedSet],
-      doneTodayCount,
-      deletedTodayCount,
-      todayDate: today
-    }, updated_at: now }),
     sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
     sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
   ]).then(() => setSyncStatus('synced')).catch(e => { console.warn('Supabase push error:', e); setSyncStatus('error'); });
