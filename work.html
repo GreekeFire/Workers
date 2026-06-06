@@ -2164,7 +2164,7 @@ async function renderCleanView() {
       </div>`;
     }
     return `<div class="done-entry" id="clean-entry-${l.id}">
-      <div class="done-info" onclick="cleanEditingId=${l.id};renderCleanView()" style="cursor:pointer;flex:1">
+      <div class="done-info" style="flex:1">
         <div class="done-title-text">${esc(l.title)}</div>
         <div class="done-meta">Cost $${cost.toFixed(2)} · Under $15 minimum</div>
         <div style="display:flex;gap:8px;margin-top:6px">
