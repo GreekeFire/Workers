@@ -1,7 +1,6 @@
-const CACHE = 'steadymart-v1';
+const CACHE = 'steadymart-v2';
 
 const PRECACHE = [
-  '/',
   '/manifest.json',
   '/icons/icon-192.png',
 ];
@@ -22,10 +21,18 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase')) {
+
+  // Always network-first for HTML, API calls, and Supabase
+  if (
+    url.hostname.includes('supabase') ||
+    url.pathname.startsWith('/api/') ||
+    e.request.headers.get('accept')?.includes('text/html')
+  ) {
     e.respondWith(fetch(e.request));
     return;
   }
+
+  // Cache-first for static assets (icons, manifest)
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
