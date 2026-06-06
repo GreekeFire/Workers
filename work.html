@@ -2163,13 +2163,11 @@ async function renderCleanView() {
         <button onclick="cleanDeleteEntry(${l.id})" style="width:100%;margin-top:8px;padding:14px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.12);color:var(--danger);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.03em">Delete from Carousell ✕</button>
       </div>`;
     }
-    return `<div class="done-entry" id="clean-entry-${l.id}">
+    return `<div class="done-entry" id="clean-entry-${l.id}" ${l.carousell_url ? `onclick="window.open('${esc(l.carousell_url)}','_blank')"` : ''} style="cursor:${l.carousell_url ? 'pointer' : 'default'}">
       <div class="done-info" style="flex:1">
         <div class="done-title-text">${esc(l.title)}</div>
         <div class="done-meta">Cost $${cost.toFixed(2)} · Under $15 minimum</div>
-        <div style="display:flex;gap:8px;margin-top:6px">
-          ${l.carousell_url ? `<a class="link-btn" href="${esc(l.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : '<span style="color:var(--text-tertiary);font-size:12px">No link</span>'}
-        </div>
+        ${!l.carousell_url ? '<div style="color:var(--text-tertiary);font-size:12px;margin-top:4px">No Carousell link</div>' : ''}
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
         <button onclick="event.stopPropagation();cleanKeepEntry(${l.id})" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:12px;font-weight:700;cursor:pointer">Keep</button>
