@@ -2214,6 +2214,8 @@ async function cleanDeleteEntry(id) {
 }
 
 let _doneSearchTimer = null;
+let _listingsEditingId = null;
+let _listingsCache = [];
 
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
@@ -2222,8 +2224,13 @@ function renderDoneView() {
     list.innerHTML = '<p class="done-empty">Type to search all listings</p>';
     return;
   }
-  list.innerHTML = '<p class="done-empty">Searching…</p>';
   clearTimeout(_doneSearchTimer);
+  if (_listingsCache.length && _listingsEditingId) {
+    // re-render from cache when toggling edit
+    _renderListingsResults(_listingsCache);
+    return;
+  }
+  list.innerHTML = '<p class="done-empty">Searching…</p>';
   _doneSearchTimer = setTimeout(() => _searchAllListings(query), 300);
 }
 
@@ -2237,32 +2244,97 @@ async function _searchAllListings(query) {
       .order('status')
       .limit(30);
     if (error) throw error;
-    if (!data.length) {
-      list.innerHTML = '<p class="done-empty">No matches</p>';
-      return;
-    }
-    const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
-    const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
-    list.innerHTML = data.map(d => {
-      const cost = parseFloat(d.source_cost) || 0;
-      const sell = parseFloat(d.sell_price) || 0;
-      return `<div class="done-entry">
-        <div class="done-info">
-          <div class="done-title-text">${esc(d.title)}</div>
-          <div class="done-meta">
-            Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
-            <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
-          </div>
-          <div style="display:flex;gap:6px;margin-top:6px">
-            ${d.shopee_url ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
-            ${d.carousell_url ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
+    if (!data.length) { list.innerHTML = '<p class="done-empty">No matches</p>'; return; }
+    _listingsCache = data;
+    _renderListingsResults(data);
   } catch (e) {
     list.innerHTML = `<p class="done-empty">Search failed</p>`;
   }
+}
+
+function _renderListingsResults(data) {
+  const list = document.getElementById('done-list');
+  const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
+  const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
+
+  list.innerHTML = data.map(d => {
+    const cost = parseFloat(d.source_cost) || 0;
+    const sell = parseFloat(d.sell_price) || 0;
+
+    if (_listingsEditingId === d.id) {
+      return `<div class="done-entry editing" id="lentry-${d.id}">
+        <input class="done-edit-title" type="text" id="let-${d.id}" value="${esc(d.title)}" placeholder="Title">
+        <div class="done-edit-price">
+          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
+          <input class="done-edit-cost" type="number" step="0.01" id="lec-${d.id}" value="${cost}" oninput="document.getElementById('les-${d.id}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)">
+          <span style="color:var(--text-tertiary)">→</span>
+          <span class="done-edit-sell" id="les-${d.id}">$${sell.toFixed(2)}</span>
+        </div>
+        <input class="link-edit-input" type="url" id="lesh-${d.id}" placeholder="Shopee URL" value="${esc(d.shopee_url||'')}" style="margin-top:8px">
+        <input class="link-edit-input" type="url" id="leca-${d.id}" placeholder="Carousell URL" value="${esc(d.carousell_url||'')}" style="margin-top:6px">
+        <div class="done-edit-actions" style="margin-top:10px">
+          <button class="done-cancel-btn" onclick="_listingsEditingId=null;renderDoneView()">Cancel</button>
+          <button class="done-save-btn" onclick="listingsSave(${d.id})">Save</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed ✓</button>
+          <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete ✕</button>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="done-entry" onclick="_listingsEditingId=${d.id};renderDoneView()" style="cursor:pointer">
+      <div class="done-info">
+        <div class="done-title-text">${esc(d.title)}</div>
+        <div class="done-meta">
+          Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
+          <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          ${d.shopee_url ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
+          ${d.carousell_url ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
+        </div>
+      </div>
+      <div class="done-edit-icon">✎</div>
+    </div>`;
+  }).join('');
+}
+
+async function listingsSave(id) {
+  const title = document.getElementById(`let-${id}`)?.value?.trim();
+  const cost  = parseFloat(document.getElementById(`lec-${id}`)?.value) || 0;
+  const shopeeUrl = document.getElementById(`lesh-${id}`)?.value?.trim() || '';
+  const carousellUrl = document.getElementById(`leca-${id}`)?.value?.trim() || '';
+  if (!title) { toast('Title cannot be empty'); return; }
+  const sell = calcSell(cost);
+  const { error } = await sb.from('listings').update({
+    title, shopee_url: shopeeUrl, carousell_url: carousellUrl, source_cost: cost, sell_price: sell
+  }).eq('id', id);
+  if (error) { toast('Save failed'); return; }
+  const item = _listingsCache.find(l => l.id === id);
+  if (item) { item.title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
+  _listingsEditingId = null;
+  toast('Saved ✓');
+  _renderListingsResults(_listingsCache);
+}
+
+async function listingsMarkDone(id) {
+  const { error } = await sb.from('listings').update({ status: 'done' }).eq('id', id);
+  if (error) { toast('Failed'); return; }
+  const item = _listingsCache.find(l => l.id === id);
+  if (item) item.status = 'done';
+  _listingsEditingId = null;
+  toast('Marked as listed ✓');
+  _renderListingsResults(_listingsCache);
+}
+
+async function listingsDelete(id) {
+  const { error } = await sb.from('listings').delete().eq('id', id);
+  if (error) { toast('Delete failed'); return; }
+  _listingsCache = _listingsCache.filter(l => l.id !== id);
+  _listingsEditingId = null;
+  toast('Deleted ✓');
+  _renderListingsResults(_listingsCache);
 }
 
 
