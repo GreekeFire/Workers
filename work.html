@@ -875,7 +875,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- DONE view -->
   <div id="view-done" style="display:none">
     <div class="done-search-wrap">
-      <input type="text" class="form-input" id="done-search" placeholder="Search done listings..." autocomplete="off" oninput="editingDoneIdx=null;renderDoneView()">
+      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()">
     </div>
     <div class="done-list" id="done-list"></div>
   </div>
@@ -2213,59 +2213,56 @@ async function cleanDeleteEntry(id) {
   renderCleanView();
 }
 
-function renderDoneView() { withFocusPreserved(_renderDoneView); }
-function _renderDoneView() {
-  const query = (document.getElementById('done-search')?.value || '').toLowerCase();
-  const list = document.getElementById('done-list');
-  const filtered = doneData.map((d, i) => ({ ...d, _i: i }))
-    .filter(d => !query || d.title.toLowerCase().includes(query));
+let _doneSearchTimer = null;
 
-  if (filtered.length === 0) {
-    list.innerHTML = `<p class="done-empty">${doneData.length === 0 ? 'No done listings yet' : 'No matches'}</p>`;
+function renderDoneView() {
+  const query = (document.getElementById('done-search')?.value || '').trim();
+  const list = document.getElementById('done-list');
+  if (!query) {
+    list.innerHTML = '<p class="done-empty">Type to search all listings</p>';
     return;
   }
+  list.innerHTML = '<p class="done-empty">Searching…</p>';
+  clearTimeout(_doneSearchTimer);
+  _doneSearchTimer = setTimeout(() => _searchAllListings(query), 300);
+}
 
-  list.innerHTML = filtered.map(d => {
-    const ov = urlOverrides[d.index] || {};
-    const dShopee = ov.shopeeUrl !== undefined ? ov.shopeeUrl : (d.shopeeUrl || LISTINGS[d.index]?.[1] || '');
-    const dCaro = ov.carousellUrl !== undefined ? ov.carousellUrl : (d.carousellUrl || LISTINGS[d.index]?.[2] || '');
-    const linkBtns = `<div style="display:flex;gap:6px;margin-top:6px">
-      ${dShopee ? `<a class="link-btn" href="${esc(dShopee)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
-      ${dCaro ? `<a class="link-btn" href="${esc(dCaro)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
-    </div>`;
-    if (editingDoneIdx === d._i) {
-      const linkSection = doneLinkEditIdx === d._i ? `
-        <div class="done-link-inputs">
-          <input class="link-edit-input" id="done-link-shopee-${d._i}" type="url" placeholder="Shopee URL" value="${esc(dShopee)}">
-          <input class="link-edit-input" id="done-link-caro-${d._i}" type="url" placeholder="Carousell URL" value="${esc(dCaro)}">
-          <button class="done-save-btn" onclick="saveDoneLinkEdits(${d._i},${d.index})">Save Links</button>
-        </div>` : linkBtns;
-      return `<div class="done-entry editing">
-        <input class="done-edit-title" type="text" value="${esc(d.title)}" id="edit-title-${d._i}" placeholder="Title">
-        <div class="done-edit-price">
-          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
-          <input class="done-edit-cost" type="number" step="0.01" value="${d.sourceCost}" id="edit-cost-${d._i}" oninput="updateDoneEditSell(${d._i},this.value)">
-          <span style="color:var(--text-tertiary)">→</span>
-          <span class="done-edit-sell" id="edit-sell-${d._i}">$${parseFloat(d.sellPrice).toFixed(2)}</span>
-        </div>
-        ${linkSection}
-        <div class="done-edit-actions">
-          <button class="done-cancel-btn" onclick="editingDoneIdx=null;doneLinkEditIdx=null;renderDoneView()">Cancel</button>
-          <button class="done-link-btn" onclick="doneLinkEditIdx=${doneLinkEditIdx===d._i ? 'null' : d._i};renderDoneView()">✎ Links</button>
-          <button class="done-save-btn" onclick="saveDoneEdit(${d._i})">Save</button>
-        </div>
-        <button class="done-cancel-btn" style="width:100%;margin-top:6px;color:#c0392b;border-color:rgba(192,57,43,0.3)" onclick="deleteDoneEntry(${d._i})">Delete listing</button>
-      </div>`;
+async function _searchAllListings(query) {
+  const list = document.getElementById('done-list');
+  try {
+    const { data, error } = await sb
+      .from('listings')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
+      .ilike('title', `%${query}%`)
+      .order('status')
+      .limit(30);
+    if (error) throw error;
+    if (!data.length) {
+      list.innerHTML = '<p class="done-empty">No matches</p>';
+      return;
     }
-    return `<div class="done-entry" onclick="editingDoneIdx=${d._i};renderDoneView()">
-      <div class="done-info">
-        <div class="done-title-text">${esc(d.title)}</div>
-        <div class="done-meta">Cost $${d.sourceCost} → Sell $${parseFloat(d.sellPrice).toFixed(2)}</div>
-        ${linkBtns}
-      </div>
-      <div class="done-edit-icon">✎</div>
-    </div>`;
-  }).join('');
+    const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
+    const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
+    list.innerHTML = data.map(d => {
+      const cost = parseFloat(d.source_cost) || 0;
+      const sell = parseFloat(d.sell_price) || 0;
+      return `<div class="done-entry">
+        <div class="done-info">
+          <div class="done-title-text">${esc(d.title)}</div>
+          <div class="done-meta">
+            Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
+            <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            ${d.shopee_url ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
+            ${d.carousell_url ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<p class="done-empty">Search failed</p>`;
+  }
 }
 
 
