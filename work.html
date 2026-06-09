@@ -823,7 +823,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
     <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
     <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
-    <button class="seg-btn" id="btn-clean" onclick="switchTab('clean')">CLEAN</button>
   </div>
 
   <!-- FIX view -->
@@ -880,11 +879,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <div class="done-list" id="done-list"></div>
   </div>
 
-  <!-- CLEAN view -->
-  <div id="view-clean" style="display:none">
-    <div class="progress-line" id="clean-progress">Loading…</div>
-    <div id="clean-list"></div>
-  </div>
 
 
 </div>
@@ -2115,118 +2109,14 @@ function switchTab(tab) {
   document.getElementById('view-new').style.display   = tab === 'new'   ? 'block' : 'none';
   document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
   document.getElementById('view-done').style.display  = tab === 'done'  ? 'block' : 'none';
-  document.getElementById('view-clean').style.display = tab === 'clean' ? 'block' : 'none';
   document.getElementById('btn-fix').classList.toggle('active',   tab === 'fix');
   document.getElementById('btn-new').classList.toggle('active',   tab === 'new');
   document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
   document.getElementById('btn-done').classList.toggle('active',  tab === 'done');
-  document.getElementById('btn-clean').classList.toggle('active', tab === 'clean');
   if (tab === 'fix') renderFixView();
   else if (tab === 'new') renderNewView();
   else if (tab === 'sales') renderSalesView();
   else if (tab === 'done') renderDoneView();
-  else if (tab === 'clean') renderCleanView();
-}
-
-// ── CLEAN tab ──────────────────────────────────────────────────────────────────
-let cleanListings = [];
-let cleanEditingId = null;
-
-async function renderCleanView() {
-  const progress = document.getElementById('clean-progress');
-  const list     = document.getElementById('clean-list');
-  progress.textContent = 'Loading…';
-  list.innerHTML = '';
-
-  try {
-    const { data, error } = await sb
-      .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price')
-      .eq('status', 'to_delete')
-      .order('id');
-    if (error) throw error;
-    cleanListings = data || [];
-  } catch (e) {
-    progress.textContent = 'Failed to load';
-    return;
-  }
-
-  progress.textContent = `${cleanListings.length} listings to clean up`;
-
-  if (cleanListings.length === 0) {
-    list.innerHTML = '<div class="queue-complete"><div class="big-check">✓</div><h2>All cleaned up</h2><p>Nothing left to delete.</p></div>';
-    return;
-  }
-
-  list.innerHTML = cleanListings.map(l => {
-    const cost = parseFloat(l.source_cost) || 0;
-    const sell = parseFloat(l.sell_price) || 0;
-    if (cleanEditingId === l.id) {
-      return `<div class="done-entry editing" id="clean-entry-${l.id}">
-        <input class="done-edit-title" type="text" id="clean-title-${l.id}" value="${esc(l.title)}" placeholder="Title">
-        <div class="done-edit-price">
-          <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
-          <input class="done-edit-cost" type="number" step="0.01" id="clean-cost-${l.id}" value="${cost}" oninput="updateCleanSell(${l.id},this.value)">
-          <span style="color:var(--text-tertiary)">→</span>
-          <span class="done-edit-sell" id="clean-sell-${l.id}">$${sell.toFixed(2)}</span>
-        </div>
-        <input class="link-edit-input" type="url" id="clean-shopee-${l.id}" placeholder="Shopee URL" value="${esc(l.shopee_url||'')}" style="margin-top:8px">
-        <input class="link-edit-input" type="url" id="clean-caro-${l.id}" placeholder="Carousell URL" value="${esc(l.carousell_url||'')}" style="margin-top:6px">
-        <div class="done-edit-actions" style="margin-top:10px">
-          <button class="done-cancel-btn" onclick="cleanEditingId=null;renderCleanView()">Cancel</button>
-          <button class="done-save-btn" onclick="cleanKeepEntry(${l.id})">Move to Active ✓</button>
-        </div>
-        <button onclick="cleanDeleteEntry(${l.id})" style="width:100%;margin-top:8px;padding:14px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.12);color:var(--danger);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.03em">Delete from Carousell ✕</button>
-      </div>`;
-    }
-    return `<div class="done-entry" id="clean-entry-${l.id}">
-      ${l.carousell_url
-        ? `<a href="${esc(l.carousell_url)}" target="_blank" rel="noopener" style="flex:1;text-decoration:none;color:inherit;min-width:0">`
-        : `<div style="flex:1;min-width:0">`}
-        <div class="done-title-text">${esc(l.title)}</div>
-        <div class="done-meta">Cost $${cost.toFixed(2)} · Under $15 minimum</div>
-        ${!l.carousell_url ? '<div style="color:var(--text-tertiary);font-size:12px;margin-top:4px">No Carousell link</div>' : ''}
-      ${l.carousell_url ? `</a>` : `</div>`}
-      <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-        <button onclick="cleanKeepEntry(${l.id})" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:12px;font-weight:700;cursor:pointer">Keep</button>
-        <button onclick="cleanDeleteEntry(${l.id})" style="padding:8px 12px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.12);color:var(--danger);font-size:12px;font-weight:700;cursor:pointer">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function updateCleanSell(id, val) {
-  const el = document.getElementById(`clean-sell-${id}`);
-  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0).toFixed(2);
-}
-
-async function cleanKeepEntry(id) {
-  const el = document.getElementById(`clean-entry-${id}`);
-  if (el) el.style.opacity = '0.4';
-  const { error } = await sb.from('listings').update({ status: 'active' }).eq('id', id);
-  if (error) {
-    if (el) el.style.opacity = '1';
-    toast('Failed'); return;
-  }
-  cleanListings = cleanListings.filter(l => l.id !== id);
-  cleanEditingId = null;
-  toast('Moved to FIX queue ✓');
-  renderCleanView();
-}
-
-async function cleanDeleteEntry(id) {
-  const el = document.getElementById(`clean-entry-${id}`);
-  if (el) el.style.opacity = '0.4';
-  const { error } = await sb.from('listings').delete().eq('id', id);
-  if (error) {
-    if (el) el.style.opacity = '1';
-    toast('Delete failed');
-    return;
-  }
-  cleanListings = cleanListings.filter(l => l.id !== id);
-  cleanEditingId = null;
-  toast('Deleted ✓');
-  renderCleanView();
 }
 
 let _doneSearchTimer = null;
