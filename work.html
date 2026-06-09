@@ -889,7 +889,8 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 
 <script>
 function calcSell(cost) {
-  const raw = Math.ceil(Math.max(cost * 1.5, cost + 24) / 5) * 5;
+  const c = parseFloat(cost) || 0;
+  const raw = Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5;
   return raw;
 }
 
