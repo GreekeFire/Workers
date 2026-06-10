@@ -27,7 +27,7 @@ function makeEl(id) {
     focus() {}, prepend() {}, appendChild() {}, insertBefore() {},
     addEventListener() {}, removeEventListener() {},
     querySelector() { return null; }, setSelectionRange() {},
-    click() {}, remove() {},
+    click() {}, remove() {}, scrollIntoView() {},
   };
 }
 const documentStub = {
@@ -37,6 +37,7 @@ const documentStub = {
   __created: [],
   getElementById(id) { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); },
   querySelector() { return null; },
+  querySelectorAll() { return []; },
   createElement(tag) { const el = makeEl('created-' + tag); this.__created.push(el); return el; },
   addEventListener() {},
 };
@@ -263,6 +264,17 @@ const testCode = `
            && sUpd.payload.source_cost === 12 && sUpd.payload.sell_price === 40,
     JSON.stringify(sUpd && sUpd.payload));
 
+  // Undo Done reverses everything: queue, history, the row, and the AI work
+  __sbCalls.length = 0;
+  _undoFn();
+  const uUpd = __sbCalls.find(c => c.op === 'update' && c.table === 'listings');
+  __report('Undo Done: restores queue position, history, and the original row',
+    doneData.length === dlen && !doneSet.has(0) && currentIndex === 0
+      && !!uUpd && uUpd.payload.status === 'active' && uUpd.payload.title === 'Null Cost Item'
+      && aiTitle === 'Rewritten Fancy Title | Better Keywords',
+    JSON.stringify({ len: doneData.length, cur: currentIndex, upd: uUpd && uUpd.payload, aiTitle }));
+  aiTitle = ''; editedCost = null;
+
   // ── S2: extension price autofill sets editedCost ──
   LISTINGS = [{ id: 301, title: 'No Cost Item', shopee: 'https://shopee/X', caro: '', cost: '', sell: '' }];
   currentIndex = 0;
@@ -422,6 +434,77 @@ const testCode = `
   __report('Shortcut: missing link shows a toast and opens nothing',
     toastText() === 'No Carousell link' && document.__created.length === createdBefore,
     toastText());
+
+  // ── Queue navigation skips processed listings and wraps ──
+  LISTINGS = [
+    { id: 701, title: 'Nav A', shopee: '', caro: '', cost: '10', sell: '30' },
+    { id: 702, title: 'Nav B', shopee: '', caro: '', cost: '10', sell: '30' },
+    { id: 703, title: 'Nav C', shopee: '', caro: '', cost: '10', sell: '30' },
+  ];
+  doneSet = new Set([1]); deletedSet = new Set();
+  currentIndex = 0;
+  navQueue(1);
+  __report('Nav: → skips processed listings', currentIndex === 2, String(currentIndex));
+  navQueue(1);
+  __report('Nav: → wraps to the start', currentIndex === 0, String(currentIndex));
+  navQueue(-1);
+  __report('Nav: ← goes backwards with wrap', currentIndex === 2, String(currentIndex));
+
+  // ── Refresh re-pulls from cloud and flushes pending deletes ──
+  __sbCalls.length = 0;
+  undoStack = [{ idx: 0, sbId: 909 }];
+  deletedSet = new Set([0]);
+  __sb.__nextSelectData = [{ id: 801, title: 'Fresh Row', shopee_url: '', carousell_url: '', source_cost: 10, sell_price: 35 }];
+  await refreshFromCloud();
+  __sb.__nextSelectData = null;
+  __report('Refresh: flushes pending deletes and reloads from cloud',
+    __sbCalls.some(c => c.op === 'delete' && eq(c.filters, [['id', 909]]))
+      && LISTINGS.length === 1 && LISTINGS[0].id === 801
+      && deletedSet.size === 0 && undoStack.length === 0
+      && toastText() === 'Refreshed ✓',
+    JSON.stringify({ n: LISTINGS.length, ds: deletedSet.size, toast: toastText() }));
+
+  // ── Download-all images ──
+  fixShopeeImages = ['https://down-sg.img.susercontent.com/file/abc', 'https://down-sg.img.susercontent.com/file/def'];
+  const cBefore2 = document.__created.length;
+  downloadAllImages('fix');
+  __report('Download all: toast announces the batch', toastText() === 'Downloading 2 images', toastText());
+  await tick(500);
+  const dlAnchors = document.__created.slice(cBefore2).filter(a => (a.href || '').startsWith('/api/image?url='));
+  __report('Download all: one proxied download per image', dlAnchors.length === 2,
+    JSON.stringify(dlAnchors.map(a => a.href)));
+  fixShopeeImages = [];
+
+  // ── Backup nudge ──
+  localStorage.removeItem('carobiz_last_backup');
+  localStorage.removeItem('carobiz_backup_nudge_day');
+  maybeBackupNudge();
+  __report('Nudge: warns when no backup exists',
+    toastText() === 'No backup yet — ⬇ Backup in LISTINGS', toastText());
+  toast('sentinel');
+  maybeBackupNudge();
+  __report('Nudge: fires at most once per day', toastText() === 'sentinel', toastText());
+  localStorage.removeItem('carobiz_backup_nudge_day');
+  localStorage.setItem('carobiz_last_backup', new Date().toISOString());
+  maybeBackupNudge();
+  __report('Nudge: silent when the backup is fresh', toastText() === 'sentinel', toastText());
+
+  // ── SALES dropdown keyboard ──
+  doneSet = new Set(); deletedSet = new Set(); LISTINGS = [];
+  doneData = [{ index: 0, id: 999, title: 'Capybara Plush Long Pillow', shopeeUrl: 's', carousellUrl: 'c',
+    sourceCost: 30, sellPrice: 54.9, doneAt: '2026-06-01T00:00:00Z' }];
+  searchListings('capybara');
+  const kev = k => ({ key: k, preventDefault() {} });
+  salesSearchKey(kev('ArrowDown'));
+  salesSearchKey(kev('Enter'));
+  __report('Sales search: ArrowDown + Enter picks the highlighted match',
+    document.getElementById('sale-listing').value === 'Capybara Plush Long Pillow',
+    document.getElementById('sale-listing').value);
+  searchListings('capybara');
+  salesSearchKey(kev('Escape'));
+  __report('Sales search: Esc closes the dropdown',
+    document.getElementById('search-dropdown').style.display === 'none',
+    document.getElementById('search-dropdown').style.display);
 })()
 `;
 
