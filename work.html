@@ -1890,25 +1890,65 @@ function autoResize(el) {
 function addSwipeGestures() {
   const card = document.querySelector('#listing-wrap .listing-card');
   if (!card) return;
-  let startX = 0, startY = 0, swiping = false;
+  let startX = 0, startY = 0, swiping = false, cancelled = false;
+
+  // Swipe reveal overlay
+  let reveal = card.querySelector('.swipe-reveal');
+  if (!reveal) {
+    reveal = document.createElement('div');
+    reveal.className = 'swipe-reveal';
+    reveal.style.cssText = 'position:absolute;top:0;bottom:0;left:0;right:0;border-radius:inherit;display:flex;align-items:center;padding:0 28px;pointer-events:none;opacity:0;transition:opacity 0.1s;z-index:0;';
+    card.style.position = 'relative';
+    card.style.overflow = 'hidden';
+    card.insertBefore(reveal, card.firstChild);
+  }
+
+  const THRESHOLD = 110;
+
   card.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     swiping = true;
+    cancelled = false;
+    card.style.transition = 'none';
   }, { passive: true });
+
   card.addEventListener('touchmove', e => {
-    if (!swiping) return;
+    if (!swiping || cancelled) return;
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
-    if (Math.abs(dy) > Math.abs(dx)) swiping = false; // cancel if mostly vertical
+    if (Math.abs(dy) > Math.abs(dx)) { cancelled = true; card.style.transform = ''; reveal.style.opacity = 0; return; }
+    if (Math.abs(dx) < 8) return;
+    const progress = Math.min(Math.abs(dx) / THRESHOLD, 1);
+    card.style.transform = `translateX(${dx > 0 ? Math.min(dx, THRESHOLD * 1.1) : Math.max(dx, -THRESHOLD * 1.1)}px)`;
+    reveal.style.opacity = progress;
+    if (dx > 0) {
+      reveal.style.justifyContent = 'flex-start';
+      reveal.style.background = `rgba(107,227,164,${0.15 * progress})`;
+      reveal.textContent = progress >= 1 ? 'Done ✓' : 'Swipe →';
+      reveal.style.color = 'var(--success)';
+      reveal.style.fontWeight = '700';
+      reveal.style.fontSize = '14px';
+    } else {
+      reveal.style.justifyContent = 'flex-end';
+      reveal.style.background = `rgba(224,88,88,${0.15 * progress})`;
+      reveal.textContent = progress >= 1 ? 'Delete ✕' : '← Swipe';
+      reveal.style.color = 'var(--danger)';
+      reveal.style.fontWeight = '700';
+      reveal.style.fontSize = '14px';
+    }
   }, { passive: true });
+
   card.addEventListener('touchend', e => {
-    if (!swiping) return;
+    if (!swiping || cancelled) { swiping = false; return; }
     swiping = false;
     const dx = e.changedTouches[0].clientX - startX;
-    const dy = e.changedTouches[0].clientY - startY;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
-    if (dx > 0) markDone(); else markDeleted();
+    card.style.transition = 'transform 0.2s ease';
+    card.style.transform = '';
+    reveal.style.opacity = 0;
+    if (Math.abs(dx) >= THRESHOLD) {
+      if (dx > 0) markDone(); else markDeleted();
+    }
   }, { passive: true });
 }
 
@@ -2187,6 +2227,7 @@ function _renderListingsResults(data) {
           <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed ✓</button>
           <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete ✕</button>
         </div>
+        <button onclick="listingsSendToFix(${d.id})" style="width:100%;margin-top:8px;padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer">↩ Send back to FIX</button>
       </div>`;
     }
 
@@ -2232,6 +2273,15 @@ async function listingsMarkDone(id) {
   if (item) item.status = 'done';
   _listingsEditingId = null;
   toast('Marked as listed ✓');
+  _renderListingsResults(_listingsCache);
+}
+
+async function listingsSendToFix(id) {
+  const { error } = await sb.from('listings').update({ status: 'active' }).eq('id', id);
+  if (error) { toast('Failed'); return; }
+  _listingsCache = _listingsCache.filter(l => l.id !== id);
+  _listingsEditingId = null;
+  toast('Sent back to FIX ✓');
   _renderListingsResults(_listingsCache);
 }
 
