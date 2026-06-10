@@ -67,6 +67,7 @@ const sbCalls = [];
 let nextInsertId = 501;
 const sbStub = {
   __nextSelectData: null,
+  __appState: {},   // key → data, served to .eq('key', …).single() selects
   from(table) {
     const call = { table, op: null, payload: null, filters: [], single: false };
     const b = {
@@ -82,7 +83,12 @@ const sbStub = {
         sbCalls.push(call);
         let result;
         if (call.op === 'insert' && call.single) result = { data: { id: nextInsertId++ }, error: null };
-        else if (call.op === 'select') result = { data: call.single ? null : (sbStub.__nextSelectData || []), error: null };
+        else if (call.op === 'select' && call.single) {
+          const key = call.filters.find(f => f[0] === 'key')?.[1];
+          const val = key != null ? sbStub.__appState[key] : null;
+          result = { data: val == null ? null : { data: val }, error: null };
+        }
+        else if (call.op === 'select') result = { data: sbStub.__nextSelectData || [], error: null };
         else result = { data: null, error: null };
         return Promise.resolve(result).then(resolve, reject);
       },
@@ -314,6 +320,44 @@ const testCode = `
   const sel = __sbCalls.find(c => c.op === 'select' && c.table === 'listings');
   __report('Q1: export reads all listings and reports success',
     !!sel && toastText() === 'Backup downloaded ✓', toastText());
+
+  // ── S3: sale-undo reinserts by timestamp, not stale index ──
+  salesLog = [
+    { name: 'S-new', price: 1, sourceCost: 0, category: '', ts: '2026-06-10T12:00:00.000Z', date: '2026-06-10' },
+    { name: 'S-mid', price: 2, sourceCost: 0, category: '', ts: '2026-06-09T12:00:00.000Z', date: '2026-06-09' },
+    { name: 'S-old', price: 3, sourceCost: 0, category: '', ts: '2026-06-08T12:00:00.000Z', date: '2026-06-08' },
+  ];
+  deleteSale(1);   // remove S-mid; undo closure captures index 1
+  // List shifts before the undo fires — a new sale gets logged
+  salesLog.unshift({ name: 'S-newest', price: 4, sourceCost: 0, category: '', ts: '2026-06-10T13:00:00.000Z', date: '2026-06-10' });
+  _undoFn();
+  __report('S3: undo restores the sale at its chronological position after the list shifted',
+    eq(salesLog.map(s => s.name), ['S-newest', 'S-new', 'S-mid', 'S-old']),
+    JSON.stringify(salesLog.map(s => s.name)));
+
+  // ── T2: sales sync merges instead of replacing ──
+  salesLog = [
+    { name: 'Unsynced New Sale', price: 50, ts: '2026-06-10T10:00:00.000Z', date: '2026-06-10' },
+    { name: 'Synced Sale',       price: 20, ts: '2026-06-01T00:00:00.000Z', date: '2026-06-01' },
+    { name: 'Deleted Elsewhere', price: 10, ts: '2026-05-20T00:00:00.000Z', date: '2026-05-20' },
+  ];
+  __sb.__appState = { carobiz_sales: [
+    { name: 'Cloud Newest', price: 30, ts: '2026-06-09T00:00:00.000Z', date: '2026-06-09' },
+    { name: 'Synced Sale',  price: 20, ts: '2026-06-01T00:00:00.000Z', date: '2026-06-01' },
+  ]};
+  __sbCalls.length = 0;
+  await syncFromSupabase();
+  __sb.__appState = {};
+  __report('T2: local sale newer than cloud survives the sync (was silently dropped)',
+    salesLog.some(s => s.name === 'Unsynced New Sale'), JSON.stringify(salesLog.map(s => s.name)));
+  __report('T2: older local-only entry is treated as deleted elsewhere, not resurrected',
+    !salesLog.some(s => s.name === 'Deleted Elsewhere'), JSON.stringify(salesLog.map(s => s.name)));
+  __report('T2: merged log is ordered newest-first with no duplicates',
+    eq(salesLog.map(s => s.name), ['Unsynced New Sale', 'Cloud Newest', 'Synced Sale']),
+    JSON.stringify(salesLog.map(s => s.name)));
+  __report('T2: recovered sales are pushed back to the cloud',
+    __sbCalls.some(c => c.op === 'upsert' && c.payload?.key === 'carobiz_sales'),
+    JSON.stringify(__sbCalls.map(c => c.op)));
 })()
 `;
 

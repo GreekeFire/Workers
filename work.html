@@ -1000,11 +1000,7 @@ async function loadListingsFromSupabase() {
 }
 
 function loadLocal() {
-  const today = getToday();
-  // Clear stale localStorage — Supabase is now source of truth for listings state
-  localStorage.removeItem('carobiz_work');
-  localStorage.removeItem('carobiz_url_overrides');
-  todayDate = today;
+  todayDate = getToday();
   const rawSales = localStorage.getItem('carobiz_sales');
   if (rawSales) salesLog = JSON.parse(rawSales);
   // Restore NEW tab draft
@@ -1046,8 +1042,17 @@ async function syncFromSupabase() {
     }
 
     if (sRes.data?.data) {
-      salesLog = sRes.data.data;
+      // Merge instead of replace: a sale logged while a push failed (and the
+      // app then closed) lives only in localStorage — keep local entries newer
+      // than the newest cloud entry. Older local-only entries are treated as
+      // deleted on another device, not resurrected.
+      const cloud = sRes.data.data;
+      const newestCloudTs = cloud.reduce((m, s) => ((s.ts || '') > m ? s.ts : m), '');
+      const cloudTs = new Set(cloud.map(s => s.ts));
+      const localOnly = salesLog.filter(s => s.ts && !cloudTs.has(s.ts) && s.ts > newestCloudTs);
+      salesLog = [...localOnly, ...cloud].sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
       localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
+      if (localOnly.length) pushToSupabase();   // persist the recovered sales
     }
   } catch (e) {
     console.warn('Supabase sync error:', e);
@@ -2126,7 +2131,10 @@ function deleteSale(idx) {
   renderSalesView();
   renderSessionBar();
   toastWithUndo('Sale removed', () => {
-    salesLog.splice(idx, 0, removed);
+    // Reinsert by timestamp, not the captured index — the list may have
+    // shifted (new sale logged, another delete) before the undo fires
+    const pos = salesLog.findIndex(s => (s.ts || '') < (removed.ts || ''));
+    salesLog.splice(pos === -1 ? salesLog.length : pos, 0, removed);
     localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
     pushToSupabase();
     renderSalesView();
