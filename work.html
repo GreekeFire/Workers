@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1987,15 +1987,15 @@ function addSwipeGestures() {
     if (dx > 0) {
       reveal.style.justifyContent = 'flex-start';
       reveal.style.background = `rgba(107,227,164,${0.15 * progress})`;
-      reveal.textContent = progress >= 1 ? 'Delete ✕' : '← Swipe';
-      reveal.style.color = 'var(--danger)';
+      reveal.textContent = progress >= 1 ? 'Done ✓' : 'Swipe →';
+      reveal.style.color = 'var(--success)';
       reveal.style.fontWeight = '700';
       reveal.style.fontSize = '14px';
     } else {
       reveal.style.justifyContent = 'flex-end';
       reveal.style.background = `rgba(224,88,88,${0.15 * progress})`;
-      reveal.textContent = progress >= 1 ? 'Done ✓' : 'Swipe →';
-      reveal.style.color = 'var(--success)';
+      reveal.textContent = progress >= 1 ? 'Delete ✕' : '← Swipe';
+      reveal.style.color = 'var(--danger)';
       reveal.style.fontWeight = '700';
       reveal.style.fontSize = '14px';
     }
@@ -2009,7 +2009,7 @@ function addSwipeGestures() {
     card.style.transform = '';
     reveal.style.opacity = 0;
     if (Math.abs(dx) >= THRESHOLD) {
-      if (dx > 0) markDeleted(); else markDone();
+      if (dx > 0) markDone(); else markDeleted();
     }
   }, { passive: true });
 }
