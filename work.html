@@ -922,8 +922,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 function getToday() { return new Date().toISOString().slice(0, 10); }
 
 // Listings (loaded from Supabase)
-let LISTINGS = [];      // [[title, shopeeUrl, carousellUrl, sourceCost, sellPrice], ...]
-let LISTING_IDS = [];   // [supabase_id, ...] parallel array
+let LISTINGS = [];      // [{ id, title, shopee, caro, cost, sell }, ...]
 
 // State
 let currentIndex = 0;
@@ -990,10 +989,11 @@ async function loadListingsFromSupabase() {
       .eq('status', 'active')
       .order('id');
     if (error) throw error;
-    LISTINGS    = data.map(r => [r.title, r.shopee_url, r.carousell_url,
-      r.source_cost == null ? '' : String(r.source_cost),
-      r.sell_price  == null ? '' : String(r.sell_price)]);
-    LISTING_IDS = data.map(r => r.id);
+    LISTINGS = data.map(r => ({
+      id: r.id, title: r.title, shopee: r.shopee_url, caro: r.carousell_url,
+      cost: r.source_cost == null ? '' : String(r.source_cost),
+      sell: r.sell_price  == null ? '' : String(r.sell_price)
+    }));
   } catch (e) {
     console.error('Failed to load listings from Supabase:', e);
   }
@@ -1039,7 +1039,7 @@ async function syncFromSupabase() {
       // stored positional index: the active list shifts as listings complete.
       doneSet = new Set(
         doneData
-          .map(d => (d.id != null ? LISTING_IDS.indexOf(d.id) : -1))
+          .map(d => (d.id != null ? LISTINGS.findIndex(l => l.id === d.id) : -1))
           .filter(i => i >= 0)
       );
       doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
@@ -1106,22 +1106,22 @@ function findNext(from) {
 
 function markDone() {
   const idx = currentIndex;
-  const costVal = parseFloat(editedCost !== null ? editedCost : LISTINGS[idx][3]);
+  const costVal = parseFloat(editedCost !== null ? editedCost : LISTINGS[idx].cost);
   if (!(costVal > 0)) { toast('Enter a cost before marking Done'); return; }
   if (!doneSet.has(idx) && !deletedSet.has(idx)) {
     const L = LISTINGS[idx];
-    const sbId = LISTING_IDS[idx];
+    const sbId = L.id;
     doneSet.add(idx);
     doneTodayCount++;
     doneData.push({
       index: idx,
       id: sbId,
-      title: aiTitle || L[0],
+      title: aiTitle || L.title,
       description: aiDesc,
-      shopeeUrl: L[1],
-      carousellUrl: L[2],
-      sourceCost: editedCost !== null ? editedCost : L[3],
-      sellPrice: calcSell(editedCost !== null ? editedCost : L[3]),
+      shopeeUrl: L.shopee,
+      carousellUrl: L.caro,
+      sourceCost: editedCost !== null ? editedCost : L.cost,
+      sellPrice: calcSell(editedCost !== null ? editedCost : L.cost),
       doneAt: new Date().toISOString()
     });
     // Mark as done in Supabase; the id-based doneSet rebuild self-heals if this
@@ -1141,7 +1141,7 @@ function markDeleted() {
   if (!doneSet.has(idx) && !deletedSet.has(idx)) {
     deletedSet.add(idx);
     deletedTodayCount++;
-    undoStack.push({ idx, sbId: LISTING_IDS[idx] });
+    undoStack.push({ idx, sbId: LISTINGS[idx].id });
   }
   resetAI();
   currentIndex = findNext(idx + 1);
@@ -1183,14 +1183,14 @@ function undoDelete() {
 async function saveLinkEdits() {
   const s = document.getElementById('link-shopee-input')?.value.trim() || '';
   const c = document.getElementById('link-caro-input')?.value.trim() || '';
-  const sbId = LISTING_IDS[currentIndex];
+  const sbId = LISTINGS[currentIndex].id;
   if (sbId) {
     const { error } = await sb.from('listings')
       .update({ shopee_url: s, carousell_url: c }).eq('id', sbId);
     if (error) { toast('Save failed'); return; }
   }
-  LISTINGS[currentIndex][1] = s;
-  LISTINGS[currentIndex][2] = c;
+  LISTINGS[currentIndex].shopee = s;
+  LISTINGS[currentIndex].caro = c;
   linkEditing = false;
   renderFixView();
   toast('Links saved');
@@ -1537,7 +1537,7 @@ async function fetchShopeeDataFix() {
       // cost yet. Set state, not the DOM — the re-render below rebuilds the
       // input from editedCost, and markDone reads editedCost too.
       if (p.price_min_sgd) {
-        const cur = parseFloat(editedCost !== null ? editedCost : LISTINGS[currentIndex][3]);
+        const cur = parseFloat(editedCost !== null ? editedCost : LISTINGS[currentIndex].cost);
         if (!(cur > 0)) editedCost = parseFloat(p.price_min_sgd) || null;
       }
       toast('Fetched via extension ✓');
@@ -1690,7 +1690,7 @@ function searchListings(query) {
     if (!d.title.toLowerCase().includes(q)) continue;
     // Resolve the entry's current queue position by stable id — null when the
     // listing is no longer active. The stored d.index goes stale as the list shifts.
-    const li = d.id != null ? LISTING_IDS.indexOf(d.id) : -1;
+    const li = d.id != null ? LISTINGS.findIndex(l => l.id === d.id) : -1;
     _searchMatches.push({
       name: d.title,
       price: d.sellPrice,
@@ -1703,8 +1703,8 @@ function searchListings(query) {
   // Fall back to unprocessed LISTINGS by original title
   for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
     if (doneSet.has(i) || deletedSet.has(i)) continue;
-    if (!LISTINGS[i][0].toLowerCase().includes(q)) continue;
-    _searchMatches.push({ name: LISTINGS[i][0], price: LISTINGS[i][4], shopee: LISTINGS[i][1], caro: LISTINGS[i][2], listingIdx: i });
+    if (!LISTINGS[i].title.toLowerCase().includes(q)) continue;
+    _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingIdx: i });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = _searchMatches.map((m, mi) => {
@@ -1738,17 +1738,17 @@ function jumpToFix(idx) {
 
 function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride) {
   const L = idx !== null ? LISTINGS[idx] : null;
-  const name   = nameOverride  ?? L?.[0] ?? '';
-  const price  = priceOverride ?? L?.[4] ?? '';
-  const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.[1] || '');
-  const caro   = caroOverride  !== undefined ? caroOverride  : (L?.[2] || '');
+  const name   = nameOverride  ?? L?.title ?? '';
+  const price  = priceOverride ?? L?.sell ?? '';
+  const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.shopee || '');
+  const caro   = caroOverride  !== undefined ? caroOverride  : (L?.caro || '');
   if (!name) return;
   document.getElementById('sale-listing').value = name;
   document.getElementById('search-dropdown').style.display = 'none';
   document.getElementById('sale-price').value = price;
   const costEl = document.getElementById('sale-cost');
   if (costEl) {
-    const rawCost  = costOverride ?? L?.[3] ?? '';
+    const rawCost  = costOverride ?? L?.cost ?? '';
     costEl.value   = rawCost || '';
   }
   const infoEl = document.getElementById('sale-listing-info');
@@ -1819,11 +1819,11 @@ function _renderFixView() {
   }
 
   const L = LISTINGS[currentIndex];
-  const title = aiTitle || L[0];
-  const shopeeUrl = L[1];
-  const carousellUrl = L[2];
-  const cost = editedCost !== null ? editedCost : L[3];
-  const sell = L[4];
+  const title = aiTitle || L.title;
+  const shopeeUrl = L.shopee;
+  const carousellUrl = L.caro;
+  const cost = editedCost !== null ? editedCost : L.cost;
+  const sell = L.sell;
   wrap.innerHTML = `<div class="listing-card">
     <div class="field-header">
       <span class="field-label">Title</span>

@@ -110,10 +110,9 @@ const testCode = `
 
   // Seed state: two active listings (ids 101, 102)
   LISTINGS = [
-    ['Wireless Keyboard', 'https://shopee/A', 'https://caro/A', '29.4', '54.9'],
-    ['Foldable Chair',    'https://shopee/B', 'https://caro/B', '17.8', '44.9'],
+    { id: 101, title: 'Wireless Keyboard', shopee: 'https://shopee/A', caro: 'https://caro/A', cost: '29.4', sell: '54.9' },
+    { id: 102, title: 'Foldable Chair',    shopee: 'https://shopee/B', caro: 'https://caro/B', cost: '17.8', sell: '44.9' },
   ];
-  LISTING_IDS = [101, 102];
   currentIndex = 0;
   doneSet = new Set(); deletedSet = new Set(); salesLog = [];
   doneData = [
@@ -142,7 +141,7 @@ const testCode = `
           && upd.payload.carousell_url === 'https://caro/UPDATED',
     JSON.stringify(upd && upd.payload));
   __report('P1: in-memory listing updated',
-    LISTINGS[0][1] === 'https://shopee/UPDATED' && LISTINGS[0][2] === 'https://caro/UPDATED',
+    LISTINGS[0].shopee === 'https://shopee/UPDATED' && LISTINGS[0].caro === 'https://caro/UPDATED',
     JSON.stringify(LISTINGS[0]));
   __report('P1: no positional urlOverrides written to localStorage',
     localStorage.getItem('carobiz_url_overrides') === null,
@@ -228,7 +227,7 @@ const testCode = `
   await loadListingsFromSupabase();
   __sb.__nextSelectData = null;
   __report('S1: null source_cost maps to empty string, not "null"',
-    LISTINGS.length === 1 && LISTINGS[0][3] === '' && LISTINGS[0][4] === '',
+    LISTINGS.length === 1 && LISTINGS[0].id === 7 && LISTINGS[0].cost === '' && LISTINGS[0].sell === '',
     JSON.stringify(LISTINGS[0]));
 
   currentIndex = 0; editedCost = null;
@@ -238,7 +237,7 @@ const testCode = `
   __report('S1: markDone blocked when cost is empty',
     doneData.length === dlen && toastText() === 'Enter a cost before marking Done', toastText());
 
-  LISTINGS[0][3] = 'null';   // legacy bad shape from the old String() coercion
+  LISTINGS[0].cost = 'null';   // legacy bad shape from the old String() coercion
   markDone();
   __report('S1: markDone blocked on legacy "null" string cost',
     doneData.length === dlen, String(doneData.length));
@@ -252,8 +251,8 @@ const testCode = `
     JSON.stringify({ len: doneData.length, upd: sUpd && sUpd.filters }));
 
   // ── S2: extension price autofill sets editedCost ──
-  LISTINGS = [['No Cost Item', 'https://shopee/X', '', '', '']];
-  LISTING_IDS = [301]; currentIndex = 0;
+  LISTINGS = [{ id: 301, title: 'No Cost Item', shopee: 'https://shopee/X', caro: '', cost: '', sell: '' }];
+  currentIndex = 0;
   doneSet = new Set(); deletedSet = new Set();
   editedCost = null; shopeeInput = '';
   window.__product = { name: 'Foo Product', description: 'Nice thing', images: [], price_min_sgd: 25 };
@@ -267,7 +266,7 @@ const testCode = `
     'editedCost=' + editedCost);
 
   editedCost = null; shopeeInput = '';
-  LISTINGS[0][3] = '29.4';
+  LISTINGS[0].cost = '29.4';
   await fetchShopeeDataFix();
   await tick(20);
   __report('S2: an existing valid cost is not overwritten by the fetch',
