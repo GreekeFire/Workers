@@ -251,11 +251,16 @@ const testCode = `
 
   __sbCalls.length = 0;
   editedCost = 12;
+  aiTitle = 'Rewritten Fancy Title | Better Keywords';
   markDone();
   const sUpd = __sbCalls.find(c => c.op === 'update' && c.table === 'listings');
   __report('S1: valid cost still marks done and updates status by id',
     doneData.length === dlen + 1 && !!sUpd && eq(sUpd.filters, [['id', 7]]) && sUpd.payload.status === 'done',
     JSON.stringify({ len: doneData.length, upd: sUpd && sUpd.filters }));
+  __report('markDone writes the final title/cost/sell back to the listings row',
+    !!sUpd && sUpd.payload.title === 'Rewritten Fancy Title | Better Keywords'
+           && sUpd.payload.source_cost === 12 && sUpd.payload.sell_price === 40,
+    JSON.stringify(sUpd && sUpd.payload));
 
   // ── S2: extension price autofill sets editedCost ──
   LISTINGS = [{ id: 301, title: 'No Cost Item', shopee: 'https://shopee/X', caro: '', cost: '', sell: '' }];

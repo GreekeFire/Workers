@@ -1129,9 +1129,17 @@ function markDone() {
       sellPrice: calcSell(editedCost !== null ? editedCost : L.cost),
       doneAt: new Date().toISOString()
     });
-    // Mark as done in Supabase; the id-based doneSet rebuild self-heals if this
-    // write is lost, but surface it so a "ghost" item next boot isn't a mystery
-    if (sbId) sb.from('listings').update({ status: 'done' }).eq('id', sbId)
+    // Mark done in Supabase AND write back the final title/cost/sell, so the
+    // catalog row matches what is actually live on Carousell — otherwise the
+    // LISTINGS search only ever knows the old pre-fix title. The id-based
+    // doneSet rebuild self-heals if this write is lost, but surface it so a
+    // "ghost" item next boot isn't a mystery.
+    if (sbId) sb.from('listings').update({
+      status: 'done',
+      title: aiTitle || L.title,
+      source_cost: costVal,
+      sell_price: calcSell(costVal)
+    }).eq('id', sbId)
       .then(({ error }) => { if (error) toast('Status sync failed — item may reappear'); });
   }
   resetAI();
