@@ -362,8 +362,21 @@
     </div>
   </div>
 
+  <!-- Boom card (shown when limit hit) -->
+  <div class="card" id="boom-card" style="display:none;text-align:center;padding:36px 24px">
+    <div style="font-size:56px;margin-bottom:16px">💥</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">This demo has self-destructed.</div>
+    <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:24px;line-height:1.6">
+      You've used all 40 trial generations.<br>Hope the listings were worth it 😈
+    </div>
+    <a href="mailto:quekquinn@gmail.com?subject=I want the full version"
+       style="display:inline-block;padding:13px 28px;border-radius:12px;background:var(--coral);color:#fff;font-size:15px;font-weight:700;text-decoration:none">
+      Get the full version →
+    </a>
+  </div>
+
   <!-- Input card -->
-  <div class="card">
+  <div class="card" id="input-card">
     <label class="field-label">Shopee URLs — one per line</label>
     <textarea id="urls-ta" rows="4"
       placeholder="https://shopee.sg/product-name-i.123.456&#10;https://shopee.sg/another-item-i.789.012&#10;https://shopee.sg/…"
@@ -389,6 +402,7 @@ function checkPasscode() {
     document.getElementById('passcode-overlay').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     genCountDisplay();
+    checkLimitBoom();
     const stored = localStorage.getItem('demo_claude_key');
     if (stored) {
       savedKey = stored;
@@ -661,8 +675,16 @@ function createResultCard(i, url) {
   document.getElementById('results').appendChild(card);
 }
 
+function checkLimitBoom() {
+  if (getGenCount() < GEN_LIMIT) return false;
+  document.getElementById('input-card').style.display = 'none';
+  document.getElementById('boom-card').style.display = 'block';
+  return true;
+}
+
 async function batchGenerate() {
   if (loading) return;
+  if (checkLimitBoom()) return;
   if (!savedKey) {
     document.getElementById('key-card').style.display = 'block';
     document.getElementById('api-key-input').focus();
@@ -674,7 +696,7 @@ async function batchGenerate() {
   if (!urls.length) { toast('Paste at least one Shopee URL'); return; }
 
   const remaining = GEN_LIMIT - getGenCount();
-  if (remaining <= 0) { toast('Generation limit reached — contact us to upgrade'); return; }
+  if (remaining <= 0) { checkLimitBoom(); return; }
   const toProcess = urls.slice(0, remaining);
 
   loading = true;
@@ -699,6 +721,7 @@ async function batchGenerate() {
       const { title, desc } = await runAIGenerate(productText);
       incGenCount();
       genCountDisplay();
+      checkLimitBoom();
       setCardStatus(i, '');
       showCardOutput(i, title, desc);
     } catch (e) {
