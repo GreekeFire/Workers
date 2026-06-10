@@ -1,8 +1,6 @@
 {
   "outputDirectory": ".",
   "rewrites": [
-    { "source": "/", "destination": "/work.html" },
-    { "source": "/research", "destination": "/research.html" },
-    { "source": "/test-shopee", "destination": "/test-shopee.html" }
+    { "source": "/", "destination": "/work.html" }
   ]
 }

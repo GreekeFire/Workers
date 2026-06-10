@@ -1056,12 +1056,6 @@ async function syncFromSupabase() {
   }
 }
 
-function saveLocal() {
-  localStorage.setItem('carobiz_work', JSON.stringify({
-    todayDate
-  }));
-}
-
 async function pushToSupabase() {
   const now = new Date().toISOString();
   const today = getToday();
@@ -1121,7 +1115,6 @@ function markDone() {
   }
   resetAI();
   currentIndex = findNext(idx + 1);
-  saveLocal();
   pushToSupabase();
   renderAll();
   toast('Done ✓');
@@ -1136,7 +1129,6 @@ function markDeleted() {
   }
   resetAI();
   currentIndex = findNext(idx + 1);
-  saveLocal();
   renderAll();
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => {
@@ -1167,7 +1159,6 @@ function undoDelete() {
       pushToSupabase();
     }, 4000);
   }
-  saveLocal();
   renderAll();
   const remaining = undoStack.length;
   toast(remaining > 0 ? `Undo ✓ (${remaining} pending)` : 'Undo ✓');
@@ -1627,7 +1618,6 @@ function saveNewListing() {
   newShopeeUrl = ''; newCaroUrl = ''; newShopeeCollapsed = false;
   newShopeeImages = []; newShopeeFetching = false;
   localStorage.removeItem('carobiz_new_draft');
-  saveLocal();
   pushToSupabase();
   renderSessionBar();
   switchTab('done');
@@ -2332,7 +2322,6 @@ function saveDoneEdit(i) {
   doneData[i].sourceCost = cost;
   doneData[i].sellPrice = calcSell(cost);
   editingDoneIdx = null;
-  saveLocal();
   pushToSupabase();
   renderDoneView();
   toast('Saved');
@@ -2349,7 +2338,6 @@ function deleteDoneEntry(i) {
   if (entry.index !== null) doneSet.delete(entry.index);
   editingDoneIdx = null;
   doneLinkEditIdx = null;
-  saveLocal();
   pushToSupabase();
   renderDoneView();
   renderFixView();
@@ -2413,7 +2401,6 @@ document.addEventListener('visibilitychange', () => {
     todayDate = getToday();
     doneTodayCount = 0;
     deletedTodayCount = 0;
-    saveLocal();
     renderAll();
   }
 });
