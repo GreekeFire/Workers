@@ -970,9 +970,7 @@ let newShopeeFetching = false;
 let newApiKeyVisible = false;
 let newFetchCollapsed = false;
 
-// Link overrides
 let linkEditing = false;
-let urlOverrides = {};
 
 // Init
 async function init() {
@@ -1003,11 +1001,10 @@ function loadLocal() {
   const today = getToday();
   // Clear stale localStorage — Supabase is now source of truth for listings state
   localStorage.removeItem('carobiz_work');
+  localStorage.removeItem('carobiz_url_overrides');
   todayDate = today;
   const rawSales = localStorage.getItem('carobiz_sales');
   if (rawSales) salesLog = JSON.parse(rawSales);
-  const rawOverrides = localStorage.getItem('carobiz_url_overrides');
-  if (rawOverrides) urlOverrides = JSON.parse(rawOverrides);
   // Restore NEW tab draft
   try {
     const rawDraft = localStorage.getItem('carobiz_new_draft');
@@ -1178,11 +1175,17 @@ function undoDelete() {
   toast(remaining > 0 ? `Undo ✓ (${remaining} pending)` : 'Undo ✓');
 }
 
-function saveLinkEdits() {
+async function saveLinkEdits() {
   const s = document.getElementById('link-shopee-input')?.value.trim() || '';
   const c = document.getElementById('link-caro-input')?.value.trim() || '';
-  urlOverrides[currentIndex] = { shopeeUrl: s, carousellUrl: c };
-  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
+  const sbId = LISTING_IDS[currentIndex];
+  if (sbId) {
+    const { error } = await sb.from('listings')
+      .update({ shopee_url: s, carousell_url: c }).eq('id', sbId);
+    if (error) { toast('Save failed'); return; }
+  }
+  LISTINGS[currentIndex][1] = s;
+  LISTINGS[currentIndex][2] = c;
   linkEditing = false;
   renderFixView();
   toast('Links saved');
@@ -1659,12 +1662,11 @@ function searchListings(query) {
   for (const d of doneData) {
     if (_searchMatches.length >= 8) break;
     if (!d.title.toLowerCase().includes(q)) continue;
-    const ov = urlOverrides[d.index] || {};
     _searchMatches.push({
       name: d.title,
       price: d.sellPrice,
-      shopee: ov.shopeeUrl ?? d.shopeeUrl ?? LISTINGS[d.index]?.[1] ?? '',
-      caro:   ov.carousellUrl ?? d.carousellUrl ?? LISTINGS[d.index]?.[2] ?? '',
+      shopee: d.shopeeUrl ?? LISTINGS[d.index]?.[1] ?? '',
+      caro:   d.carousellUrl ?? LISTINGS[d.index]?.[2] ?? '',
       listingIdx: d.index
     });
   }
@@ -1789,9 +1791,8 @@ function _renderFixView() {
 
   const L = LISTINGS[currentIndex];
   const title = aiTitle || L[0];
-  const ov = urlOverrides[currentIndex] || {};
-  const shopeeUrl = ov.shopeeUrl !== undefined ? ov.shopeeUrl : L[1];
-  const carousellUrl = ov.carousellUrl !== undefined ? ov.carousellUrl : L[2];
+  const shopeeUrl = L[1];
+  const carousellUrl = L[2];
   const cost = editedCost !== null ? editedCost : L[3];
   const sell = L[4];
   wrap.innerHTML = `<div class="listing-card">
