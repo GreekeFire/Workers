@@ -1638,40 +1638,7 @@ async function fetchShopeeData() {
   if (newShopeeInput) generateAINew('both');
 }
 
-// Extension bridge — send a postMessage and wait for the reply
-function fetchViaExtension(url) {
-  return new Promise((resolve, reject) => {
-    const reqId = Math.random().toString(36).slice(2);
-    const timeout = setTimeout(() => {
-      window.removeEventListener('message', handler);
-      reject(new Error('Extension timeout'));
-    }, 35000);
-    function handler(e) {
-      if (e.data?.type === 'SM_RESULT' && e.data?.reqId === reqId) {
-        clearTimeout(timeout);
-        window.removeEventListener('message', handler);
-        if (e.data.ok) resolve(e.data.product);
-        else reject(new Error(e.data.error || 'Extension error'));
-      }
-    }
-    window.addEventListener('message', handler);
-    window.postMessage({ type: 'SM_SCRAPE', url, reqId }, '*');
-  });
-}
-
-// Check if Wormhole extension is installed
-function checkExtension() {
-  return new Promise(resolve => {
-    const t = setTimeout(() => { window.removeEventListener('message', h); resolve(false); }, 500);
-    function h(e) { if (e.data?.type === 'SM_PONG') { clearTimeout(t); window.removeEventListener('message', h); resolve(true); } }
-    window.addEventListener('message', h);
-    window.postMessage({ type: 'SM_PING' }, '*');
-  });
-}
-
-// FIX tab — fetch from Shopee URL
-// Tries extension first (full data: price, sold, rating, images),
-// falls back to /api/shopee (title + description only via og: tags).
+// FIX tab — fetch from Shopee URL via /api/shopee (og: tag scrape)
 async function fetchShopeeDataFix() {
   const urlEl = document.getElementById('fix-shopee-fetch-url');
   const url   = urlEl?.value.trim();
@@ -1679,31 +1646,13 @@ async function fetchShopeeDataFix() {
   fixShopeeFetching = true;
   renderFixView();
   try {
-    const hasExt = await checkExtension();
-    if (hasExt) {
-      // Extension path — full structured data
-      const p = await fetchViaExtension(url);
-      shopeeInput     = [p.name, p.description].filter(Boolean).join('\n\n');
-      fixShopeeImages = (p.images || []).map(h => `https://down-sg.img.susercontent.com/file/${h}`);
-      shopeeCollapsed = true;
-      // Auto-fill source cost if price came back and the listing has no valid
-      // cost yet. Set state, not the DOM — the re-render below rebuilds the
-      // input from editedCost, and markDone reads editedCost too.
-      if (p.price_min_sgd) {
-        const cur = parseFloat(editedCost !== null ? editedCost : LISTINGS[currentIndex].cost);
-        if (!(cur > 0)) editedCost = parseFloat(p.price_min_sgd) || null;
-      }
-      toast('Fetched via extension ✓');
-    } else {
-      // Fallback — og: tag scrape (title + description, no live price)
-      const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Fetch failed');
-      shopeeInput     = [data.title, data.description].filter(Boolean).join('\n\n');
-      fixShopeeImages = data.images || [];
-      shopeeCollapsed = true;
-      toast('Fetched ✓');
-    }
+    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    shopeeInput     = [data.title, data.description].filter(Boolean).join('\n\n');
+    fixShopeeImages = data.images || [];
+    shopeeCollapsed = true;
+    toast('Fetched ✓');
   } catch(e) {
     toast('Failed — ' + (e.message || 'unknown error'));
   }
