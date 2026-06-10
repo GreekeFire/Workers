@@ -1597,7 +1597,7 @@ function saveApiKeyNew() {
   }
 }
 
-function saveNewListing() {
+async function saveNewListing() {
   const titleEl  = document.getElementById('new-title-ta');
   const costEl   = document.getElementById('new-cost-input');
   const shopeeEl = document.getElementById('new-shopee-fetch-url');
@@ -1610,14 +1610,30 @@ function saveNewListing() {
   if (caroEl)   newCaroUrl   = caroEl.value.trim();
   if (!newTitle) { toast('Add a title first'); return; }
   const cost = parseFloat(newCost) || 0;
+  const sell = calcSell(cost);
+  // Insert into the listings table so it shows up in LISTINGS search —
+  // doneData alone is not queried there
+  let sbId = null;
+  try {
+    const { data, error } = await sb.from('listings').insert({
+      title: newTitle, shopee_url: newShopeeUrl, carousell_url: newCaroUrl,
+      source_cost: cost, sell_price: sell, status: 'done'
+    }).select('id').single();
+    if (error) throw error;
+    sbId = data.id;
+  } catch (e) {
+    console.warn('Failed to insert listing row:', e);
+    toast('Saved, but not added to LISTINGS catalog');
+  }
   doneData.push({
     index: null,
+    id: sbId,
     title: newTitle,
     description: newDesc,
     shopeeUrl: newShopeeUrl,
     carousellUrl: newCaroUrl,
     sourceCost: cost,
-    sellPrice: calcSell(cost),
+    sellPrice: sell,
     doneAt: new Date().toISOString()
   });
   // Reset new tab
@@ -1662,12 +1678,16 @@ function searchListings(query) {
   for (const d of doneData) {
     if (_searchMatches.length >= 8) break;
     if (!d.title.toLowerCase().includes(q)) continue;
+    // Resolve the entry's current queue position by stable id — null when the
+    // listing is no longer active. The stored d.index goes stale as the list shifts.
+    const li = d.id != null ? LISTING_IDS.indexOf(d.id) : -1;
     _searchMatches.push({
       name: d.title,
       price: d.sellPrice,
-      shopee: d.shopeeUrl ?? LISTINGS[d.index]?.[1] ?? '',
-      caro:   d.carousellUrl ?? LISTINGS[d.index]?.[2] ?? '',
-      listingIdx: d.index
+      shopee: d.shopeeUrl ?? '',
+      caro:   d.carousellUrl ?? '',
+      cost: d.sourceCost,
+      listingIdx: li >= 0 ? li : null
     });
   }
   // Fall back to unprocessed LISTINGS by original title
@@ -1696,7 +1716,7 @@ function searchListings(query) {
 function selectMatch(mi) {
   const m = _searchMatches[mi];
   if (!m) return;
-  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro);
+  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro, m.cost);
 }
 
 function jumpToFix(idx) {
@@ -1706,7 +1726,7 @@ function jumpToFix(idx) {
   switchTab('fix');
 }
 
-function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride) {
+function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride) {
   const L = idx !== null ? LISTINGS[idx] : null;
   const name   = nameOverride  ?? L?.[0] ?? '';
   const price  = priceOverride ?? L?.[4] ?? '';
@@ -1718,8 +1738,7 @@ function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOve
   document.getElementById('sale-price').value = price;
   const costEl = document.getElementById('sale-cost');
   if (costEl) {
-    const doneCost = doneData.find(d => d.index === idx)?.sourceCost;
-    const rawCost  = doneCost ?? L?.[3] ?? '';
+    const rawCost  = costOverride ?? L?.[3] ?? '';
     costEl.value   = rawCost || '';
   }
   const infoEl = document.getElementById('sale-listing-info');
