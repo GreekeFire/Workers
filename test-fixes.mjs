@@ -1,4 +1,4 @@
-// Regression tests for the positional-index fixes in work.html.
+// Regression tests for work.html fixes.
 // Runs the app's inline <script> in a Node vm with a stubbed DOM, localStorage
 // and Supabase client, then drives the fixed code paths directly.
 //
@@ -7,6 +7,12 @@
 // P1: FIX-tab "Edit links" saves to Supabase by stable id (no urlOverrides)
 // P2: SALES search resolves done entries by id, never by stored position
 // P3: NEW-tab save inserts a row into the listings table
+// S1: null source_cost can't slip through markDone as the string 'null'
+// S2: extension price autofill sets editedCost (was a dead DOM write)
+// T4: double-tap Save can't insert duplicate rows
+// T5: entering the LISTINGS tab clears the stale search cache
+// Q2: NEW-tab draft persists and restores the cost field
+// Q1: export backup reads all listings and downloads
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -21,11 +27,13 @@ function makeEl(id) {
     focus() {}, prepend() {}, appendChild() {}, insertBefore() {},
     addEventListener() {}, removeEventListener() {},
     querySelector() { return null; }, setSelectionRange() {},
+    click() {}, remove() {},
   };
 }
 const documentStub = {
   hidden: false,
   activeElement: null,
+  body: makeEl('body'),
   getElementById(id) { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); },
   querySelector() { return null; },
   createElement(tag) { return makeEl('created-' + tag); },
@@ -39,32 +47,48 @@ const localStorageStub = {
   removeItem: k => lsStore.delete(k),
 };
 
+// Window doubles as a message bus so the extension bridge (SM_PING/SM_SCRAPE)
+// can be exercised: PING is answered with PONG, SCRAPE with __product.
+const msgHandlers = new Set();
+const windowStub = {
+  __product: null,
+  addEventListener(type, fn) { if (type === 'message') msgHandlers.add(fn); },
+  removeEventListener(type, fn) { msgHandlers.delete(fn); },
+  postMessage(msg) {
+    const dispatch = data => setTimeout(() => { for (const fn of [...msgHandlers]) fn({ data }); }, 0);
+    dispatch(msg); // pages receive their own postMessage
+    if (msg?.type === 'SM_PING') dispatch({ type: 'SM_PONG' });
+    if (msg?.type === 'SM_SCRAPE') dispatch({ type: 'SM_RESULT', reqId: msg.reqId, ok: true, product: windowStub.__product });
+  },
+  open() {},
+};
+
 const sbCalls = [];
 let nextInsertId = 501;
-function from(table) {
-  const call = { table, op: null, payload: null, filters: [], single: false };
-  const b = {
-    select(cols) { if (!call.op) call.op = 'select'; call.selected = cols; return b; },
-    insert(p) { call.op = 'insert'; call.payload = p; return b; },
-    update(p) { call.op = 'update'; call.payload = p; return b; },
-    upsert(p) { call.op = 'upsert'; call.payload = p; return b; },
-    delete() { call.op = 'delete'; return b; },
-    eq(col, val) { call.filters.push([col, val]); return b; },
-    order() { return b; }, ilike() { return b; }, limit() { return b; },
-    single() { call.single = true; return b; },
-    then(resolve, reject) {
-      sbCalls.push(call);
-      let result;
-      if (call.op === 'insert' && call.single) result = { data: { id: nextInsertId++ }, error: null };
-      else if (call.op === 'select') result = { data: call.single ? null : [], error: null };
-      else result = { data: null, error: null };
-      return Promise.resolve(result).then(resolve, reject);
-    },
-  };
-  return b;
-}
 const sbStub = {
-  from,
+  __nextSelectData: null,
+  from(table) {
+    const call = { table, op: null, payload: null, filters: [], single: false };
+    const b = {
+      select(cols) { if (!call.op) call.op = 'select'; call.selected = cols; return b; },
+      insert(p) { call.op = 'insert'; call.payload = p; return b; },
+      update(p) { call.op = 'update'; call.payload = p; return b; },
+      upsert(p) { call.op = 'upsert'; call.payload = p; return b; },
+      delete() { call.op = 'delete'; return b; },
+      eq(col, val) { call.filters.push([col, val]); return b; },
+      order() { return b; }, ilike() { return b; }, limit() { return b; },
+      single() { call.single = true; return b; },
+      then(resolve, reject) {
+        sbCalls.push(call);
+        let result;
+        if (call.op === 'insert' && call.single) result = { data: { id: nextInsertId++ }, error: null };
+        else if (call.op === 'select') result = { data: call.single ? null : (sbStub.__nextSelectData || []), error: null };
+        else result = { data: null, error: null };
+        return Promise.resolve(result).then(resolve, reject);
+      },
+    };
+    return b;
+  },
   auth: { getSession: async () => ({ data: { session: null } }) },
 };
 
@@ -81,6 +105,8 @@ const appCode = blocks.join('\n;\n');
 const testCode = `
 ;(async () => {
   const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const tick = ms => new Promise(r => setTimeout(r, ms));
+  const toastText = () => document.getElementById('toast').textContent;
 
   // Seed state: two active listings (ids 101, 102)
   LISTINGS = [
@@ -194,6 +220,101 @@ const testCode = `
     JSON.stringify({ id: added.id, title: added.title }));
   __report('P3: NEW tab reset after save', newTitle === '' && newDesc === '' && newCost === '',
     JSON.stringify({ newTitle, newDesc, newCost }));
+
+  // ── S1: null cost can't slip through markDone ──
+  __sb.__nextSelectData = [
+    { id: 7, title: 'Null Cost Item', shopee_url: 's7', carousell_url: 'c7', source_cost: null, sell_price: null },
+  ];
+  await loadListingsFromSupabase();
+  __sb.__nextSelectData = null;
+  __report('S1: null source_cost maps to empty string, not "null"',
+    LISTINGS.length === 1 && LISTINGS[0][3] === '' && LISTINGS[0][4] === '',
+    JSON.stringify(LISTINGS[0]));
+
+  currentIndex = 0; editedCost = null;
+  doneSet = new Set(); deletedSet = new Set();
+  const dlen = doneData.length;
+  markDone();
+  __report('S1: markDone blocked when cost is empty',
+    doneData.length === dlen && toastText() === 'Enter a cost before marking Done', toastText());
+
+  LISTINGS[0][3] = 'null';   // legacy bad shape from the old String() coercion
+  markDone();
+  __report('S1: markDone blocked on legacy "null" string cost',
+    doneData.length === dlen, String(doneData.length));
+
+  __sbCalls.length = 0;
+  editedCost = 12;
+  markDone();
+  const sUpd = __sbCalls.find(c => c.op === 'update' && c.table === 'listings');
+  __report('S1: valid cost still marks done and updates status by id',
+    doneData.length === dlen + 1 && !!sUpd && eq(sUpd.filters, [['id', 7]]) && sUpd.payload.status === 'done',
+    JSON.stringify({ len: doneData.length, upd: sUpd && sUpd.filters }));
+
+  // ── S2: extension price autofill sets editedCost ──
+  LISTINGS = [['No Cost Item', 'https://shopee/X', '', '', '']];
+  LISTING_IDS = [301]; currentIndex = 0;
+  doneSet = new Set(); deletedSet = new Set();
+  editedCost = null; shopeeInput = '';
+  window.__product = { name: 'Foo Product', description: 'Nice thing', images: [], price_min_sgd: 25 };
+  document.getElementById('fix-shopee-fetch-url').value = 'https://shopee.sg/foo';
+  await fetchShopeeDataFix();
+  await tick(20);
+  __report('S2: extension price autofills editedCost when listing has no cost',
+    editedCost === 25, String(editedCost));
+  __report('S2: autofill survives the re-render (cost input shows 25)',
+    document.getElementById('listing-wrap').innerHTML.includes('value="25"'),
+    'editedCost=' + editedCost);
+
+  editedCost = null; shopeeInput = '';
+  LISTINGS[0][3] = '29.4';
+  await fetchShopeeDataFix();
+  await tick(20);
+  __report('S2: an existing valid cost is not overwritten by the fetch',
+    editedCost === null, String(editedCost));
+
+  // ── T4: double-tap Save inserts exactly one row ──
+  __sbCalls.length = 0;
+  const beforeLen = doneData.length;
+  document.getElementById('new-title-ta').value        = 'Dup Test Item';
+  document.getElementById('new-desc-ta').value         = '';
+  document.getElementById('new-cost-input').value      = '10';
+  document.getElementById('new-shopee-fetch-url').value = '';
+  document.getElementById('new-caro-url').value        = '';
+  const q1 = saveNewListing(); const q2 = saveNewListing();
+  await q1; await q2;
+  const inserts = __sbCalls.filter(c => c.op === 'insert' && c.table === 'listings');
+  __report('T4: double-tap Save inserts exactly one row',
+    inserts.length === 1 && doneData.length === beforeLen + 1,
+    JSON.stringify({ inserts: inserts.length, doneAdded: doneData.length - beforeLen }));
+
+  // ── T5: entering LISTINGS tab clears the stale search cache ──
+  _listingsCache = [{ id: 1 }]; _listingsEditingId = 9;
+  switchTab('done');
+  __report('T5: entering LISTINGS tab clears the stale search cache',
+    _listingsCache.length === 0 && _listingsEditingId === null,
+    JSON.stringify([_listingsCache.length, _listingsEditingId]));
+
+  // ── Q2: NEW-tab draft persists the cost ──
+  newTitle = 'Draft Item'; newDesc = ''; newShopeeInput = '';
+  newShopeeUrl = ''; newCaroUrl = ''; newCost = '33';
+  saveDraft();
+  const draft = JSON.parse(localStorage.getItem('carobiz_new_draft'));
+  __report('Q2: draft includes the cost field', draft.cost === '33', JSON.stringify(draft));
+  newCost = ''; newTitle = '';
+  loadLocal();
+  __report('Q2: loadLocal restores the cost from the draft',
+    newCost === '33' && newTitle === 'Draft Item', JSON.stringify({ newCost, newTitle }));
+  localStorage.removeItem('carobiz_new_draft');
+
+  // ── Q1: export backup ──
+  __sbCalls.length = 0;
+  __sb.__nextSelectData = [{ id: 1, title: 'Row One' }];
+  await exportBackup();
+  __sb.__nextSelectData = null;
+  const sel = __sbCalls.find(c => c.op === 'select' && c.table === 'listings');
+  __report('Q1: export reads all listings and reports success',
+    !!sel && toastText() === 'Backup downloaded ✓', toastText());
 })()
 `;
 
@@ -204,9 +325,13 @@ const sandbox = {
   document: documentStub,
   localStorage: localStorageStub,
   navigator: { onLine: true, clipboard: { writeText: async () => {} } },
-  window: { addEventListener() {}, removeEventListener() {}, postMessage() {}, open() {} },
+  window: windowStub,
   supabase: { createClient: () => sbStub },
-  __report, __sbCalls: sbCalls,
+  // Fast-failing network: callClaude sees a non-529 error and throws immediately
+  fetch: async () => ({ ok: false, status: 418, json: async () => ({ error: 'test-no-network' }) }),
+  Blob: class { constructor(parts, opts) { this.parts = parts; this.opts = opts; } },
+  URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
+  __report, __sbCalls: sbCalls, __sb: sbStub,
 };
 
 try {

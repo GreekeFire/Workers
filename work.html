@@ -888,8 +888,9 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 
   <!-- DONE view -->
   <div id="view-done" style="display:none">
-    <div class="done-search-wrap">
-      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()">
+    <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
+      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
+      <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
     </div>
     <div class="done-list" id="done-list"></div>
   </div>
@@ -936,7 +937,6 @@ let salesLog = [];
 let activeTab = 'fix';
 
 // AI state
-let aiExpanded = false;
 let aiLoading = false;
 let aiTitle = '';
 let aiDesc = '';
@@ -990,7 +990,9 @@ async function loadListingsFromSupabase() {
       .eq('status', 'active')
       .order('id');
     if (error) throw error;
-    LISTINGS    = data.map(r => [r.title, r.shopee_url, r.carousell_url, String(r.source_cost), String(r.sell_price)]);
+    LISTINGS    = data.map(r => [r.title, r.shopee_url, r.carousell_url,
+      r.source_cost == null ? '' : String(r.source_cost),
+      r.sell_price  == null ? '' : String(r.sell_price)]);
     LISTING_IDS = data.map(r => r.id);
   } catch (e) {
     console.error('Failed to load listings from Supabase:', e);
@@ -1015,6 +1017,7 @@ function loadLocal() {
       newShopeeInput= d.shopeeInput|| '';
       newShopeeUrl  = d.shopeeUrl  || '';
       newCaroUrl    = d.caroUrl    || '';
+      newCost       = d.cost       || '';
       if (newTitle || newDesc) newShopeeCollapsed = true;
     }
   } catch(e) {}
@@ -1103,8 +1106,8 @@ function findNext(from) {
 
 function markDone() {
   const idx = currentIndex;
-  const costVal = editedCost !== null ? editedCost : LISTINGS[idx][3];
-  if (!costVal || costVal <= 0) { toast('Enter a cost before marking Done'); return; }
+  const costVal = parseFloat(editedCost !== null ? editedCost : LISTINGS[idx][3]);
+  if (!(costVal > 0)) { toast('Enter a cost before marking Done'); return; }
   if (!doneSet.has(idx) && !deletedSet.has(idx)) {
     const L = LISTINGS[idx];
     const sbId = LISTING_IDS[idx];
@@ -1121,8 +1124,10 @@ function markDone() {
       sellPrice: calcSell(editedCost !== null ? editedCost : L[3]),
       doneAt: new Date().toISOString()
     });
-    // Mark as done in Supabase
-    if (sbId) sb.from('listings').update({ status: 'done' }).eq('id', sbId).then(() => {});
+    // Mark as done in Supabase; the id-based doneSet rebuild self-heals if this
+    // write is lost, but surface it so a "ghost" item next boot isn't a mystery
+    if (sbId) sb.from('listings').update({ status: 'done' }).eq('id', sbId)
+      .then(({ error }) => { if (error) toast('Status sync failed — item may reappear'); });
   }
   resetAI();
   currentIndex = findNext(idx + 1);
@@ -1314,7 +1319,7 @@ function saveDraft() {
   if (newTitle || newDesc || newShopeeInput) {
     localStorage.setItem('carobiz_new_draft', JSON.stringify({
       title: newTitle, desc: newDesc, shopeeInput: newShopeeInput,
-      shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl
+      shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl, cost: newCost
     }));
   } else {
     localStorage.removeItem('carobiz_new_draft');
@@ -1323,9 +1328,9 @@ function saveDraft() {
 
 
 // Routes through /api/claude so the Anthropic key never touches the browser.
-// Falls back to a direct browser call if the server key isn't configured
-// (backwards-compatible for local dev with a saved key).
-async function callClaude(_unusedKey, system, userContent, maxTokens, temperature = 0.3, retries = 2) {
+// Falls back to a direct browser call with savedApiKey if the server key
+// isn't configured (backwards-compatible for local dev with a saved key).
+async function callClaude(system, userContent, maxTokens, temperature = 0.3, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     let resp, data;
     try {
@@ -1379,17 +1384,15 @@ async function callClaude(_unusedKey, system, userContent, maxTokens, temperatur
 }
 
 async function runAIGenerate(productText, { titleOnly = false, descOnly = false } = {}) {
-  // Key param kept for fallback path inside callClaude — server route doesn't need it
-  const apiKey = savedApiKey;
   const productContent = `Product info:\n\n${productText}`;
-  const titlePromise = descOnly  ? null : callClaude(apiKey, TITLE_SYSTEM, productContent, 512);
-  const descPromise  = titleOnly ? null : callClaude(apiKey, DESC_SYSTEM, productContent, 1536, 0.5);
+  const titlePromise = descOnly  ? null : callClaude(TITLE_SYSTEM, productContent, 512);
+  const descPromise  = titleOnly ? null : callClaude(DESC_SYSTEM, productContent, 1536, 0.5);
   let rawTitle = '';
   if (!descOnly) {
     let titleText = await titlePromise;
     rawTitle = titleText.trim().split('\n')[0].trim();
     if (rawTitle.length < 180) {
-      const retry = await callClaude(apiKey, TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.', 512);
+      const retry = await callClaude(TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.', 512);
       rawTitle = retry.trim().split('\n')[0].trim();
     }
     if (rawTitle.length > 225) {
@@ -1530,10 +1533,12 @@ async function fetchShopeeDataFix() {
       shopeeInput     = [p.name, p.description].filter(Boolean).join('\n\n');
       fixShopeeImages = (p.images || []).map(h => `https://down-sg.img.susercontent.com/file/${h}`);
       shopeeCollapsed = true;
-      // Auto-fill source cost if price came back
+      // Auto-fill source cost if price came back and the listing has no valid
+      // cost yet. Set state, not the DOM — the re-render below rebuilds the
+      // input from editedCost, and markDone reads editedCost too.
       if (p.price_min_sgd) {
-        const costEl = document.getElementById('fix-cost-input');
-        if (costEl && !costEl.value) costEl.value = p.price_min_sgd;
+        const cur = parseFloat(editedCost !== null ? editedCost : LISTINGS[currentIndex][3]);
+        if (!(cur > 0)) editedCost = parseFloat(p.price_min_sgd) || null;
       }
       toast('Fetched via extension ✓');
     } else {
@@ -1597,6 +1602,8 @@ function saveApiKeyNew() {
   }
 }
 
+let _savingNew = false;
+
 async function saveNewListing() {
   const titleEl  = document.getElementById('new-title-ta');
   const costEl   = document.getElementById('new-cost-input');
@@ -1609,6 +1616,8 @@ async function saveNewListing() {
   if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
   if (caroEl)   newCaroUrl   = caroEl.value.trim();
   if (!newTitle) { toast('Add a title first'); return; }
+  if (_savingNew) return;   // double-tap during the awaited insert = duplicate rows
+  _savingNew = true;
   const cost = parseFloat(newCost) || 0;
   const sell = calcSell(cost);
   // Insert into the listings table so it shows up in LISTINGS search —
@@ -1625,6 +1634,7 @@ async function saveNewListing() {
     console.warn('Failed to insert listing row:', e);
     toast('Saved, but not added to LISTINGS catalog');
   }
+  _savingNew = false;   // past the only await — the rest runs synchronously
   doneData.push({
     index: null,
     id: sbId,
@@ -2073,7 +2083,7 @@ function _renderNewView() {
       <div class="pcol-label">Cost</div>
       <div class="pcol-input-wrap">
         <span class="pcol-currency">$</span>
-        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="new-cost-input">
+        <input class="cost-input" type="number" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;saveDraft();document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="new-cost-input">
       </div>
     </div>
     <div class="parrow">→</div>
@@ -2193,7 +2203,13 @@ function switchTab(tab) {
   if (tab === 'fix') renderFixView();
   else if (tab === 'new') renderNewView();
   else if (tab === 'sales') renderSalesView();
-  else if (tab === 'done') renderDoneView();
+  else if (tab === 'done') {
+    // Drop the cached search results — edits made elsewhere (FIX tab, another
+    // device) would otherwise show stale until the query is retyped
+    _listingsCache = [];
+    _listingsEditingId = null;
+    renderDoneView();
+  }
 }
 
 let _doneSearchTimer = null;
@@ -2330,6 +2346,38 @@ async function listingsDelete(id) {
   _renderListingsResults(_listingsCache);
 }
 
+
+// Downloads a full JSON backup: every listings row plus the done/sales blobs.
+// The only copy of this data lives in Supabase (no backups there), so this is
+// the recovery path if a row is ever deleted or overwritten by mistake.
+async function exportBackup() {
+  toast('Preparing backup…');
+  let listings;
+  try {
+    const { data, error } = await sb.from('listings').select('*').order('id');
+    if (error) throw error;
+    listings = data;
+  } catch (e) {
+    toast('Backup failed — could not read listings');
+    return;
+  }
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    listings,
+    doneData,
+    salesLog
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `workers-backup-${getToday()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Backup downloaded ✓');
+}
 
 function copyField(fieldId, btnId) {
   const el = document.getElementById(fieldId);
