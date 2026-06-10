@@ -77,7 +77,8 @@ const sbStub = {
       upsert(p) { call.op = 'upsert'; call.payload = p; return b; },
       delete() { call.op = 'delete'; return b; },
       eq(col, val) { call.filters.push([col, val]); return b; },
-      order() { return b; }, ilike() { return b; }, limit() { return b; },
+      order() { return b; }, limit() { return b; },
+      ilike(col, pat) { (call.ilikes ||= []).push(pat); return b; },
       single() { call.single = true; return b; },
       then(resolve, reject) {
         sbCalls.push(call);
@@ -358,6 +359,43 @@ const testCode = `
   __report('T2: recovered sales are pushed back to the cloud',
     __sbCalls.some(c => c.op === 'upsert' && c.payload?.key === 'carobiz_sales'),
     JSON.stringify(__sbCalls.map(c => c.op)));
+
+  // ── Word-based search (SALES + LISTINGS) ──
+  doneSet = new Set(); deletedSet = new Set();
+  LISTINGS = [{ id: 401, title: 'Foldable Deck Chair Recliner', shopee: '', caro: '', cost: '20', sell: '50' }];
+  doneData = [{ index: 0, id: 999, title: 'Capybara Plush Long Pillow', shopeeUrl: 's', carousellUrl: 'c',
+    sourceCost: 30, sellPrice: 54.9, doneAt: '2026-06-01T00:00:00Z' }];
+
+  searchListings('Capybara\\u00A0Plush | Long\\nPillow');
+  __report('Search: pasted title with NBSP/pipes/newline matches in SALES',
+    _searchMatches.length === 1 && _searchMatches[0].name === 'Capybara Plush Long Pillow',
+    JSON.stringify(_searchMatches.map(m => m.name)));
+
+  searchListings('pillow capybara');
+  __report('Search: words out of order still match',
+    _searchMatches.length === 1, JSON.stringify(_searchMatches.map(m => m.name)));
+
+  searchListings('capybara sofa');
+  __report('Search: a word not in the title gives no match',
+    _searchMatches.length === 0, JSON.stringify(_searchMatches.map(m => m.name)));
+
+  searchListings('deck\\u00A0chair');
+  __report('Search: active LISTINGS matching is word-based too',
+    _searchMatches.length === 1 && _searchMatches[0].listingIdx === 0,
+    JSON.stringify(_searchMatches.map(m => m.name)));
+
+  __sbCalls.length = 0;
+  __sb.__nextSelectData = [{ id: 7, title: 'Drain Buster Air Power Plunger', shopee_url: '',
+    carousell_url: '', source_cost: 9.8, sell_price: 35, status: 'done' }];
+  await _searchAllListings('Drain\\u00A0Buster | Plunger');
+  __sb.__nextSelectData = null;
+  const sq = __sbCalls.find(c => c.table === 'listings' && c.op === 'select');
+  __report('Search: LISTINGS query sends one ilike filter per word',
+    !!sq && eq(sq.ilikes, ['%Drain%', '%Buster%', '%Plunger%']),
+    JSON.stringify(sq && sq.ilikes));
+  __report('Search: LISTINGS results render from the word-based query',
+    document.getElementById('done-list').innerHTML.includes('Drain Buster'),
+    document.getElementById('done-list').innerHTML.slice(0, 100));
 })()
 `;
 

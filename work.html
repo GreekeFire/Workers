@@ -1687,12 +1687,16 @@ let _searchMatches = [];
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
   if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
-  const q = query.toLowerCase();
+  // Word-based match (same approach as the LISTINGS search): every word must
+  // appear, any order — immune to pasted non-breaking spaces, pipes, dashes
+  const terms = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
+  if (!terms.length) terms.push(query.toLowerCase().trim());
+  const matchesQuery = title => { const t = title.toLowerCase(); return terms.every(w => t.includes(w)); };
   _searchMatches = [];
   // Search done listings first — uses AI-rewritten titles
   for (const d of doneData) {
     if (_searchMatches.length >= 8) break;
-    if (!d.title.toLowerCase().includes(q)) continue;
+    if (!matchesQuery(d.title)) continue;
     // Resolve the entry's current queue position by stable id — null when the
     // listing is no longer active. The stored d.index goes stale as the list shifts.
     const li = d.id != null ? LISTINGS.findIndex(l => l.id === d.id) : -1;
@@ -1708,7 +1712,7 @@ function searchListings(query) {
   // Fall back to unprocessed LISTINGS by original title
   for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
     if (doneSet.has(i) || deletedSet.has(i)) continue;
-    if (!LISTINGS[i].title.toLowerCase().includes(q)) continue;
+    if (!matchesQuery(LISTINGS[i].title)) continue;
     _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingIdx: i });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
@@ -2244,12 +2248,15 @@ function renderDoneView() {
 async function _searchAllListings(query) {
   const list = document.getElementById('done-list');
   try {
-    const { data, error } = await sb
+    // Word-based match: require every word, in any order. Splitting on
+    // non-alphanumerics strips the invisible junk a paste carries (non-breaking
+    // spaces, pipes, dashes, newlines) that breaks exact-substring search.
+    const terms = query.split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1).slice(0, 8);
+    let q = sb
       .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
-      .ilike('title', `%${query}%`)
-      .order('status')
-      .limit(30);
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status');
+    for (const t of terms.length ? terms : [query.trim()]) q = q.ilike('title', `%${t}%`);
+    const { data, error } = await q.order('status').limit(30);
     if (error) throw error;
     if (!data.length) { list.innerHTML = '<p class="done-empty">No matches</p>'; return; }
     _listingsCache = data;
