@@ -934,7 +934,6 @@ let deletedTodayCount = 0;
 let todayDate = getToday();
 let salesLog = [];
 let activeTab = 'fix';
-let editingDoneIdx = null;
 
 // AI state
 let aiExpanded = false;
@@ -973,7 +972,6 @@ let newFetchCollapsed = false;
 
 // Link overrides
 let linkEditing = false;
-let doneLinkEditIdx = null;
 let urlOverrides = {};
 
 // Init
@@ -1178,16 +1176,6 @@ function undoDelete() {
   renderAll();
   const remaining = undoStack.length;
   toast(remaining > 0 ? `Undo ✓ (${remaining} pending)` : 'Undo ✓');
-}
-
-function saveDoneLinkEdits(doneIdx, listingIndex) {
-  const s = document.getElementById(`done-link-shopee-${doneIdx}`)?.value.trim() || '';
-  const c = document.getElementById(`done-link-caro-${doneIdx}`)?.value.trim() || '';
-  urlOverrides[listingIndex] = { shopeeUrl: s, carousellUrl: c };
-  localStorage.setItem('carobiz_url_overrides', JSON.stringify(urlOverrides));
-  doneLinkEditIdx = null;
-  renderDoneView();
-  toast('Links saved');
 }
 
 function saveLinkEdits() {
@@ -1796,8 +1784,6 @@ function _renderFixView() {
   if (currentIndex >= total || remaining === 0) {
     wrap.innerHTML = `<div class="queue-complete"><div class="big-check">✓</div><h2>Queue complete</h2><p>${doneSet.size} done &middot; ${deletedSet.size} deleted</p></div>`;
     actionRow.style.display = 'none';
-    // Signal to dashboard that queue is done today
-    if (doneTodayCount > 0) localStorage.setItem('workers_queue_done:' + getToday(), '1');
     return;
   }
 
@@ -2324,42 +2310,6 @@ async function listingsDelete(id) {
   _renderListingsResults(_listingsCache);
 }
 
-
-function updateDoneEditSell(i, val) {
-  const el = document.getElementById(`edit-sell-${i}`);
-  if (el) el.textContent = '$' + calcSell(parseFloat(val) || 0).toFixed(2);
-}
-
-function saveDoneEdit(i) {
-  const title = document.getElementById(`edit-title-${i}`)?.value?.trim();
-  const cost = parseFloat(document.getElementById(`edit-cost-${i}`)?.value) || 0;
-  if (!title) { toast('Title cannot be empty'); return; }
-  doneData[i].title = title;
-  doneData[i].sourceCost = cost;
-  doneData[i].sellPrice = calcSell(cost);
-  editingDoneIdx = null;
-  pushToSupabase();
-  renderDoneView();
-  toast('Saved');
-}
-
-function deleteDoneEntry(i) {
-  if (!confirm('Remove this listing from Done? This also removes it from your processed count.')) return;
-  const entry = doneData[i];
-  if (!entry) return;
-  if (entry.doneAt?.startsWith(getToday())) {
-    doneTodayCount = Math.max(0, doneTodayCount - 1);
-  }
-  doneData.splice(i, 1);
-  if (entry.index !== null) doneSet.delete(entry.index);
-  editingDoneIdx = null;
-  doneLinkEditIdx = null;
-  pushToSupabase();
-  renderDoneView();
-  renderFixView();
-  renderSessionBar();
-  toast('Listing removed');
-}
 
 function copyField(fieldId, btnId) {
   const el = document.getElementById(fieldId);
