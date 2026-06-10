@@ -1823,8 +1823,7 @@ function _renderFixView() {
   const total = LISTINGS.length;
   const processed = doneSet.size + deletedSet.size;
   const remaining = total - processed;
-  document.getElementById('progress-line').textContent =
-    doneSet.size + ' done · ' + deletedSet.size + ' deleted · ' + remaining + ' remaining';
+  document.getElementById('progress-line').textContent = remaining + ' remaining';
 
   const wrap = document.getElementById('listing-wrap');
   const actionRow = document.getElementById('action-row');
