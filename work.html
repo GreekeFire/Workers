@@ -2444,13 +2444,30 @@ function toastWithUndo(msg, undoFn) {
   toastTimer = setTimeout(() => { el.classList.remove('show'); _undoFn = null; }, 4000);
 }
 
+// Open the current FIX listing's Shopee/Carousell link in a new tab.
+// Anchor click (not window.open) for iPhone PWA compatibility.
+function openListingLink(kind) {
+  const L = LISTINGS[currentIndex];
+  if (!L) return;
+  const url = kind === 'shopee' ? L.shopee : L.caro;
+  if (!url) { toast(kind === 'shopee' ? 'No Shopee link' : 'No Carousell link'); return; }
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // Keyboard shortcuts for FIX tab (desktop)
 document.addEventListener('keydown', e => {
   if (activeTab !== 'fix') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;   // keep Ctrl+C / Cmd+C etc. intact
   if (e.target.matches('input, textarea, select')) return;
   if (currentIndex >= LISTINGS.length) return;
   if (e.key === 'd' || e.key === 'D') { e.preventDefault(); markDone(); }
   if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') { e.preventDefault(); markDeleted(); }
+  if (e.key === 's' || e.key === 'S') { e.preventDefault(); openListingLink('shopee'); }
+  if (e.key === 'c' || e.key === 'C') { e.preventDefault(); openListingLink('caro'); }
 });
 
 document.addEventListener('visibilitychange', () => {

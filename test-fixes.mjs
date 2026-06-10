@@ -34,9 +34,10 @@ const documentStub = {
   hidden: false,
   activeElement: null,
   body: makeEl('body'),
+  __created: [],
   getElementById(id) { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); },
   querySelector() { return null; },
-  createElement(tag) { return makeEl('created-' + tag); },
+  createElement(tag) { const el = makeEl('created-' + tag); this.__created.push(el); return el; },
   addEventListener() {},
 };
 
@@ -401,6 +402,26 @@ const testCode = `
   __report('Search: LISTINGS results render from the word-based query',
     document.getElementById('done-list').innerHTML.includes('Drain Buster'),
     document.getElementById('done-list').innerHTML.slice(0, 100));
+
+  // ── S/C shortcuts open the current FIX listing's links ──
+  LISTINGS = [{ id: 601, title: 'Shortcut Item', shopee: 'https://shopee/sc', caro: 'https://caro/sc', cost: '10', sell: '35' }];
+  currentIndex = 0;
+  openListingLink('shopee');
+  const aS = document.__created[document.__created.length - 1];
+  __report('Shortcut S: opens the Shopee link via new-tab anchor',
+    aS.href === 'https://shopee/sc' && aS.target === '_blank' && aS.rel === 'noopener',
+    JSON.stringify([aS.href, aS.target, aS.rel]));
+  openListingLink('caro');
+  const aC = document.__created[document.__created.length - 1];
+  __report('Shortcut C: opens the Carousell link via new-tab anchor',
+    aC.href === 'https://caro/sc' && aC.target === '_blank',
+    JSON.stringify([aC.href, aC.target]));
+  LISTINGS[0].caro = '';
+  const createdBefore = document.__created.length;
+  openListingLink('caro');
+  __report('Shortcut: missing link shows a toast and opens nothing',
+    toastText() === 'No Carousell link' && document.__created.length === createdBefore,
+    toastText());
 })()
 `;
 
