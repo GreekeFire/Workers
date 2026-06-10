@@ -995,6 +995,8 @@ let newShopeeImages = [];
 let newShopeeFetching = false;
 let newApiKeyVisible = false;
 let newFetchCollapsed = false;
+let newBatchRunning = false;
+let newBatchResults = []; // [{ url, status, title, desc }]
 
 let linkEditing = false;
 
@@ -1757,6 +1759,70 @@ function saveApiKeyNew() {
 
 let _savingNew = false;
 
+const _batchCopyTimers = {};
+function copyBatch(i, field) {
+  const taId  = field === 'title' ? `btt-${i}` : `bdt-${i}`;
+  const btnId = field === 'title' ? `bct-${i}` : `bcd-${i}`;
+  const ta  = document.getElementById(taId);
+  const btn = document.getElementById(btnId);
+  if (!ta || !ta.value) return;
+  navigator.clipboard.writeText(ta.value).then(() => {
+    btn.textContent = 'Copied ✓'; btn.classList.add('copied');
+    clearTimeout(_batchCopyTimers[btnId]);
+    _batchCopyTimers[btnId] = setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+async function saveBatchItem(i) {
+  const r = newBatchResults[i];
+  if (!r || !r.title) { toast('No title to save'); return; }
+  const { data, error } = await sb.from('listings').insert({
+    title: r.title, status: 'done'
+  }).select('id').single();
+  const sbId = error ? null : data?.id;
+  doneData.push({
+    index: null, id: sbId, title: r.title, description: r.desc || '',
+    shopeeUrl: r.url, carousellUrl: '', sourceCost: 0, sellPrice: 0,
+    doneAt: new Date().toISOString()
+  });
+  pushToSupabase();
+  renderSessionBar();
+  toast('Saved ✓');
+}
+
+async function batchGenerateNew() {
+  if (newBatchRunning) return;
+  const urlsEl = document.getElementById('new-batch-urls');
+  const urls = (urlsEl?.value || '').split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
+  if (!urls.length) { toast('Paste at least one Shopee URL'); return; }
+
+  newBatchRunning = true;
+  newBatchResults = urls.map(url => ({ url, status: 'loading', loadingMsg: 'Fetching…' }));
+  renderNewView();
+
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const res  = await fetch(`/api/shopee?url=${encodeURIComponent(urls[i])}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Fetch failed');
+      const productText = [data.title, data.description].filter(Boolean).join('\n\n');
+      if (!productText) throw new Error('No product text returned');
+
+      newBatchResults[i].loadingMsg = 'Generating…';
+      renderNewView();
+
+      const { title, desc } = await runAIGenerate(productText);
+      newBatchResults[i] = { url: urls[i], status: 'done', title, desc };
+    } catch (e) {
+      newBatchResults[i] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
+    }
+    renderNewView();
+  }
+
+  newBatchRunning = false;
+  renderNewView();
+}
+
 async function saveNewListing() {
   const titleEl  = document.getElementById('new-title-ta');
   const costEl   = document.getElementById('new-cost-input');
@@ -2295,6 +2361,55 @@ function _renderNewView() {
     <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
   </div>`;
 
+  // Batch section
+  html += `<div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--card-border)">
+    <div class="field-label" style="margin-bottom:8px">Batch — Multiple URLs</div>
+    <textarea class="ai-field" id="new-batch-urls" rows="3"
+      placeholder="Paste Shopee URLs, one per line…"
+      oninput="autoResize(this)" style="margin-bottom:8px"></textarea>
+    <button class="ai-gen-btn" ${newBatchRunning?'disabled':''} onclick="batchGenerateNew()">
+      ${newBatchRunning ? 'Generating…' : '✨ Generate All'}
+    </button>
+  </div>`;
+
+  // Batch results
+  if (newBatchResults.length) {
+    html += newBatchResults.map((r, i) => {
+      const shortUrl = r.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 55);
+      if (r.status === 'loading') {
+        return `<div class="listing-card" style="margin-top:12px">
+          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+          <div class="ai-loading">${r.loadingMsg || 'Working…'}</div>
+        </div>`;
+      }
+      if (r.status === 'error') {
+        return `<div class="listing-card" style="margin-top:12px">
+          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+          <div style="color:var(--danger);font-size:12px">Error: ${esc(r.error)}</div>
+        </div>`;
+      }
+      const tlen = (r.title||'').length;
+      return `<div class="listing-card" style="margin-top:12px">
+        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+        <div class="field-header">
+          <span class="field-label">Title</span>
+          <button class="copy-btn" id="bct-${i}" onclick="copyBatch(${i},'title')">Copy</button>
+        </div>
+        <textarea class="title-input" rows="1" id="btt-${i}"
+          oninput="newBatchResults[${i}].title=this.value;autoResize(this);updateCharCount(this.value,'bcc-${i}')"
+          style="margin-bottom:0">${esc(r.title||'')}</textarea>
+        <div class="char-counter ${tlen>225?'danger':tlen>=200?'warn':''}" id="bcc-${i}">${tlen} / 225</div>
+        <div class="field-header" style="margin-top:4px">
+          <span class="field-label">Description</span>
+          <button class="copy-btn" id="bcd-${i}" onclick="copyBatch(${i},'desc')">Copy</button>
+        </div>
+        <textarea class="ai-field" id="bdt-${i}"
+          oninput="newBatchResults[${i}].desc=this.value;autoResize(this)">${esc(r.desc||'')}</textarea>
+        <button class="btn-done" style="margin-top:10px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
+      </div>`;
+    }).join('');
+  }
+
   wrap.innerHTML = html;
 
   requestAnimationFrame(() => {
@@ -2304,6 +2419,10 @@ function _renderNewView() {
     if (da) autoResize(da);
     const sa = document.getElementById('new-shopee-ta');
     if (sa) autoResize(sa);
+    newBatchResults.forEach((_, i) => {
+      const t = document.getElementById(`btt-${i}`); if (t) autoResize(t);
+      const d = document.getElementById(`bdt-${i}`); if (d) autoResize(d);
+    });
   });
 }
 

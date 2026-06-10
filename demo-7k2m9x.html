@@ -364,56 +364,15 @@
 
   <!-- Input card -->
   <div class="card">
-    <label class="field-label">Product Info</label>
-    <textarea id="product-ta" rows="6"
-      placeholder="Paste the product title and description here…"
+    <label class="field-label">Shopee URLs — one per line</label>
+    <textarea id="urls-ta" rows="4"
+      placeholder="https://shopee.sg/product-name-i.123.456&#10;https://shopee.sg/another-item-i.789.012&#10;https://shopee.sg/…"
       oninput="autoResize(this)"></textarea>
-
-    <div class="divider">or</div>
-
-    <div class="fetch-row">
-      <input type="url" id="shopee-url" placeholder="Shopee URL (optional)…" style="flex:1;font-size:13px;padding:9px 12px">
-      <button class="fetch-btn" id="fetch-btn" onclick="fetchShopee()">Fetch ↓</button>
-    </div>
-
-    <button class="gen-btn" id="gen-btn" onclick="generate()">✨ Generate</button>
+    <button class="gen-btn" id="gen-btn" onclick="batchGenerate()" style="margin-top:12px">✨ Generate</button>
   </div>
 
-  <!-- Output card -->
-  <div class="card" id="output-card" style="display:none">
-    <div id="loading-row" class="ai-loading" style="display:none">Generating…</div>
-
-    <div id="output-fields" style="display:none">
-      <div class="field-header">
-        <span class="field-label">Title</span>
-        <div style="display:flex;gap:6px">
-          <button class="copy-btn" style="font-size:10px" id="regen-title-btn" onclick="regenerate('title')">↺</button>
-          <button class="copy-btn" id="copy-title-btn" onclick="copyField('title-ta','copy-title-btn')">Copy</button>
-        </div>
-      </div>
-      <textarea class="title-ta" id="title-ta"
-        oninput="autoResize(this);updateCharCount(this.value,'char-count')"></textarea>
-      <div class="char-counter" id="char-count">0 / 225</div>
-
-      <div class="field-header" style="margin-top:4px">
-        <span class="field-label">Description</span>
-        <div style="display:flex;gap:6px">
-          <button class="copy-btn" style="font-size:10px" id="regen-desc-btn" onclick="regenerate('desc')">↺</button>
-          <button class="copy-btn" id="copy-desc-btn" onclick="copyField('desc-ta','copy-desc-btn')">Copy</button>
-        </div>
-      </div>
-      <textarea class="desc-ta" id="desc-ta"
-        oninput="autoResize(this)"></textarea>
-
-      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border)">
-        <button class="gen-btn" onclick="generate()">↺ Regenerate Both</button>
-        <div class="save-teaser">
-          Save to Catalog
-          <span class="save-teaser-badge">Full Version</span>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Results -->
+  <div id="results"></div>
 
   <div id="gen-counter" style="text-align:center;font-size:11px;color:var(--text-tertiary);margin-top:8px"></div>
 
@@ -648,89 +607,111 @@ async function runAIGenerate(productText, { titleOnly = false, descOnly = false 
   return { title: rawTitle, desc };
 }
 
-async function generate(opts = {}) {
+function setCardStatus(i, html) {
+  const el = document.getElementById(`rs-${i}`);
+  if (el) el.innerHTML = html;
+}
+
+function showCardOutput(i, title, desc) {
+  const out = document.getElementById(`ro-${i}`);
+  if (!out) return;
+  const titleTa = document.getElementById(`rt-${i}`);
+  const descTa  = document.getElementById(`rd-${i}`);
+  if (titleTa) { titleTa.value = title; autoResize(titleTa); updateCharCount(title, `cc-${i}`); }
+  if (descTa)  { descTa.value  = desc;  autoResize(descTa); }
+  out.style.display = 'block';
+  titleTa?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function copyById(taId, btnId) {
+  const ta  = document.getElementById(taId);
+  const btn = document.getElementById(btnId);
+  if (!ta || !ta.value) return;
+  navigator.clipboard.writeText(ta.value).then(() => {
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('copied');
+    clearTimeout(copyTimers[btnId]);
+    copyTimers[btnId] = setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function createResultCard(i, url) {
+  const shortUrl = url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.id = `rc-${i}`;
+  card.innerHTML = `
+    <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+    <div id="rs-${i}" class="ai-loading">Fetching…</div>
+    <div id="ro-${i}" style="display:none">
+      <div class="field-header" style="margin-top:4px">
+        <span class="field-label">Title</span>
+        <button class="copy-btn" id="ctb-${i}" onclick="copyById('rt-${i}','ctb-${i}')">Copy</button>
+      </div>
+      <textarea class="title-ta" id="rt-${i}"
+        oninput="autoResize(this);updateCharCount(this.value,'cc-${i}')"></textarea>
+      <div class="char-counter" id="cc-${i}">0 / 225</div>
+      <div class="field-header" style="margin-top:4px">
+        <span class="field-label">Description</span>
+        <button class="copy-btn" id="cdb-${i}" onclick="copyById('rd-${i}','cdb-${i}')">Copy</button>
+      </div>
+      <textarea class="desc-ta" id="rd-${i}" oninput="autoResize(this)"></textarea>
+      <div class="save-teaser" style="margin-top:12px">Save to Catalog<span class="save-teaser-badge">Full Version</span></div>
+    </div>`;
+  document.getElementById('results').appendChild(card);
+}
+
+async function batchGenerate() {
   if (loading) return;
-  if (getGenCount() >= GEN_LIMIT) {
-    toast('Generation limit reached — contact us to upgrade');
-    return;
-  }
   if (!savedKey) {
     document.getElementById('key-card').style.display = 'block';
     document.getElementById('api-key-input').focus();
     toast('Enter your API key first');
     return;
   }
-  const productText = document.getElementById('product-ta').value.trim();
-  if (!productText) { toast('Paste product info first'); return; }
+  const urls = document.getElementById('urls-ta').value
+    .split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
+  if (!urls.length) { toast('Paste at least one Shopee URL'); return; }
+
+  const remaining = GEN_LIMIT - getGenCount();
+  if (remaining <= 0) { toast('Generation limit reached — contact us to upgrade'); return; }
+  const toProcess = urls.slice(0, remaining);
 
   loading = true;
   document.getElementById('gen-btn').disabled = true;
-  document.getElementById('output-card').style.display = 'block';
-  document.getElementById('output-fields').style.display = 'none';
-  document.getElementById('loading-row').style.display = 'block';
+  document.getElementById('results').innerHTML = '';
 
-  try {
-    const { title, desc } = await runAIGenerate(productText, opts);
+  for (let i = 0; i < toProcess.length; i++) {
+    const url = toProcess[i];
+    createResultCard(i, url);
 
-    const titleTa = document.getElementById('title-ta');
-    const descTa  = document.getElementById('desc-ta');
+    try {
+      // Fetch
+      const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Fetch failed');
+      const productText = [data.title, data.description].filter(Boolean).join('\n\n');
+      if (!productText) throw new Error('No product text returned');
 
-    if (!opts.descOnly && title) {
-      titleTa.value = title;
-      autoResize(titleTa);
-      updateCharCount(title, 'char-count');
+      setCardStatus(i, '<div class="ai-loading">Generating…</div>');
+
+      // Generate
+      const { title, desc } = await runAIGenerate(productText);
+      incGenCount();
+      genCountDisplay();
+      setCardStatus(i, '');
+      showCardOutput(i, title, desc);
+    } catch (e) {
+      setCardStatus(i, `<div style="color:var(--danger);font-size:12px">Error: ${esc(e.message || 'unknown')}</div>`);
     }
-    if (!opts.titleOnly && desc) {
-      descTa.value = desc;
-      autoResize(descTa);
-    }
+  }
 
-    incGenCount();
-    genCountDisplay();
-    document.getElementById('loading-row').style.display = 'none';
-    document.getElementById('output-fields').style.display = 'block';
-    titleTa.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  } catch (e) {
-    document.getElementById('loading-row').style.display = 'none';
-    if (e.message === 'NO_KEY') {
-      document.getElementById('key-card').style.display = 'block';
-      document.getElementById('api-key-input').focus();
-      toast('Enter your API key first');
-    } else {
-      document.getElementById('output-fields').style.display = 'block';
-      toast('Error: ' + (e.message || 'Unknown error'));
-    }
+  if (toProcess.length < urls.length) {
+    toast(`Limit reached — processed ${toProcess.length} of ${urls.length}`);
   }
 
   loading = false;
   document.getElementById('gen-btn').disabled = false;
-}
-
-function regenerate(mode) {
-  generate({ titleOnly: mode === 'title', descOnly: mode === 'desc' });
-}
-
-async function fetchShopee() {
-  const url = document.getElementById('shopee-url').value.trim();
-  if (!url) { toast('Paste a Shopee URL first'); return; }
-  const btn = document.getElementById('fetch-btn');
-  btn.disabled = true;
-  btn.textContent = 'Fetching…';
-  try {
-    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Fetch failed');
-    const combined = [data.title, data.description].filter(Boolean).join('\n\n');
-    const ta = document.getElementById('product-ta');
-    ta.value = combined;
-    autoResize(ta);
-    toast('Fetched ✓');
-    if (combined) generate();
-  } catch(e) {
-    toast('Fetch failed — paste the product text manually');
-  }
-  btn.disabled = false;
-  btn.textContent = 'Fetch ↓';
 }
 </script>
 </body>
