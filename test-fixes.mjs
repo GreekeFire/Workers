@@ -505,6 +505,30 @@ const testCode = `
   __report('Sales search: Esc closes the dropdown',
     document.getElementById('search-dropdown').style.display === 'none',
     document.getElementById('search-dropdown').style.display);
+
+  // ── Send back to FIX fully reverses a Done ──
+  LISTINGS = [{ id: 7, title: 'Accidental Done Item', shopee: '', caro: '', cost: '12', sell: '40' }];
+  doneSet = new Set([0]); deletedSet = new Set();
+  doneData = [{ index: 0, id: 7, title: 'Accidental Done Item', shopeeUrl: '', carousellUrl: '',
+    sourceCost: 12, sellPrice: 40, doneAt: new Date().toISOString() }];
+  doneTodayCount = 1;
+  _listingsCache = [{ id: 7, title: 'Accidental Done Item', status: 'done' }];
+  __sbCalls.length = 0;
+  await listingsSendToFix(7);
+  const backUpd = __sbCalls.find(c => c.op === 'update' && c.table === 'listings');
+  __report('Send back to FIX: row set active and done-history entry removed',
+    !!backUpd && backUpd.payload.status === 'active' && eq(backUpd.filters, [['id', 7]])
+      && doneData.length === 0 && !doneSet.has(0) && doneTodayCount === 0,
+    JSON.stringify({ dd: doneData.length, ds: [...doneSet], cnt: doneTodayCount }));
+  __report('Send back to FIX: cleaned history is pushed to the cloud',
+    __sbCalls.some(c => c.op === 'upsert' && c.payload?.key === 'carobiz_done_data'),
+    JSON.stringify(__sbCalls.map(c => c.op)));
+  // The poison scenario: a sync right after must NOT re-mark it done
+  __sb.__appState = { carobiz_done_data: doneData.slice() };
+  await syncFromSupabase();
+  __sb.__appState = {};
+  __report('Send back to FIX: next sync no longer re-marks it done',
+    !doneSet.has(0), JSON.stringify([...doneSet]));
 })()
 `;
 

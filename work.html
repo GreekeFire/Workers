@@ -2525,8 +2525,22 @@ async function listingsMarkDone(id) {
 async function listingsSendToFix(id) {
   const { error } = await sb.from('listings').update({ status: 'active' }).eq('id', id);
   if (error) { toast('Failed'); return; }
+  // Drop its done-history entries too — otherwise the id-based doneSet rebuild
+  // sees them on the next sync, assumes the status write failed, and silently
+  // re-marks the listing done: it would never actually return to the queue.
+  const removed = doneData.filter(d => d.id === id);
+  if (removed.length) {
+    doneData = doneData.filter(d => d.id !== id);
+    doneTodayCount = Math.max(0, doneTodayCount -
+      removed.filter(d => d.doneAt?.startsWith(getToday())).length);
+    pushToSupabase();
+  }
+  // If it was done in this session it's still in the active array — unskip it
+  const li = LISTINGS.findIndex(l => l.id === id);
+  if (li !== -1) doneSet.delete(li);
   _listingsCache = _listingsCache.filter(l => l.id !== id);
   _listingsEditingId = null;
+  renderSessionBar();
   toast('Sent back to FIX ✓');
   _renderListingsResults(_listingsCache);
 }
