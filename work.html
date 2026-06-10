@@ -1056,15 +1056,31 @@ async function syncFromSupabase() {
   }
 }
 
+let pendingPush = false;
+
 async function pushToSupabase() {
   const now = new Date().toISOString();
-  const today = getToday();
   setSyncStatus('syncing');
-  await Promise.all([
-    sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
-    sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
-  ]).then(() => setSyncStatus('synced')).catch(e => { console.warn('Supabase push error:', e); setSyncStatus('error'); });
+  try {
+    await Promise.all([
+      sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
+      sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
+    ]);
+    pendingPush = false;
+    setSyncStatus('synced');
+  } catch (e) {
+    console.warn('Supabase push error:', e);
+    pendingPush = true;   // a sync is still owed — retry when network/app returns
+    setSyncStatus('error');
+  }
 }
+
+// Re-send a failed push when the network or app comes back. doneData/salesLog are
+// always the latest in-memory state, so this just re-sends whatever is current.
+function retryPendingPush() {
+  if (pendingPush && navigator.onLine) pushToSupabase();
+}
+window.addEventListener('online', retryPendingPush);
 
 let syncStatusTimer = null;
 function setSyncStatus(state) {
@@ -2397,7 +2413,9 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && getToday() !== todayDate) {
+  if (document.hidden) return;
+  retryPendingPush();   // re-send any sync that failed while we were away
+  if (getToday() !== todayDate) {
     todayDate = getToday();
     doneTodayCount = 0;
     deletedTodayCount = 0;
