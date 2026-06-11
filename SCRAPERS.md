@@ -20,19 +20,29 @@ editor (Dashboard → SQL Editor → paste → Run).
 
 ---
 
-## 1. Shopee product grab (`Shopee → Work`)
+## 1. Shopee product grab (`Shopee → Work`) — v2, batch + variant prices
 
-Use on: any `shopee.sg` product page (logged in or not — your browser session
-carries you through Cloudflare either way).
+Use on: **any** `shopee.sg` page (product page, homepage, search — doesn't
+matter; the API call is same-origin from anywhere on the site).
 
-Gets: title, description, **price**, full-res images, sold, stock.
+Click it → a box appears on the page (prefilled with the current product's
+link if you're on one) → paste one or many Shopee links, one per line →
+**Send**. Each product is fetched via the v4 API with your session and pushed
+to the inbox, spaced ~1s apart.
+
+Gets per product: title, description, **price (incl. every variant's exact
+price)**, full-res images, sold, stock.
 
 ```
-javascript:(async()=>{const K='sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';const m=location.href.match(/i\.(\d+)\.(\d+)/)||location.href.match(/\/product\/(\d+)\/(\d+)/);if(!m){alert('Not a Shopee product page');return}try{const r=await fetch('https://shopee.sg/api/v4/item/get?itemid='+m[2]+'&shopid='+m[1],{credentials:'include',headers:{'x-api-source':'pc','x-requested-with':'XMLHttpRequest'}});const d=await r.json();const it=d.item||(d.data&&(d.data.item||d.data));if(!it||!it.name)throw new Error('Shopee returned no item (try refreshing the page)');const p={title:it.name,description:it.description||'',price_min:(it.price_min||it.price||0)/1e5,price_max:(it.price_max||it.price||0)/1e5,images:(it.images||[]).map(h=>'https://down-sg.img.susercontent.com/file/'+h),sold:it.historical_sold||it.sold||0,stock:it.stock||0,url:location.href.split('?')[0]};const s=await fetch('https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/scrape_inbox',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+K,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({kind:'shopee',payload:p})});if(!s.ok)throw new Error('Supabase '+s.status);const t=document.createElement('div');t.textContent='✓ Sent to work.html — $'+p.price_min.toFixed(2)+' · '+p.images.length+' imgs';t.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#16a34a;color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';document.body.appendChild(t);setTimeout(()=>t.remove(),3000)}catch(e){alert('Scrape failed: '+e.message)}})();
+javascript:(()=>{const K='sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';const cur=location.href.match(/i\.\d+\.\d+/)?location.href.split('?')[0]:'';const w=document.createElement('div');w.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;background:#111827;color:#fff;padding:16px;border-radius:12px;font:13px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.5);width:min(480px,90vw)';w.innerHTML='<b>Send to work.html</b><br><textarea id=whx rows=5 style="width:100%;margin:8px 0;background:#1f2937;color:#fff;border:1px solid #374151;border-radius:8px;padding:8px;font:12px monospace;box-sizing:border-box" placeholder="One Shopee link per line"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button id=whc style="padding:6px 14px;border-radius:8px;border:1px solid #374151;background:none;color:#9ca3af;cursor:pointer">Cancel</button><button id=whg style="padding:6px 14px;border-radius:8px;border:0;background:#16a34a;color:#fff;font-weight:700;cursor:pointer">Send</button></div><div id=whs style="margin-top:8px;color:#9ca3af"></div>';document.body.appendChild(w);const ta=w.querySelector('#whx');ta.value=cur;w.querySelector('#whc').onclick=()=>w.remove();w.querySelector('#whg').onclick=async()=>{const st=w.querySelector('#whs');const links=ta.value.split(/\s+/).filter(Boolean);if(!links.length){st.textContent='No links';return}let ok=0,fail=0;for(let i=0;i<links.length;i++){const m=links[i].match(/i\.(\d+)\.(\d+)/)||links[i].match(/\/product\/(\d+)\/(\d+)/);st.textContent='Fetching '+(i+1)+'/'+links.length+'…';if(!m){fail++;continue}try{const r=await fetch('https://shopee.sg/api/v4/item/get?itemid='+m[2]+'&shopid='+m[1],{credentials:'include',headers:{'x-api-source':'pc','x-requested-with':'XMLHttpRequest'}});const d=await r.json();const it=d.item||(d.data&&(d.data.item||d.data));if(!it||!it.name)throw 0;const p={title:it.name,description:it.description||'',price_min:(it.price_min||it.price||0)/1e5,price_max:(it.price_max||it.price||0)/1e5,models:(it.models||[]).map(x=>({name:x.name,price:(x.price||0)/1e5})).filter(x=>x.price>0),images:(it.images||[]).map(h=>'https://down-sg.img.susercontent.com/file/'+h),sold:it.historical_sold||it.sold||0,stock:it.stock||0,url:links[i].split('?')[0]};const s=await fetch('https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/scrape_inbox',{method:'POST',headers:{apikey:K,Authorization:'Bearer '+K,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({kind:'shopee',payload:p})});if(!s.ok)throw 0;ok++}catch(e){fail++}if(i<links.length-1)await new Promise(r=>setTimeout(r,900+Math.random()*600))}st.innerHTML='<b style=color:#4ade80>✓ '+ok+' sent</b>'+(fail?' · <span style=color:#f87171>'+fail+' failed — solve the bot check on any product page, then retry those links</span>':'');setTimeout(()=>w.remove(),fail?6000:2500)};})();
 ```
 
-Workflow: on product page → click bookmark → green "✓ Sent" toast → in
-work.html NEW (or FIX) tab hit **⬇ Pull scraped**.
+Workflow: click bookmark anywhere on Shopee → paste links → Send → open
+work.html NEW tab — it auto-pulls. One link fills the form (with a variant
+price picker when prices differ); several links flow into the batch generator.
+
+Note: paste full `shopee.sg` links (short `sg.shp.ee` links can't be resolved
+from inside the browser — open them first, then copy the full URL).
 
 ---
 
