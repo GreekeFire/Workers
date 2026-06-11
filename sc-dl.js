@@ -1,0 +1,155 @@
+/* Steadymart Shopee scraper — dataLayer-first TEST build (sc-dl.js).
+ * Same as sc.js, but on a product page it FIRST tries to read the full item
+ * (title, description, images, exact variant prices) out of window.dataLayer —
+ * which Shopee already populated via its own signed request, so there's no
+ * fetch of ours and no bot puzzle. Falls back to the v4 fetch if the page
+ * hasn't populated dataLayer yet, and always uses fetch for paste-box links
+ * (dataLayer only holds the page you're on).
+ *
+ * Toast is tagged ·page (read from memory) or ·api (fetched) so old-vs-new is visible.
+ */
+(async () => {
+  const K = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
+  const INBOX = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/scrape_inbox';
+  const CDN = 'https://down-sg.img.susercontent.com/file/';
+
+  const post = async (p) => {
+    const s = await fetch(INBOX, {
+      method: 'POST',
+      headers: { apikey: K, Authorization: 'Bearer ' + K, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ kind: 'shopee', payload: p }),
+    });
+    if (!s.ok) throw new Error('Supabase ' + s.status);
+    return p;
+  };
+
+  const mapImg = (h) => (/^https?:/.test(h) ? h.split('?')[0] : CDN + h);
+
+  // Read the full item for `itemid` out of window.dataLayer. Shopee pushes
+  // several copies (some with prices nulled for analytics); we collect every
+  // matching copy and merge — prices from the priced copy, description/images
+  // from whichever copy has them. Returns null if no priced copy is present.
+  const fromDataLayer = (itemid) => {
+    const dl = window.dataLayer;
+    if (!Array.isArray(dl)) return null;
+    const copies = [];
+    const seen = new Set();
+    const scan = (o, d) => {
+      if (!o || typeof o !== 'object' || d > 10 || seen.has(o)) return;
+      seen.add(o);
+      try {
+        if (String(o.itemid || o.item_id || '') === String(itemid) && Array.isArray(o.models)) copies.push(o);
+      } catch (e) { /* cross-origin */ }
+      let ks; try { ks = Object.keys(o); } catch (e) { return; }
+      for (const k of ks) {
+        if (['window', 'self', 'top', 'parent', 'frames', 'document'].includes(k)) continue;
+        let v; try { v = o[k]; } catch (e) { continue; }
+        if (v && typeof v === 'object') scan(v, d + 1);
+      }
+    };
+    for (const e of dl) scan(e, 0);
+    if (!copies.length) return null;
+
+    const priced = copies.find(c => c.models.some(m => m && m.price != null));
+    if (!priced) return null; // prices nulled everywhere → let caller fetch
+    const withDesc = copies.find(c => c.description) || priced;
+    const withImgs = copies.find(c => Array.isArray(c.images) && c.images.length) || priced;
+
+    const models = priced.models
+      .filter(m => m && m.price != null)
+      .map(m => ({ name: m.name, price: m.price / 1e5 }));
+    const prices = models.map(m => m.price);
+
+    return {
+      title: priced.name || priced.title || withDesc.name || '',
+      description: withDesc.description || '',
+      price_min: priced.price_min != null ? priced.price_min / 1e5 : Math.min(...prices),
+      price_max: priced.price_max != null ? priced.price_max / 1e5 : Math.max(...prices),
+      models,
+      images: (withImgs.images || []).map(mapImg),
+      sold: priced.historical_sold || priced.global_sold || 0,
+      stock: priced.stock || 0,
+      url: location.href.split('?')[0],
+    };
+  };
+
+  // Fetch path (v4 API) — used for paste-box links and as fallback
+  const fetchItem = async (L) => {
+    if (/shp\.ee/.test(L)) {
+      try {
+        const rr = await fetch('https://workers-v1.vercel.app/api/shopee?url=' + encodeURIComponent(L) + '&resolve=1');
+        L = (await rr.json()).url || L;
+      } catch (e) { /* keep original */ }
+    }
+    const m = L.match(/i\.(\d+)\.(\d+)/) || L.match(/\/product\/(\d+)\/(\d+)/);
+    if (!m) throw new Error('not a product link');
+    const r = await fetch('https://shopee.sg/api/v4/item/get?itemid=' + m[2] + '&shopid=' + m[1], {
+      credentials: 'include',
+      headers: { 'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest' },
+    });
+    const d = await r.json();
+    const it = d.item || (d.data && (d.data.item || d.data));
+    if (!it || !it.name) throw new Error('Shopee returned no item — solve the bot check, retry');
+    return {
+      title: it.name,
+      description: it.description || '',
+      price_min: (it.price_min || it.price || 0) / 1e5,
+      price_max: (it.price_max || it.price || 0) / 1e5,
+      models: (it.models || []).map(x => ({ name: x.name, price: (x.price || 0) / 1e5 })).filter(x => x.price > 0),
+      images: (it.images || []).map(mapImg),
+      sold: it.historical_sold || it.sold || 0,
+      stock: it.stock || 0,
+      url: L.split('?')[0],
+    };
+  };
+
+  // Send a paste-box link (always fetch)
+  const send = async (L) => post(await fetchItem(L));
+
+  const note = (msg, bad) => {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;background:' +
+      (bad ? '#dc2626' : '#16a34a') + ';color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  };
+
+  // Product page → try dataLayer first, fall back to fetch
+  const cur = location.href.match(/i\.\d+\.\d+/) ? location.href.split('?')[0] : '';
+  if (cur) {
+    const itemid = (cur.match(/i\.\d+\.(\d+)/) || [])[1];
+    try {
+      let p, via;
+      const dl = fromDataLayer(itemid);
+      if (dl && dl.title && dl.models.length) { p = await post(dl); via = 'page'; }
+      else { p = await send(cur); via = 'api'; }
+      note('✓ Sent ·' + via + ' — $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs');
+    } catch (e) {
+      note('✗ ' + e.message, 1);
+    }
+    return;
+  }
+
+  // Not a product page → paste-box (same as sc.js)
+  const w = document.createElement('div');
+  w.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;background:#111827;color:#fff;padding:16px;border-radius:12px;font:13px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.5);width:min(480px,90vw)';
+  w.innerHTML = '<b>Send to work.html</b><br><textarea id=whx rows=5 style="width:100%;margin:8px 0;background:#1f2937;color:#fff;border:1px solid #374151;border-radius:8px;padding:8px;font:12px monospace;box-sizing:border-box" placeholder="One Shopee link per line"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button id=whc style="padding:6px 14px;border-radius:8px;border:1px solid #374151;background:none;color:#9ca3af;cursor:pointer">Cancel</button><button id=whg style="padding:6px 14px;border-radius:8px;border:0;background:#16a34a;color:#fff;font-weight:700;cursor:pointer">Send</button></div><div id=whs style="margin-top:8px;color:#9ca3af"></div>';
+  document.body.appendChild(w);
+  const ta = w.querySelector('#whx');
+  w.querySelector('#whc').onclick = () => w.remove();
+  w.querySelector('#whg').onclick = async () => {
+    const st = w.querySelector('#whs');
+    const links = ta.value.split(/\s+/).filter(Boolean);
+    if (!links.length) { st.textContent = 'No links'; return; }
+    let ok = 0, fail = 0;
+    for (let i = 0; i < links.length; i++) {
+      st.textContent = 'Fetching ' + (i + 1) + '/' + links.length + '…';
+      try { await send(links[i]); ok++; } catch (e) { fail++; }
+      if (i < links.length - 1) await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
+    }
+    st.innerHTML = '<b style=color:#4ade80>✓ ' + ok + ' sent</b>' +
+      (fail ? ' · <span style=color:#f87171>' + fail + ' failed — solve the bot check on any product page, then retry those links</span>' : '');
+    setTimeout(() => w.remove(), fail ? 6000 : 2500);
+  };
+})();
