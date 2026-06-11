@@ -7,6 +7,61 @@ work.html pulls them in with the **⬇ Pull scraped** button (NEW and FIX tabs).
 One-time prerequisite: run `supabase/scrape_inbox.sql` in the Supabase SQL
 editor (Dashboard → SQL Editor → paste → Run). *(Done 2026-06-11.)*
 
+---
+
+## How it all fits together (read this first)
+
+```
+  Shopee product page (your logged-in browser)
+        │  click the Shopee → Work bookmark
+        ▼
+  sc.js (hosted loader target)
+        │  reads window.dataLayer  ──► ·page  (no request, NO bot puzzle)
+        │  └ if not ready, falls back to v4 fetch ──► ·api (puzzle possible)
+        ▼
+  Supabase  scrape_inbox  (kind:'shopee', payload:{title,description,
+        │                   price_min/max, models[], images[], sold, stock, url})
+        ▼
+  work.html
+    NEW tab  → auto-pulls on open; 1 item fills the form, several → batch cards
+    FIX tab  → pull matches the inbox row to the CURRENT listing by Shopee URL,
+               refreshes cost from the live price, auto-pulls on open + after Done
+```
+
+**Two data sources, picked automatically (see `sc.js`):**
+
+- **dataLayer read (`·page`, preferred).** On a product page, Shopee has already
+  fetched the full item with its own *signed* request and stashed it in
+  `window.dataLayer` (its Google-Analytics array). We just read that variable —
+  no request of ours, so nothing for Shopee's bot check to challenge. Gives the
+  complete item: title, description, all variant prices, full-res images.
+- **v4 API fetch (`·api`, fallback).** `fetch(shopee.sg/api/v4/item/get…)` with
+  your session cookies. Used when dataLayer isn't populated yet, and **always**
+  for paste-box links (those products aren't loaded in your page, so they're not
+  in dataLayer). This is the path that occasionally triggers the bot puzzle.
+
+**Practical upshot:** batching by **opening each product in a tab and clicking
+the bookmark** is fully puzzle-free (every click reads dataLayer). The paste-box
+(paste a list of links at once) uses the API and can still hit a puzzle.
+
+Prices are the variant **`price` after the seller's product discount** — the
+guaranteed price every buyer pays. Stackable platform/shop *vouchers* (min-spend,
+limited claims) are deliberately NOT included; costing off the higher pre-voucher
+price keeps your margin safe.
+
+### What changed (2026-06-11 rework)
+
+| Piece | Change |
+|---|---|
+| `sc.js` (new) | Hosted scraper body; **dataLayer-first**, v4 fallback. One file, all devices. |
+| Loader bookmarklet | Tiny `fetch(sc.js)+eval` bookmark — paste-safe, auto-updates from `sc.js`. |
+| `supabase/scrape_inbox.sql` (new) | Relay table; RLS allows anon insert/select/update (no `to anon` — publishable key). |
+| `api/shopee.js` | Added v4 retry before og-scrape; `?resolve=1` expands `sg.shp.ee` short links. |
+| `api/ingest.js` (new) | Accepts raw v4 JSON a phone fetched (with cookies) → reshapes → inserts inbox row. |
+| `work.html` NEW | ⬇ Pull + auto-pull on tab open; 1→form, many→batch cards (each a full mini-form). |
+| `work.html` FIX | ⬇ Pull **matches inbox row to the current listing by Shopee URL**; refreshes cost + warns on change; auto-pulls on open and after each Done/Delete. |
+| Cost logic | Defaults to the **highest** variant price (margin-safe); no variant picker. |
+
 ## Roadmap: removing the bookmark press entirely
 
 The bookmark click exists because browsers won't run your code on Shopee's
@@ -50,9 +105,11 @@ Vercel app, so:
 - when the scraper is fixed/improved, edit `sc.js` once and **every device picks
   it up on next click** — never re-paste the bookmark again.
 
-It runs inside your logged-in Shopee tab, so it sends your session cookies
-automatically (no cookie copying). If it ever fails because you're logged out,
-just log back into shopee.sg in that browser — no laptop/DevTools needed.
+On a product page it reads `window.dataLayer` first (puzzle-free, toast shows
+`·page`); if that isn't ready it falls back to the v4 fetch using your session
+cookies (toast shows `·api`). Either way no cookie copying. If it ever fails
+because you're logged out, just log back into shopee.sg in that browser — no
+laptop/DevTools needed.
 
 Bookmark URL (paste as the whole URL; must keep the `javascript:` prefix):
 
