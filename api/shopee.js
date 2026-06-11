@@ -150,6 +150,12 @@ export default async function handler(req) {
     } catch (e) { /* fall through with original URL */ }
   }
 
+  // resolve=1 → just return the expanded URL (bookmarklet uses this for
+  // sg.shp.ee short links, which the browser can't follow cross-origin)
+  if (searchParams.get('resolve')) {
+    return json({ url: cleanUrl });
+  }
+
   // First try the v4 JSON API — gives price; silently falls back if blocked
   const v4 = await tryV4(cleanUrl);
   if (v4) return json(v4);
