@@ -981,6 +981,8 @@ let activeTab = 'fix';
 
 // AI state
 let aiLoading = false;
+let _fixGenSeq = 0;   // bumped when the FIX card changes; stale generations check it
+let fixCostNote = ''; // inline cost-change note on the FIX card (toast would clobber UNDO)
 let aiTitle = '';
 let aiDesc = '';
 let editedCost = null;
@@ -1296,6 +1298,8 @@ function markDone() {
 
 function undoDone(s) {
   _undoFn = null;   // guard against a double-tap on the UNDO button
+  _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
+  fixCostNote = '';
   doneSet.delete(s.idx);
   doneTodayCount = Math.max(0, doneTodayCount - 1);
   let di = doneData.indexOf(s.entry);
@@ -1344,6 +1348,8 @@ function markDeleted() {
 function undoDelete() {
   const entry = undoStack.pop();
   if (entry === undefined) return;
+  _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
+  fixCostNote = '';
   const idx = entry.idx ?? entry; // handle old format
   deletedSet.delete(idx);
   deletedTodayCount = Math.max(0, deletedTodayCount - 1);
@@ -1380,6 +1386,8 @@ async function saveLinkEdits() {
 }
 
 function resetAI() {
+  _fixGenSeq++;        // invalidate any in-flight generation for the old card
+  fixCostNote = '';
   aiLoading = false;
   aiTitle = '';
   aiDesc = '';
@@ -1606,6 +1614,7 @@ async function generateAI(mode = 'both') {
   const taEl = document.getElementById('shopee-input-ta');
   if (taEl) shopeeInput = taEl.value;
   if (!shopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
+  const seq = _fixGenSeq;   // abort if the card changes (Done/Delete/undo) mid-flight
   aiLoading = true;
   renderFixView();
   let aiError = null;
@@ -1614,10 +1623,12 @@ async function generateAI(mode = 'both') {
       titleOnly: mode === 'title',
       descOnly:  mode === 'desc',
     });
+    if (seq !== _fixGenSeq) return;
     if (mode !== 'desc'  && title) aiTitle = title;
     if (mode !== 'title' && desc)  aiDesc  = desc;
     if (!aiTitle && !aiDesc) aiError = 'No content returned — try again';
   } catch (e) {
+    if (seq !== _fixGenSeq) return;
     if (e.message === 'NO_KEY') { apiKeyVisible = true; aiLoading = false; renderFixView(); return; }
     aiError = e.message || 'Unknown error';
   }
@@ -1745,8 +1756,10 @@ async function pullScraped(target, silent) {
     const curCost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
     if (newCostVal && Math.abs(newCostVal - curCost) > 0.005) {
       editedCost = String(newCostVal);
-      toast(`Cost $${curCost.toFixed(2)} → $${newCostVal.toFixed(2)} · sell $${calcSell(newCostVal).toFixed(2)}`);
-    } else {
+      // Inline note, not a toast — a toast here would clobber the Done ✓ UNDO
+      fixCostNote = `Cost $${curCost.toFixed(2)} → $${newCostVal.toFixed(2)} · sell $${calcSell(newCostVal).toFixed(2)}`;
+      if (!silent) toast(fixCostNote);
+    } else if (!silent) {
       toast('Pulled ✓' + (newCostVal ? ` — cost $${newCostVal.toFixed(2)} unchanged` : ''));
     }
     renderFixView();
@@ -2281,6 +2294,7 @@ function _renderFixView() {
         <div class="sell-display" id="sell-display">$${calcSell(cost).toFixed(2)}</div>
       </div>
     </div>
+    ${fixCostNote ? `<div style="color:var(--warning,#f59e0b);font-size:12px;margin:6px 0 0">⚠ ${esc(fixCostNote)}</div>` : ''}
     <div class="ai-section">
       <div class="field-header">
         <span class="field-label">✨ AI</span>
