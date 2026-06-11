@@ -1708,18 +1708,21 @@ async function pullScraped(target, silent) {
 
   const p = rows[rows.length - 1].payload || {};
   const text = [p.title, p.description].filter(Boolean).join('\n\n');
-  const priceNote = p.price_min ? ` — cost $${Number(p.price_min).toFixed(2)}` : '';
+  // Default cost to the most expensive variant — safest for margin;
+  // the picker lets you drop to a cheaper tier if that's the one listed
+  const defCost = Math.max(p.price_max || 0, p.price_min || 0,
+    ...(p.models || []).map(m => m.price || 0));
+  const priceNote = defCost ? ` — cost $${defCost.toFixed(2)}` : '';
   if (target === 'new') {
     newShopeeInput  = text;
     newShopeeImages = p.images || [];
     newShopeeUrl    = p.url || newShopeeUrl;
-    if (p.price_min) {
-      newCost = String(p.price_min);
+    if (defCost) {
+      newCost = String(defCost);
       saveDraft();
     }
     newShopeeCollapsed = true;
     renderNewView();
-    showVariantPicker(p.models || []);
     if (newShopeeInput) generateAINew('both');
   } else {
     shopeeInput     = text;
@@ -1729,34 +1732,6 @@ async function pullScraped(target, silent) {
     if (shopeeInput) generateAI('both');
   }
   toast('Pulled ✓' + priceNote);
-}
-
-// Multi-variant items: let the user tap the variant they're listing so the
-// exact price (not just the minimum) becomes the cost
-function showVariantPicker(models) {
-  const priced = (models || []).filter(m => m && m.price > 0);
-  if ([...new Set(priced.map(m => m.price))].length < 2) return;
-  document.getElementById('variant-picker')?.remove();
-  const w = document.createElement('div');
-  w.id = 'variant-picker';
-  w.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--bg-secondary,#1c1c1e);border:1px solid var(--border,#333);border-radius:14px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.5);max-width:min(420px,92vw);max-height:50vh;overflow-y:auto';
-  w.innerHTML = `<div style="font-size:13px;font-weight:700;margin-bottom:10px">Which variant? (sets cost)</div>` +
-    priced.map(m =>
-      `<button onclick="pickVariantCost(${m.price})" style="display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;padding:9px 12px;margin-bottom:6px;border-radius:9px;border:1px solid var(--border,#333);background:none;color:inherit;font-size:13px;cursor:pointer"><span>${esc(m.name || 'Variant')}</span><b>$${m.price.toFixed(2)}</b></button>`
-    ).join('') +
-    `<button onclick="document.getElementById('variant-picker').remove()" style="width:100%;padding:8px;border:none;background:none;color:var(--text-tertiary,#888);font-size:12px;cursor:pointer">Keep lowest ($${Math.min(...priced.map(m => m.price)).toFixed(2)})</button>`;
-  document.body.appendChild(w);
-}
-
-function pickVariantCost(price) {
-  newCost = String(price);
-  saveDraft();
-  document.getElementById('variant-picker')?.remove();
-  const costEl = document.getElementById('new-cost-input');
-  if (costEl) costEl.value = newCost;
-  const sellEl = document.getElementById('new-sell-display');
-  if (sellEl) sellEl.textContent = '$' + calcSell(price).toFixed(2);
-  toast(`Cost set $${price.toFixed(2)} → sell $${calcSell(price).toFixed(2)}`);
 }
 
 // Batch ingest of pre-scraped payloads — no /api/shopee fetch needed,
@@ -1772,7 +1747,8 @@ async function ingestScrapedBatch(payloads) {
       const text = [p.title, p.description].filter(Boolean).join('\n\n');
       if (!text) throw new Error('Empty scrape');
       const { title, desc } = await runAIGenerate(text);
-      newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: p.price_min || 0 };
+      const cost = Math.max(p.price_max || 0, p.price_min || 0, ...(p.models || []).map(m => m.price || 0));
+      newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost };
     } catch (e) {
       newBatchResults[i] = { url: p.url || '', status: 'error', error: e.message || 'unknown' };
     }
