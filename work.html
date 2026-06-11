@@ -954,6 +954,12 @@ function calcSell(cost) {
   return raw;
 }
 
+// Highest variant price from a scraped Shopee payload — the margin-safe cost
+// default. Single source of truth so every pull/batch path costs identically.
+function highestCost(p) {
+  return Math.max(p.price_max || 0, p.price_min || 0, ...((p.models || []).map(m => m.price || 0)));
+}
+
 function onCostChange(val) {
   editedCost = parseFloat(val) || 0;
   const el = document.getElementById('sell-display');
@@ -1198,9 +1204,10 @@ async function refreshFromCloud() {
 
 // Download every fetched product image, staggered so the browser
 // doesn't block the burst as a popup storm.
-function downloadAllImages(which = 'fix') {
-  const imgs = which === 'new' ? newShopeeImages : fixShopeeImages;
-  if (!imgs.length) return;
+// Download a list of product images, staggered so the browser doesn't block
+// the burst as a popup storm. Shared by the FIX/NEW grids and batch cards.
+function downloadImages(imgs) {
+  if (!imgs || !imgs.length) return;
   imgs.forEach((src, i) => setTimeout(() => {
     const a = document.createElement('a');
     a.href = `/api/image?url=${encodeURIComponent(src)}&n=${i + 1}`;
@@ -1212,18 +1219,12 @@ function downloadAllImages(which = 'fix') {
   toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
 }
 
+function downloadAllImages(which = 'fix') {
+  downloadImages(which === 'new' ? newShopeeImages : fixShopeeImages);
+}
+
 function downloadBatchImages(i) {
-  const imgs = (newBatchResults[i] && newBatchResults[i].images) || [];
-  if (!imgs.length) return;
-  imgs.forEach((src, n) => setTimeout(() => {
-    const a = document.createElement('a');
-    a.href = `/api/image?url=${encodeURIComponent(src)}&n=${n + 1}`;
-    a.download = `shopee-${n + 1}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, n * 350));
-  toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
+  downloadImages((newBatchResults[i] && newBatchResults[i].images) || []);
 }
 
 // Once-a-day reminder when the last ⬇ Backup is over a week old.
@@ -1647,15 +1648,19 @@ async function generateAI(mode = 'both') {
   }
 }
 
+// Shared key-save body — reads an input, stores the key, runs a per-caller
+// cleanup (hide its key row + re-render), then confirms.
+function saveApiKeyFrom(inputId, onSaved) {
+  const val = document.getElementById(inputId)?.value.trim();
+  if (!val) return;
+  savedApiKey = val;
+  localStorage.setItem('alfred_claude_key', val);
+  if (onSaved) onSaved();
+  toast('Key saved');
+}
+
 function saveApiKey() {
-  const val = document.getElementById('api-key-input').value.trim();
-  if (val) {
-    savedApiKey = val;
-    localStorage.setItem('alfred_claude_key', val);
-    apiKeyVisible = false;
-    renderFixView();
-    toast('Key saved');
-  }
+  saveApiKeyFrom('api-key-input', () => { apiKeyVisible = false; renderFixView(); });
 }
 
 // NEW tab — fetch from Shopee URL
@@ -1751,8 +1756,7 @@ async function pullScraped(target, silent) {
     shopeeCollapsed = true;
     // Refresh cost from the live scraped price (highest variant) and surface
     // the change — supplier price moves are exactly what kills margins
-    const newCostVal = Math.max(p.price_max || 0, p.price_min || 0,
-      ...(p.models || []).map(m => m.price || 0));
+    const newCostVal = highestCost(p);
     const curCost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
     if (newCostVal && Math.abs(newCostVal - curCost) > 0.005) {
       editedCost = String(newCostVal);
@@ -1780,8 +1784,7 @@ async function pullScraped(target, silent) {
   const p = rows[rows.length - 1].payload || {};
   const text = [p.title, p.description].filter(Boolean).join('\n\n');
   // Default cost to the most expensive variant — safest for margin
-  const defCost = Math.max(p.price_max || 0, p.price_min || 0,
-    ...(p.models || []).map(m => m.price || 0));
+  const defCost = highestCost(p);
   const priceNote = defCost ? ` — cost $${defCost.toFixed(2)}` : '';
   newShopeeInput  = text;
   newShopeeImages = p.images || [];
@@ -1808,7 +1811,7 @@ async function ingestScrapedBatch(payloads) {
     try {
       const text = [p.title, p.description].filter(Boolean).join('\n\n');
       if (!text) throw new Error('Empty scrape');
-      const cost = Math.max(p.price_max || 0, p.price_min || 0, ...(p.models || []).map(m => m.price || 0));
+      const cost = highestCost(p);
       const imgs = p.images || [];
       try {
         const { title, desc } = await runAIGenerate(text);
@@ -1830,14 +1833,10 @@ async function ingestScrapedBatch(payloads) {
 }
 
 function saveApiKeyBatch(i) {
-  const val = document.getElementById(`bkey-${i}`)?.value.trim();
-  if (val) {
-    savedApiKey = val;
-    localStorage.setItem('alfred_claude_key', val);
+  saveApiKeyFrom(`bkey-${i}`, () => {
     if (newBatchResults[i]) newBatchResults[i].keyVisible = false;
     renderNewView();
-    toast('Key saved');
-  }
+  });
 }
 
 // Re-fetch a batch card's product from its URL via /api/shopee
@@ -1918,14 +1917,7 @@ async function generateAINew(mode = 'both') {
 }
 
 function saveApiKeyNew() {
-  const val = document.getElementById('new-api-key-input').value.trim();
-  if (val) {
-    savedApiKey = val;
-    localStorage.setItem('alfred_claude_key', val);
-    newApiKeyVisible = false;
-    renderNewView();
-    toast('Key saved');
-  }
+  saveApiKeyFrom('new-api-key-input', () => { newApiKeyVisible = false; renderNewView(); });
 }
 
 let _savingNew = false;
