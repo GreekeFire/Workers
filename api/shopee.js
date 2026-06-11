@@ -1,5 +1,5 @@
-// Vercel Edge Function — scrapes Shopee product page HTML for og: meta tags
-// Price extraction is not possible server-side (Shopee loads prices via JS/API with session cookies).
+// Vercel Edge Function — tries Shopee's v4 item/get JSON API first (gives price),
+// falls back to scraping the page HTML for og: meta tags when Cloudflare blocks us.
 export const config = { runtime: 'edge', regions: ['sin1'] };
 
 function json(data, status = 200) {
@@ -78,6 +78,51 @@ function extractJsonLD(html) {
   return { name: '', description: '' };
 }
 
+// Attempt Shopee's internal v4 JSON API. Usually Cloudflare-blocked from
+// datacenter IPs, but free to try — returns price/sold/stock when it works.
+async function tryV4(cleanUrl) {
+  const m = cleanUrl.match(/i\.(\d+)\.(\d+)/) || cleanUrl.match(/\/product\/(\d+)\/(\d+)/);
+  if (!m) return null;
+  const [, shopid, itemid] = m;
+  try {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('v4 timeout')), 6000)
+    );
+    const resp = await Promise.race([
+      fetch(`https://shopee.sg/api/v4/item/get?itemid=${itemid}&shopid=${shopid}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+          'Accept-Language': 'en-SG,en;q=0.9',
+          'Referer': 'https://shopee.sg/',
+          'x-api-source': 'pc',
+          'x-requested-with': 'XMLHttpRequest',
+          'x-shopee-language': 'en',
+        },
+      }),
+      timeout,
+    ]);
+    if (!resp.ok) return null;
+    const ct = resp.headers.get('content-type') || '';
+    if (!ct.includes('json')) return null;
+    const data = await resp.json();
+    const item = data.item || data.data?.item || data.data;
+    if (!item || !item.name) return null;
+    return {
+      title: item.name,
+      description: item.description || '',
+      images: (item.images || []).slice(0, 9).map(h => `https://down-sg.img.susercontent.com/file/${h}`),
+      price: (item.price_min || item.price || 0) / 100000,
+      price_max: (item.price_max || item.price || 0) / 100000,
+      sold: item.historical_sold || item.sold || 0,
+      stock: item.stock || 0,
+      source: 'v4',
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -104,6 +149,10 @@ export default async function handler(req) {
       }
     } catch (e) { /* fall through with original URL */ }
   }
+
+  // First try the v4 JSON API — gives price; silently falls back if blocked
+  const v4 = await tryV4(cleanUrl);
+  if (v4) return json(v4);
 
   try {
     const timeout = new Promise((_, reject) =>

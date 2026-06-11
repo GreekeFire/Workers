@@ -1678,6 +1678,46 @@ async function fetchShopeeDataFix() {
   if (shopeeInput) generateAI('both');
 }
 
+// Pull latest unconsumed bookmarklet/phone scrape from scrape_inbox
+async function pullScraped(target) {
+  toast('Checking inbox…');
+  let row;
+  try {
+    const { data, error } = await sb.from('scrape_inbox')
+      .select('id,payload').eq('kind', 'shopee').eq('consumed', false)
+      .order('created_at', { ascending: false }).limit(1);
+    if (error) throw error;
+    row = data && data[0];
+  } catch (e) {
+    toast('Inbox error — ' + (e.message || 'unknown'));
+    return;
+  }
+  if (!row) { toast('Nothing scraped yet — use the bookmarklet first'); return; }
+  const p = row.payload || {};
+  const text = [p.title, p.description].filter(Boolean).join('\n\n');
+  const priceNote = p.price_min ? ` — cost $${Number(p.price_min).toFixed(2)}` : '';
+  if (target === 'new') {
+    newShopeeInput  = text;
+    newShopeeImages = p.images || [];
+    newShopeeUrl    = p.url || newShopeeUrl;
+    if (p.price_min) {
+      newCost = String(p.price_min);
+      saveDraft();
+    }
+    newShopeeCollapsed = true;
+    renderNewView();
+    if (newShopeeInput) generateAINew('both');
+  } else {
+    shopeeInput     = text;
+    fixShopeeImages = p.images || [];
+    shopeeCollapsed = true;
+    renderFixView();
+    if (shopeeInput) generateAI('both');
+  }
+  toast('Pulled ✓' + priceNote);
+  sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id).then(() => {});
+}
+
 // NEW tab AI
 async function generateAINew(mode = 'both') {
   const taEl = document.getElementById('new-shopee-ta');
@@ -2106,6 +2146,7 @@ function _renderFixView() {
             <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeDataFix()">
               ${fixShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
             </button>
+            <button class="shopee-fetch-btn" ${fixShopeeFetching ? 'disabled' : ''} onclick="pullScraped('fix')" title="Pull latest bookmarklet/phone scrape">⬇ Pull</button>
           </div>`
       }
       ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
@@ -2249,6 +2290,7 @@ function _renderNewView() {
         <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
           ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
         </button>
+        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="pullScraped('new')" title="Pull latest bookmarklet/phone scrape">⬇ Pull</button>
       </div>`;
   if (newShopeeImages.length > 0) {
     html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
