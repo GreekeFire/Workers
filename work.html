@@ -1746,9 +1746,18 @@ async function ingestScrapedBatch(payloads) {
     try {
       const text = [p.title, p.description].filter(Boolean).join('\n\n');
       if (!text) throw new Error('Empty scrape');
-      const { title, desc } = await runAIGenerate(text);
       const cost = Math.max(p.price_max || 0, p.price_min || 0, ...(p.models || []).map(m => m.price || 0));
-      newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost };
+      try {
+        const { title, desc } = await runAIGenerate(text);
+        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost };
+      } catch (e) {
+        // AI unavailable (no key / quota) — keep the scraped text so nothing is lost
+        newBatchResults[i] = {
+          url: p.url || '', status: 'done', raw: true, price: cost,
+          title: p.title || '', desc: p.description || '',
+          error: 'AI skipped (' + (e.message === 'NO_KEY' ? 'no API key' : e.message) + ') — showing scraped text',
+        };
+      }
     } catch (e) {
       newBatchResults[i] = { url: p.url || '', status: 'error', error: e.message || 'unknown' };
     }
@@ -2442,6 +2451,7 @@ function _renderNewView() {
       const tlen = (r.title||'').length;
       return `<div class="listing-card" style="margin-top:12px">
         <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+        ${r.raw ? `<div style="color:var(--warning,#f59e0b);font-size:12px;margin-bottom:8px">⚠ ${esc(r.error||'AI skipped — showing scraped text')}</div>` : ''}
         ${r.price ? `<div style="font-size:12px;margin-bottom:8px">Cost <b>$${Number(r.price).toFixed(2)}</b> → Sell <b style="color:var(--accent,#ff7a5c)">$${calcSell(r.price).toFixed(2)}</b></div>` : ''}
         <div class="field-header">
           <span class="field-label">Title</span>
