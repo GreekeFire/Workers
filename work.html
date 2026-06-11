@@ -1872,7 +1872,7 @@ async function saveBatchItem(i) {
   const sbId = error ? null : data?.id;
   doneData.push({
     index: null, id: sbId, title: r.title, description: r.desc || '',
-    shopeeUrl: r.url, carousellUrl: '', sourceCost: cost, sellPrice: sell,
+    shopeeUrl: r.url, carousellUrl: r.caroUrl || '', sourceCost: cost, sellPrice: sell,
     doneAt: new Date().toISOString()
   });
   pushToSupabase();
@@ -2489,7 +2489,20 @@ function _renderNewView() {
           `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}"></a>`
         ).join('')}</div>
         <div style="display:flex;justify-content:flex-end;margin:6px 0 8px"><button class="copy-btn" onclick="downloadBatchImages(${i})">↓ All ${r.images.length}</button></div>` : ''}
-        ${r.price ? `<div style="font-size:12px;margin-bottom:10px">Cost <b>$${Number(r.price).toFixed(2)}</b> → Sell <b style="color:var(--accent,#ff7a5c)">$${calcSell(r.price).toFixed(2)}</b></div>` : ''}
+        <div class="price-calc" style="margin-bottom:10px">
+          <div class="pcol">
+            <div class="pcol-label">Cost</div>
+            <div class="pcol-input-wrap">
+              <span class="pcol-currency">$</span>
+              <input class="cost-input" type="number" inputmode="decimal" step="0.01" min="0" value="${r.price ? esc(String(r.price)) : ''}" oninput="newBatchResults[${i}].price=parseFloat(this.value)||0;document.getElementById('bsell-${i}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="bcost-${i}">
+            </div>
+          </div>
+          <div class="parrow">→</div>
+          <div class="pcol">
+            <div class="pcol-label">Sell</div>
+            <div class="sell-display" id="bsell-${i}">$${calcSell(r.price || 0).toFixed(2)}</div>
+          </div>
+        </div>
         ${srcText ? (srcCollapsed
           ? `<div class="shopee-collapsed" onclick="newBatchResults[${i}].sourceCollapsed=false;renderNewView()">▼ Shopee source</div>`
           : `<textarea class="ai-field" style="margin-bottom:4px" oninput="newBatchResults[${i}].sourceText=this.value;autoResize(this)" id="bst-${i}">${esc(srcText)}</textarea>
@@ -2510,7 +2523,11 @@ function _renderNewView() {
         <textarea class="ai-field" id="bdt-${i}" placeholder="Generate or type a description…"
           oninput="newBatchResults[${i}].desc=this.value;autoResize(this)">${esc(r.desc||'')}</textarea>
         ${!r.batchLoading ? `<button class="ai-gen-btn" style="margin-top:8px;width:100%" onclick="generateBatchItem(${i})">✨ Generate</button>` : ''}
-        <button class="btn-done" style="margin-top:8px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
+          <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
+          <input class="link-edit-input" type="url" placeholder="Carousell URL" value="${esc(r.caroUrl||'')}" oninput="newBatchResults[${i}].caroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
+        </div>
+        <button class="btn-done" style="margin-top:10px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
       </div>`;
     }).join('');
   }
