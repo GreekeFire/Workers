@@ -1764,13 +1764,12 @@ async function ingestScrapedBatch(payloads) {
       const imgs = p.images || [];
       try {
         const { title, desc } = await runAIGenerate(text);
-        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost, images: imgs };
+        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
       } catch (e) {
-        // AI unavailable (no key / quota) — keep the scraped text so nothing is lost
+        // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
         newBatchResults[i] = {
-          url: p.url || '', status: 'done', raw: true, price: cost, images: imgs,
-          title: p.title || '', desc: p.description || '',
-          error: 'AI skipped (' + (e.message === 'NO_KEY' ? 'no API key' : e.message) + ') — showing scraped text',
+          url: p.url || '', status: 'done', price: cost, images: imgs,
+          title: '', desc: '', sourceText: text, sourceCollapsed: true,
         };
       }
     } catch (e) {
@@ -1779,6 +1778,24 @@ async function ingestScrapedBatch(payloads) {
     renderNewView();
   }
   newBatchRunning = false;
+  renderNewView();
+}
+
+async function generateBatchItem(i) {
+  const r = newBatchResults[i];
+  if (!r) return;
+  const text = r.sourceText || [r.title, r.desc].filter(Boolean).join('\n\n');
+  if (!text.trim()) { toast('No source text to generate from'); return; }
+  newBatchResults[i] = { ...r, batchLoading: true };
+  renderNewView();
+  try {
+    const { title, desc } = await runAIGenerate(text);
+    newBatchResults[i] = { ...newBatchResults[i], batchLoading: false, title, desc };
+  } catch (e) {
+    newBatchResults[i] = { ...newBatchResults[i], batchLoading: false };
+    if (e.message === 'NO_KEY') { newApiKeyVisible = true; }
+    else toast('Generate failed — ' + e.message);
+  }
   renderNewView();
 }
 
@@ -2464,29 +2481,36 @@ function _renderNewView() {
         </div>`;
       }
       const tlen = (r.title||'').length;
+      const srcText = r.sourceText || '';
+      const srcCollapsed = r.sourceCollapsed !== false;
       return `<div class="listing-card" style="margin-top:12px">
         <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
-        ${r.raw ? `<div style="color:var(--warning,#f59e0b);font-size:12px;margin-bottom:8px">⚠ ${esc(r.error||'AI skipped — showing scraped text')}</div>` : ''}
         ${(r.images||[]).length ? `<div class="shopee-img-grid">${r.images.map((src, n) =>
           `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}"></a>`
         ).join('')}</div>
         <div style="display:flex;justify-content:flex-end;margin:6px 0 8px"><button class="copy-btn" onclick="downloadBatchImages(${i})">↓ All ${r.images.length}</button></div>` : ''}
-        ${r.price ? `<div style="font-size:12px;margin-bottom:8px">Cost <b>$${Number(r.price).toFixed(2)}</b> → Sell <b style="color:var(--accent,#ff7a5c)">$${calcSell(r.price).toFixed(2)}</b></div>` : ''}
+        ${r.price ? `<div style="font-size:12px;margin-bottom:10px">Cost <b>$${Number(r.price).toFixed(2)}</b> → Sell <b style="color:var(--accent,#ff7a5c)">$${calcSell(r.price).toFixed(2)}</b></div>` : ''}
+        ${srcText ? (srcCollapsed
+          ? `<div class="shopee-collapsed" onclick="newBatchResults[${i}].sourceCollapsed=false;renderNewView()">▼ Shopee source</div>`
+          : `<textarea class="ai-field" style="margin-bottom:4px" oninput="newBatchResults[${i}].sourceText=this.value;autoResize(this)" id="bst-${i}">${esc(srcText)}</textarea>
+             <div class="shopee-collapsed" style="margin-bottom:8px" onclick="newBatchResults[${i}].sourceCollapsed=true;renderNewView()">▲ Collapse</div>`) : ''}
+        ${r.batchLoading ? `<div class="ai-loading">Generating…</div>` : ''}
         <div class="field-header">
           <span class="field-label">Title</span>
           <button class="copy-btn" id="bct-${i}" onclick="copyBatch(${i},'title')">Copy</button>
         </div>
         <textarea class="title-input" rows="1" id="btt-${i}"
           oninput="newBatchResults[${i}].title=this.value;autoResize(this);updateCharCount(this.value,'bcc-${i}')"
-          style="margin-bottom:0">${esc(r.title||'')}</textarea>
+          style="margin-bottom:0" placeholder="Type or generate a title…">${esc(r.title||'')}</textarea>
         <div class="char-counter ${tlen>225?'danger':tlen>=200?'warn':''}" id="bcc-${i}">${tlen} / 225</div>
         <div class="field-header" style="margin-top:4px">
           <span class="field-label">Description</span>
           <button class="copy-btn" id="bcd-${i}" onclick="copyBatch(${i},'desc')">Copy</button>
         </div>
-        <textarea class="ai-field" id="bdt-${i}"
+        <textarea class="ai-field" id="bdt-${i}" placeholder="Generate or type a description…"
           oninput="newBatchResults[${i}].desc=this.value;autoResize(this)">${esc(r.desc||'')}</textarea>
-        <button class="btn-done" style="margin-top:10px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
+        ${!r.batchLoading ? `<button class="ai-gen-btn" style="margin-top:8px;width:100%" onclick="generateBatchItem(${i})">✨ Generate</button>` : ''}
+        <button class="btn-done" style="margin-top:8px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
       </div>`;
     }).join('');
   }
