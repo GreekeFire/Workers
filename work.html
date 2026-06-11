@@ -1210,6 +1210,20 @@ function downloadAllImages(which = 'fix') {
   toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
 }
 
+function downloadBatchImages(i) {
+  const imgs = (newBatchResults[i] && newBatchResults[i].images) || [];
+  if (!imgs.length) return;
+  imgs.forEach((src, n) => setTimeout(() => {
+    const a = document.createElement('a');
+    a.href = `/api/image?url=${encodeURIComponent(src)}&n=${n + 1}`;
+    a.download = `shopee-${n + 1}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, n * 350));
+  toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
+}
+
 // Once-a-day reminder when the last ⬇ Backup is over a week old.
 // Supabase is the only copy of this data — the habit matters.
 function maybeBackupNudge() {
@@ -1747,13 +1761,14 @@ async function ingestScrapedBatch(payloads) {
       const text = [p.title, p.description].filter(Boolean).join('\n\n');
       if (!text) throw new Error('Empty scrape');
       const cost = Math.max(p.price_max || 0, p.price_min || 0, ...(p.models || []).map(m => m.price || 0));
+      const imgs = p.images || [];
       try {
         const { title, desc } = await runAIGenerate(text);
-        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost };
+        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost, images: imgs };
       } catch (e) {
         // AI unavailable (no key / quota) — keep the scraped text so nothing is lost
         newBatchResults[i] = {
-          url: p.url || '', status: 'done', raw: true, price: cost,
+          url: p.url || '', status: 'done', raw: true, price: cost, images: imgs,
           title: p.title || '', desc: p.description || '',
           error: 'AI skipped (' + (e.message === 'NO_KEY' ? 'no API key' : e.message) + ') — showing scraped text',
         };
@@ -2452,6 +2467,10 @@ function _renderNewView() {
       return `<div class="listing-card" style="margin-top:12px">
         <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
         ${r.raw ? `<div style="color:var(--warning,#f59e0b);font-size:12px;margin-bottom:8px">⚠ ${esc(r.error||'AI skipped — showing scraped text')}</div>` : ''}
+        ${(r.images||[]).length ? `<div class="shopee-img-grid">${r.images.map((src, n) =>
+          `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}"></a>`
+        ).join('')}</div>
+        <div style="display:flex;justify-content:flex-end;margin:6px 0 8px"><button class="copy-btn" onclick="downloadBatchImages(${i})">↓ All ${r.images.length}</button></div>` : ''}
         ${r.price ? `<div style="font-size:12px;margin-bottom:8px">Cost <b>$${Number(r.price).toFixed(2)}</b> → Sell <b style="color:var(--accent,#ff7a5c)">$${calcSell(r.price).toFixed(2)}</b></div>` : ''}
         <div class="field-header">
           <span class="field-label">Title</span>
