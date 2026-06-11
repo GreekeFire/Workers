@@ -103,15 +103,56 @@ occasional (e.g. once or twice a day) — never automate it.
 
 ---
 
-## 4. Phone — Shopee share-sheet shortcut (Android, HTTP Shortcuts app)
+## 4. Phone — in-app share-sheet shortcut (iOS + Android)
 
-Install **HTTP Shortcuts** (free, Play Store: `ch.rmy.android.http_shortcuts`).
+Lets you stay in the **Shopee app**: Share → the shortcut → done. The catch:
+Shopee blocks logged-out API calls (`is_login:false`, `error:90309999`), so the
+shortcut must send your **session cookies**. Cookies expire every few weeks —
+when scrapes start failing, redo Part 1.
 
-Create a shortcut:
+The shortcut only has to GET the raw v4 JSON (this must happen on the phone, on
+your residential IP) and POST it to **`/api/ingest`**, which reshapes it and
+inserts the inbox row. No JSON wrangling inside the shortcut.
 
-1. **+ → Regular shortcut**, name `Shopee → Work`.
-2. **Method:** GET — but we need scripting, so instead set the shortcut type
-   to *Scripting shortcut* and paste:
+### Part 1 — Copy your Shopee cookies (laptop, redo when expired)
+
+1. Laptop browser → log into **shopee.sg**.
+2. **F12 → Network** tab → reload → filter `item/get` (or click any
+   `shopee.sg` request).
+3. Click it → **Headers → Request Headers** → find `Cookie:`.
+4. Copy the **whole** value after `Cookie: ` (long; starts `SPC_F=…; SPC_EC=…`).
+5. Send it to your phone (AirDrop / message) to paste in Part 2.
+
+### Part 2a — iOS (Shortcuts.app)
+
+New shortcut, add actions in order:
+
+1. **Text** → paste the full cookie string. *(This is the only thing you edit on
+   cookie refresh.)*
+2. **Match Text** — Input **Shortcut Input**, Regex `i\.\d+\.\d+`.
+3. **Get Item from List** — **First Item** (of *Matches*) → e.g. `i.123.456`.
+4. **Split Text** — Input the item above, Separator **Custom** `.`.
+5. **Text** →
+   `https://shopee.sg/api/v4/item/get?shopid=⟨Split Text → Item at Index 2⟩&itemid=⟨Split Text → Item at Index 3⟩`
+   (insert the two list items via the variable picker).
+6. **Get Contents of URL** — URL = the Text above, Method **GET**, Headers:
+   - `Cookie` = the **Text** from step 1
+   - `x-api-source` = `pc`
+   - `x-requested-with` = `XMLHttpRequest`
+   - `User-Agent` = `Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile Safari/604.1`
+7. **Get Contents of URL** — URL
+   `https://workers-v1.vercel.app/api/ingest?url=⟨Shortcut Input⟩`,
+   Method **POST**, Request Body **File** = *Contents of URL* (step 6),
+   Header `Content-Type` = `application/json`.
+8. **Show Notification** = *Contents of URL* (step 7) — shows `{"ok":true,…}` or
+   the error.
+
+In the shortcut settings (ⓘ): enable **Show in Share Sheet**, accept **URLs**.
+
+### Part 2b — Android (HTTP Shortcuts app)
+
+Install **HTTP Shortcuts** (`ch.rmy.android.http_shortcuts`). New **Scripting
+shortcut**, paste — replacing `PASTE_COOKIE_HERE`:
 
 ```js
 const url = getClipboardContent() || '';
@@ -119,36 +160,23 @@ const m = url.match(/i\.(\d+)\.(\d+)/) || url.match(/\/product\/(\d+)\/(\d+)/);
 if (!m) { showToast('No Shopee link in clipboard'); abort(); }
 const r = sendHttpRequest('https://shopee.sg/api/v4/item/get?itemid=' + m[2] + '&shopid=' + m[1], {
   method: 'GET',
-  headers: { 'user-agent': 'Mozilla/5.0 (Linux; Android 14) Chrome/124 Mobile Safari/537.36',
-             'x-api-source': 'pc', 'referer': 'https://shopee.sg/' }
+  headers: { 'cookie': 'PASTE_COOKIE_HERE',
+             'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest',
+             'user-agent': 'Mozilla/5.0 (Linux; Android 14) Chrome/124 Mobile Safari/537.36' }
 });
-const d = JSON.parse(r.body); const it = d.item || (d.data && (d.data.item || d.data));
-if (!it || !it.name) { showToast('Shopee blocked or empty'); abort(); }
-const K = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
-sendHttpRequest('https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/scrape_inbox', {
-  method: 'POST',
-  headers: { 'apikey': K, 'Authorization': 'Bearer ' + K, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-  body: JSON.stringify({ kind: 'shopee', payload: {
-    title: it.name, description: it.description || '',
-    price_min: (it.price_min || it.price || 0) / 100000,
-    price_max: (it.price_max || it.price || 0) / 100000,
-    images: (it.images || []).map(h => 'https://down-sg.img.susercontent.com/file/' + h),
-    sold: it.historical_sold || it.sold || 0, stock: it.stock || 0, url: url
-  }})
+const g = sendHttpRequest('https://workers-v1.vercel.app/api/ingest?url=' + encodeURIComponent(url), {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: r.body
 });
-showToast('✓ Sent to work.html — $' + ((it.price_min || it.price || 0) / 100000).toFixed(2));
+const o = JSON.parse(g.body);
+showToast(o.ok ? ('✓ Sent — $' + o.price.toFixed(2)) : ('✗ ' + (o.error || 'failed')));
 ```
 
-3. In the shortcut's **Trigger & Usage** settings, enable
-   **"Allow Share…"** (Direct Share / share-sheet target) — text shares.
+Enable **Allow Share** (Trigger & Usage) so it accepts shared text.
 
-Workflow: Shopee app → Share → `Shopee → Work` (or Copy Link then tap the
-shortcut) → open work.html → **⬇ Pull scraped**.
+Workflow (both): Shopee app → **Share → Shopee → Work** → green/notification
+confirms → open work.html, it pulls. If it says cookies expired, redo Part 1.
 
-> Validate first: open `https://shopee.sg/api/v4/item/get?itemid=…&shopid=…`
-> in your phone browser on mobile data. If you see JSON, the shortcut will
-> work; if you see a challenge page, the phone path needs cookies and we
-> rethink (the laptop bookmarklet is unaffected either way).
-
-iOS equivalent: Shortcuts.app → "Get Contents of URL" twice (Shopee GET, then
-Supabase POST) with the same headers/body; accept share-sheet input of type URL.
+> Why `/api/ingest` and not Supabase directly: the endpoint does the price
+> math, image-hash mapping, and payload shaping in JS so the shortcut stays a
+> two-request stub. It never calls Shopee itself (the phone already did, with
+> your cookies), so it isn't Cloudflare-blocked like the old server scraper.
