@@ -750,8 +750,8 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     transform: translateX(-50%) translateY(20px);
     background: rgba(20,20,22,0.92);
     border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    padding: 10px 20px;
+    border-radius: 12px;
+    padding: 10px 12px 10px 20px;
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
@@ -761,7 +761,24 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     pointer-events: none;
     z-index: 100;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
+  .toast-undo-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(224,118,88,0.4);
+    background: rgba(224,118,88,0.12);
+    color: var(--coral);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .toast-undo-btn:hover { background: rgba(224,118,88,0.22); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 
   /* Sync status */
@@ -2692,7 +2709,7 @@ let _undoFn = null;
 function toastWithUndo(msg, undoFn) {
   _undoFn = undoFn;
   const el = document.getElementById('toast');
-  el.innerHTML = esc(msg) + '  <button onclick="_undoFn&&_undoFn()" style="background:none;border:none;color:var(--coral);font-size:12px;font-weight:700;cursor:pointer;padding:0;letter-spacing:0.06em">UNDO</button>';
+  el.innerHTML = `<span>${esc(msg)}</span><button class="toast-undo-btn" onclick="_undoFn&&_undoFn()">UNDO</button>`;
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.classList.remove('show'); _undoFn = null; }, 6000);
