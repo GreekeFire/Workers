@@ -40,7 +40,47 @@ list.
 
 ---
 
-## 1. Shopee product grab (`Shopee → Work`) — v2, batch + variant prices
+## 1. Shopee product grab (`Shopee → Work`) — loader (recommended)
+
+**Use this on every device** (laptop Zen/Chrome/Firefox, iPhone Safari, Android
+Firefox). It's a tiny bookmark that loads the real scraper from `sc.js` on the
+Vercel app, so:
+
+- it's short enough to paste into an iOS bookmark without corruption, and
+- when the scraper is fixed/improved, edit `sc.js` once and **every device picks
+  it up on next click** — never re-paste the bookmark again.
+
+It runs inside your logged-in Shopee tab, so it sends your session cookies
+automatically (no cookie copying). If it ever fails because you're logged out,
+just log back into shopee.sg in that browser — no laptop/DevTools needed.
+
+Bookmark URL (paste as the whole URL; must keep the `javascript:` prefix):
+
+```
+javascript:fetch('https://workers-v1.vercel.app/sc.js').then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load '+e))
+```
+
+iPhone: browse Shopee **in Safari** (logged in), or in the Shopee app use
+**Share → Open in Safari** to reach a product, then run the bookmark from the
+Bookmarks list. The app's own login does not carry into Safari, so log into
+shopee.sg in Safari once.
+
+> One risk specific to the loader: if Shopee ever adds a Content-Security-Policy
+> that blocks externally-loaded code, the loader stops working. Hasn't happened;
+> fallback is the Userscripts app (iOS) / Violentmonkey (Android Firefox)
+> running the same `sc.js` body, which isn't subject to that block.
+
+The behaviour (`sc.js`) is identical to the inline snippet below: instant send on
+a product page, paste-box anywhere else on Shopee, highest-variant price, short
+`sg.shp.ee` link support.
+
+---
+
+## 1b. Inline snippet (fallback, no hosting dependency) — v2, batch + variant prices
+
+Use this only if the loader is blocked or you want a self-contained bookmark
+with no dependency on `sc.js`. Downside: it's 2KB, so iOS bookmarks may corrupt
+it on paste, and fixes require re-pasting on every device.
 
 Use on: **any** `shopee.sg` page.
 
