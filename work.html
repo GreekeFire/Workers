@@ -1291,6 +1291,7 @@ function markDone() {
   pushToSupabase();
   renderAll();
   toastWithUndo('Done ✓', () => undoDone(undoState));
+  pullScraped('fix', true);
 }
 
 function undoDone(s) {
@@ -1327,6 +1328,7 @@ function markDeleted() {
   resetAI();
   currentIndex = findNext(idx + 1);
   renderAll();
+  pullScraped('fix', true);
   clearTimeout(undoTimer);
   undoTimer = setTimeout(() => {
     // Hard delete from Supabase after undo window
@@ -1692,12 +1694,22 @@ async function fetchShopeeDataFix() {
   if (shopeeInput) generateAI('both');
 }
 
+// Product identity from any Shopee URL: "SHOPID.ITEMID". Survives
+// title-slug changes, tracking params, and the /product/ URL form.
+function shopeeKey(u) {
+  const m = String(u || '').match(/i\.(\d+)\.(\d+)/) || String(u || '').match(/\/product\/(\d+)\/(\d+)/);
+  return m ? m[1] + '.' + m[2] : '';
+}
+
 // Pull unconsumed bookmarklet/phone scrapes from scrape_inbox.
-// One scrape → fills the single-item form (variant price picker if prices differ).
-// Several → feeds the batch generator. `silent` suppresses "nothing yet" toasts
-// so it can run automatically when the NEW tab opens.
+// NEW: one scrape fills the form, several feed the batch generator.
+// FIX: takes ONLY the scrape whose URL matches the current listing's stored
+// Shopee link, leaving the rest in the inbox for the NEW tab — so you can
+// front-load bookmark clicks on many tabs and fix in a row.
+// `silent` suppresses "nothing yet" toasts for the auto-pull paths.
 async function pullScraped(target, silent) {
   if (newBatchRunning || newLoading) return;
+  if (target === 'fix' && aiLoading) return;
   let rows;
   try {
     const { data, error } = await sb.from('scrape_inbox')
@@ -1711,10 +1723,42 @@ async function pullScraped(target, silent) {
   }
   if (!rows.length) { if (!silent) toast('Nothing scraped yet — use the bookmarklet first'); return; }
 
-  // Mark consumed up front so a re-render or second tap can't ingest twice
+  if (target === 'fix') {
+    const L = LISTINGS[currentIndex];
+    const key = shopeeKey(L && L.shopee);
+    if (!key) { if (!silent) toast('This listing has no Shopee link — add one first'); return; }
+    const match = rows.find(r => shopeeKey((r.payload || {}).url) === key);
+    if (!match) {
+      if (!silent) toast('No scrape for this listing yet — open its Shopee ↗ link and click the bookmark');
+      return;
+    }
+    // Consume only the matched row; other scrapes stay queued for NEW
+    sb.from('scrape_inbox').update({ consumed: true }).eq('id', match.id).then(() => {});
+    const p = match.payload || {};
+    shopeeInput     = [p.title, p.description].filter(Boolean).join('\n\n');
+    fixShopeeImages = p.images || [];
+    shopeeCollapsed = true;
+    // Refresh cost from the live scraped price (highest variant) and surface
+    // the change — supplier price moves are exactly what kills margins
+    const newCostVal = Math.max(p.price_max || 0, p.price_min || 0,
+      ...(p.models || []).map(m => m.price || 0));
+    const curCost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
+    if (newCostVal && Math.abs(newCostVal - curCost) > 0.005) {
+      editedCost = String(newCostVal);
+      toast(`Cost $${curCost.toFixed(2)} → $${newCostVal.toFixed(2)} · sell $${calcSell(newCostVal).toFixed(2)}`);
+    } else {
+      toast('Pulled ✓' + (newCostVal ? ` — cost $${newCostVal.toFixed(2)} unchanged` : ''));
+    }
+    renderFixView();
+    if (shopeeInput) generateAI('both');
+    return;
+  }
+
+  // NEW tab: consume everything up front so a re-render or second tap
+  // can't ingest twice
   sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
 
-  if (target === 'new' && rows.length > 1) {
+  if (rows.length > 1) {
     toast(`Pulled ${rows.length} scrapes → batch`);
     ingestScrapedBatch(rows.map(r => r.payload || {}));
     return;
@@ -1722,29 +1766,20 @@ async function pullScraped(target, silent) {
 
   const p = rows[rows.length - 1].payload || {};
   const text = [p.title, p.description].filter(Boolean).join('\n\n');
-  // Default cost to the most expensive variant — safest for margin;
-  // the picker lets you drop to a cheaper tier if that's the one listed
+  // Default cost to the most expensive variant — safest for margin
   const defCost = Math.max(p.price_max || 0, p.price_min || 0,
     ...(p.models || []).map(m => m.price || 0));
   const priceNote = defCost ? ` — cost $${defCost.toFixed(2)}` : '';
-  if (target === 'new') {
-    newShopeeInput  = text;
-    newShopeeImages = p.images || [];
-    newShopeeUrl    = p.url || newShopeeUrl;
-    if (defCost) {
-      newCost = String(defCost);
-      saveDraft();
-    }
-    newShopeeCollapsed = true;
-    renderNewView();
-    if (newShopeeInput) generateAINew('both');
-  } else {
-    shopeeInput     = text;
-    fixShopeeImages = p.images || [];
-    shopeeCollapsed = true;
-    renderFixView();
-    if (shopeeInput) generateAI('both');
+  newShopeeInput  = text;
+  newShopeeImages = p.images || [];
+  newShopeeUrl    = p.url || newShopeeUrl;
+  if (defCost) {
+    newCost = String(defCost);
+    saveDraft();
   }
+  newShopeeCollapsed = true;
+  renderNewView();
+  if (newShopeeInput) generateAINew('both');
   toast('Pulled ✓' + priceNote);
 }
 
@@ -2686,7 +2721,7 @@ function switchTab(tab) {
   document.getElementById('btn-new').classList.toggle('active',   tab === 'new');
   document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
   document.getElementById('btn-done').classList.toggle('active',  tab === 'done');
-  if (tab === 'fix') renderFixView();
+  if (tab === 'fix') { renderFixView(); pullScraped('fix', true); }
   else if (tab === 'new') { renderNewView(); pullScraped('new', true); }
   else if (tab === 'sales') renderSalesView();
   else if (tab === 'done') {
