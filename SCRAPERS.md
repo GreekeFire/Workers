@@ -5,7 +5,27 @@ session/IP, and drops results into the Supabase `scrape_inbox` table.
 work.html pulls them in with the **⬇ Pull scraped** button (NEW and FIX tabs).
 
 One-time prerequisite: run `supabase/scrape_inbox.sql` in the Supabase SQL
-editor (Dashboard → SQL Editor → paste → Run).
+editor (Dashboard → SQL Editor → paste → Run). *(Done 2026-06-11.)*
+
+## Roadmap: removing the bookmark press entirely
+
+The bookmark click exists because browsers won't run your code on Shopee's
+pages without something you installed triggering it. Three upgrade paths,
+status as of 2026-06-11 — **not built yet**, planned:
+
+| Device | Path | Setup (once) | Result |
+|---|---|---|---|
+| Laptop (Zen/Firefox/Chrome) | **Userscript with floating button** via Violentmonkey/Tampermonkey | Install extension → New script → paste → save | Every Shopee product page gets a "→ Work" button injected in the corner. One click sends the item (no bookmarks bar). Long-term replacement for the bookmarklet. |
+| iPhone, from the Shopee app | **iOS Shortcuts share-sheet target** (section 4-equivalent for iOS) | Shortcuts.app: "Get Contents of URL" ×2 (Shopee v4 GET → Supabase POST), accept URLs from share sheet | Share → tap shortcut → sent. Fewest taps possible from the app. |
+| iPhone, browsing in Safari | **Userscripts app** (free, App Store) running the same floating-button script | Install app → enable in Safari Settings → Extensions → paste script | Same floating button as laptop, in Safari. |
+
+Interim zero-install trick (works today in Zen): edit the bookmark and give it
+a **keyword** like `ss` — then on any Shopee page: Ctrl+L, type `ss`, Enter.
+
+Deliberately NOT doing: fully-automatic scraping of every product page you
+visit (no button at all). It works, but fills the inbox with everything you
+browse and auto-pull would burn AI generations on items you never meant to
+list.
 
 ## How to install a bookmarklet (laptop, any browser)
 
