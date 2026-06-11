@@ -1781,6 +1781,42 @@ async function ingestScrapedBatch(payloads) {
   renderNewView();
 }
 
+function saveApiKeyBatch(i) {
+  const val = document.getElementById(`bkey-${i}`)?.value.trim();
+  if (val) {
+    savedApiKey = val;
+    localStorage.setItem('alfred_claude_key', val);
+    if (newBatchResults[i]) newBatchResults[i].keyVisible = false;
+    renderNewView();
+    toast('Key saved');
+  }
+}
+
+// Re-fetch a batch card's product from its URL via /api/shopee
+async function fetchBatchShopee(i) {
+  const r = newBatchResults[i];
+  if (!r || !r.url || !r.url.trim()) { toast('Enter a Shopee URL first'); return; }
+  newBatchResults[i] = { ...r, batchFetching: true };
+  renderNewView();
+  try {
+    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(r.url.trim())}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    const text = [data.title, data.description].filter(Boolean).join('\n\n');
+    newBatchResults[i] = {
+      ...newBatchResults[i], batchFetching: false,
+      sourceText: text || newBatchResults[i].sourceText, sourceCollapsed: true,
+      images: (data.images && data.images.length) ? data.images : newBatchResults[i].images,
+      price: data.price_max || data.price || newBatchResults[i].price || 0,
+    };
+    toast('Fetched ✓');
+  } catch (e) {
+    newBatchResults[i] = { ...newBatchResults[i], batchFetching: false };
+    toast('Fetch failed — ' + (e.message || 'unknown'));
+  }
+  renderNewView();
+}
+
 async function generateBatchItem(i) {
   const r = newBatchResults[i];
   if (!r) return;
@@ -2485,6 +2521,21 @@ function _renderNewView() {
       const srcCollapsed = r.sourceCollapsed !== false;
       return `<div class="listing-card" style="margin-top:12px">
         <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
+        ${(!savedApiKey || r.keyVisible) ? `<div class="field-header" style="margin-bottom:8px">
+          <span class="field-label">Claude API Key</span>
+          ${r.keyVisible ? `<button class="copy-btn" onclick="newBatchResults[${i}].keyVisible=false;renderNewView()">✕</button>` : ''}
+        </div>
+        <div class="ai-key-inline">
+          <input class="ai-key-input" id="bkey-${i}" type="password" placeholder="sk-ant-api03-…">
+          <button class="copy-btn" onclick="saveApiKeyBatch(${i})">Save</button>
+        </div>` : ''}
+        <div class="shopee-fetch-row">
+          <input class="link-edit-input" type="url" placeholder="shopee.sg/…" value="${esc(r.url||'')}"
+            oninput="newBatchResults[${i}].url=this.value" style="flex:1;font-size:13px;padding:9px 12px">
+          <button class="shopee-fetch-btn" ${r.batchFetching ? 'disabled' : ''} onclick="fetchBatchShopee(${i})">
+            ${r.batchFetching ? 'Fetching…' : 'Fetch ↓'}
+          </button>
+        </div>
         ${(r.images||[]).length ? `<div class="shopee-img-grid">${r.images.map((src, n) =>
           `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}"></a>`
         ).join('')}</div>
@@ -2527,7 +2578,10 @@ function _renderNewView() {
           <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
           <input class="link-edit-input" type="url" placeholder="Carousell URL" value="${esc(r.caroUrl||'')}" oninput="newBatchResults[${i}].caroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
         </div>
-        <button class="btn-done" style="margin-top:10px;width:100%" onclick="saveBatchItem(${i})">Save to Done →</button>
+        <div class="action-row" style="margin-top:10px">
+          <button class="btn-delete" onclick="newBatchResults.splice(${i},1);renderNewView()">Clear</button>
+          <button class="btn-done" onclick="saveBatchItem(${i})">Save to Done →</button>
+        </div>
       </div>`;
     }).join('');
   }
