@@ -894,8 +894,9 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <div class="action-row" id="action-row" style="display:none">
       <button class="btn-delete" onclick="markDeleted()">Delete</button>
       <button class="btn-done" onclick="markDone()">Done</button>
+      <button class="btn-done" style="background:#16a34a" onclick="fillAndDone()" title="Open + fill Carousell and mark Done (F) — still Ctrl+Enter to Save on Carousell">Fill + Done</button>
     </div>
-    <div class="kbd-hint">&larr; &rarr; skip &middot; D done &middot; X delete &middot; S shopee &middot; C caro &middot; G generate</div>
+    <div class="kbd-hint">&larr; &rarr; skip &middot; D done &middot; F fill+done &middot; X delete &middot; S shopee &middot; C caro &middot; G generate</div>
   </div>
 
   <!-- NEW view -->
@@ -1774,19 +1775,19 @@ function caroId(u) {
 // You work one listing at a time, so the latest publish is always the right one.
 async function sendToCarousell() {
   const L = LISTINGS[currentIndex];
-  if (!L || !L.caro) { toast('No Carousell link on this listing'); return; }
+  if (!L || !L.caro) { toast('No Carousell link on this listing'); return false; }
   const cost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
   const payload = {
     title: (aiTitle || L.title || '').trim(),
     desc: (aiDesc || '').trim(),
     price: cost ? calcSell(cost) : null,
   };
-  if (!payload.title && !payload.desc) { toast('Generate the listing first'); return; }
+  if (!payload.title && !payload.desc) { toast('Generate the listing first'); return false; }
   try {
     const { error } = await sb.from('fill_outbox')
       .upsert({ caro_id: '_current', payload, consumed: false }, { onConflict: 'caro_id' });
     if (error) throw error;
-  } catch (e) { toast('Outbox error — ' + (e.message || 'unknown')); return; }
+  } catch (e) { toast('Outbox error — ' + (e.message || 'unknown')); return false; }
   const id = caroId(L.caro);   // works for full /p/ or /sell/ URLs; empty for app.link
   if (id) {
     window.open('https://www.carousell.sg/sell/' + id + '/', '_blank', 'noopener');
@@ -1795,6 +1796,16 @@ async function sendToCarousell() {
     window.open(L.caro, '_blank', 'noopener');
     toast('Published — on the listing, click Edit to auto-fill');
   }
+  return true;
+}
+
+// Merged action: publish + open Carousell for THIS card, then mark it Done and
+// advance. Order matters — sendToCarousell captures the current card's copy
+// before markDone() advances the index. Done is only marked if the Fill went
+// through. (Note: the actual Carousell Save is still your Ctrl+Enter on that tab.)
+async function fillAndDone() {
+  const ok = await sendToCarousell();
+  if (ok) markDone();
 }
 
 // Pull unconsumed bookmarklet/phone scrapes from scrape_inbox.
@@ -3169,6 +3180,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') { e.preventDefault(); navQueue(1); return; }
   if (currentIndex >= LISTINGS.length) return;
   if (e.key === 'd' || e.key === 'D') { e.preventDefault(); markDone(); }
+  if (e.key === 'f' || e.key === 'F') { e.preventDefault(); fillAndDone(); }
   if (e.key === 'x' || e.key === 'X' || e.key === 'Delete') { e.preventDefault(); markDeleted(); }
   if (e.key === 's' || e.key === 'S') { e.preventDefault(); openListingLink('shopee'); }
   if (e.key === 'c' || e.key === 'C') { e.preventDefault(); openListingLink('caro'); }
