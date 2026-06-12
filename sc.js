@@ -86,10 +86,20 @@
     }
     const m = L.match(/i\.(\d+)\.(\d+)/) || L.match(/\/product\/(\d+)\/(\d+)/);
     if (!m) throw new Error('not a product link');
-    const r = await fetch('https://shopee.sg/api/v4/item/get?itemid=' + m[2] + '&shopid=' + m[1], {
-      credentials: 'include',
-      headers: { 'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest' },
-    });
+    // Abort if the v4 call hangs (e.g. a bot challenge). Without this, a
+    // backgrounded iOS tab can stall here forever with no error surfaced.
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try {
+      r = await fetch('https://shopee.sg/api/v4/item/get?itemid=' + m[2] + '&shopid=' + m[1], {
+        credentials: 'include',
+        headers: { 'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest' },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(to);
+    }
     const d = await r.json();
     const it = d.item || (d.data && (d.data.item || d.data));
     if (!it || !it.name) throw new Error('Shopee returned no item — solve the bot check, retry');

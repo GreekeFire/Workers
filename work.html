@@ -1041,20 +1041,9 @@ const copyTimers = {};
 let savedApiKey = localStorage.getItem('alfred_claude_key') || '';
 
 // NEW tab state
-let newTitle = '';
-let newDesc = '';
-let newShopeeInput = '';
-let newCost = '';
-let newShopeeUrl = '';
-let newCaroUrl = '';
-let newLoading = false;
-let newShopeeCollapsed = false;
-let newShopeeImages = [];
-let newShopeeFetching = false;
 let newApiKeyVisible = false;
-let newFetchCollapsed = false;
 let newBatchRunning = false;
-let newBatchResults = []; // [{ url, status, title, desc }]
+let newBatchResults = []; // [{ url, inboxId, status, title, desc, price, images, sourceText, caroUrl }]
 
 let linkEditing = false;
 
@@ -1091,20 +1080,6 @@ function loadLocal() {
   todayDate = getToday();
   const rawSales = localStorage.getItem('carobiz_sales');
   if (rawSales) salesLog = JSON.parse(rawSales);
-  // Restore NEW tab draft
-  try {
-    const rawDraft = localStorage.getItem('carobiz_new_draft');
-    if (rawDraft) {
-      const d = JSON.parse(rawDraft);
-      newTitle      = d.title      || '';
-      newDesc       = d.desc       || '';
-      newShopeeInput= d.shopeeInput|| '';
-      newShopeeUrl  = d.shopeeUrl  || '';
-      newCaroUrl    = d.caroUrl    || '';
-      newCost       = d.cost       || '';
-      if (newTitle || newDesc) newShopeeCollapsed = true;
-    }
-  } catch(e) {}
 }
 
 async function syncFromSupabase() {
@@ -1259,8 +1234,8 @@ function downloadImages(imgs) {
   toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
 }
 
-function downloadAllImages(which = 'fix') {
-  downloadImages(which === 'new' ? newShopeeImages : fixShopeeImages);
+function downloadAllImages() {
+  downloadImages(fixShopeeImages);
 }
 
 function downloadBatchImages(i) {
@@ -1577,18 +1552,6 @@ function updateCharCount(val, id) {
 }
 
 
-function saveDraft() {
-  if (newTitle || newDesc || newShopeeInput) {
-    localStorage.setItem('carobiz_new_draft', JSON.stringify({
-      title: newTitle, desc: newDesc, shopeeInput: newShopeeInput,
-      shopeeUrl: newShopeeUrl, caroUrl: newCaroUrl, cost: newCost
-    }));
-  } else {
-    localStorage.removeItem('carobiz_new_draft');
-  }
-}
-
-
 // Routes through /api/claude so the Anthropic key never touches the browser.
 // Falls back to a direct browser call with savedApiKey if the server key
 // isn't configured (backwards-compatible for local dev with a saved key).
@@ -1735,30 +1698,6 @@ function saveApiKey() {
   saveApiKeyFrom('api-key-input', () => { apiKeyVisible = false; renderFixView(); });
 }
 
-// NEW tab — fetch from Shopee URL
-async function fetchShopeeData() {
-  const urlEl = document.getElementById('new-shopee-fetch-url');
-  const url   = (urlEl?.value || newShopeeUrl).trim();
-  if (!url) { toast('Paste a Shopee URL first'); return; }
-  newShopeeUrl      = url;
-  newShopeeFetching = true;
-  renderNewView();
-  try {
-    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Fetch failed');
-    newShopeeInput     = [data.title, data.description].filter(Boolean).join('\n\n');
-    newShopeeImages    = data.images || [];
-    newShopeeCollapsed = true;   // hide raw text; images stay visible
-    toast('Fetched ✓');
-  } catch(e) {
-    toast('Failed — ' + (e.message || 'unknown error'));
-  }
-  newShopeeFetching = false;
-  renderNewView();
-  if (newShopeeInput) generateAINew('both');
-}
-
 // FIX tab — fetch from Shopee URL via /api/shopee (og: tag scrape)
 async function fetchShopeeDataFix() {
   const urlEl = document.getElementById('fix-shopee-fetch-url');
@@ -1851,7 +1790,7 @@ async function fillAndDone() {
 // front-load bookmark clicks on many tabs and fix in a row.
 // `silent` suppresses "nothing yet" toasts for the auto-pull paths.
 async function pullScraped(target, silent) {
-  if (newBatchRunning || newLoading) return;
+  if (newBatchRunning) return;
   if (target === 'fix' && aiLoading) return;
   let rows;
   try {
@@ -2104,47 +2043,9 @@ async function generateBatchItem(i) {
   renderNewView();
 }
 
-// NEW tab AI
-async function generateAINew(mode = 'both') {
-  const taEl = document.getElementById('new-shopee-ta');
-  if (taEl) newShopeeInput = taEl.value;
-  if (!newShopeeInput.trim()) { toast('Fetch or paste Shopee content first'); return; }
-  newLoading = true;
-  renderNewView();
-  let aiError = null;
-  try {
-    const { title, desc } = await runAIGenerate(newShopeeInput, {
-      titleOnly: mode === 'title',
-      descOnly:  mode === 'desc',
-    });
-    if (mode !== 'desc'  && title) newTitle = title;
-    if (mode !== 'title' && desc)  newDesc  = desc;
-    if (!newTitle && !newDesc) aiError = 'No content returned — try again';
-  } catch (e) {
-    if (e.message === 'NO_KEY') { newApiKeyVisible = true; newLoading = false; renderNewView(); return; }
-    aiError = e.message || 'Unknown error';
-  }
-  if (newTitle || newDesc) { newShopeeCollapsed = true; newFetchCollapsed = true; }
-  newLoading = false;
-  saveDraft();
-  renderNewView();
-  if (aiError) {
-    const errEl = document.createElement('div');
-    errEl.style.cssText = 'background:#c0392b;color:#fff;padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13px;word-break:break-all';
-    errEl.textContent = 'Error: ' + aiError;
-    document.getElementById('new-wrap')?.prepend(errEl);
-  } else if (newTitle || newDesc) {
-    document.getElementById('new-title-ta')?.classList.add('fade-in');
-    document.getElementById('new-desc-ta')?.classList.add('fade-in');
-    document.getElementById('new-title-ta')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
-
 function saveApiKeyNew() {
   saveApiKeyFrom('new-api-key-input', () => { newApiKeyVisible = false; renderNewView(); });
 }
-
-let _savingNew = false;
 
 const _batchCopyTimers = {};
 function copyBatch(i, field) {
@@ -2237,58 +2138,6 @@ function addBlankCard() {
   renderNewView();
 }
 
-async function saveNewListing() {
-  const titleEl  = document.getElementById('new-title-ta');
-  const costEl   = document.getElementById('new-cost-input');
-  const shopeeEl = document.getElementById('new-shopee-fetch-url');
-  const caroEl   = document.getElementById('new-caro-url');
-  const descEl   = document.getElementById('new-desc-ta');
-  if (titleEl)  newTitle     = titleEl.value.trim();
-  if (descEl)   newDesc      = descEl.value.trim();
-  if (costEl)   newCost      = costEl.value;
-  if (shopeeEl) newShopeeUrl = shopeeEl.value.trim();
-  if (caroEl)   newCaroUrl   = caroEl.value.trim();
-  if (!newTitle) { toast('Add a title first'); return; }
-  if (_savingNew) return;   // double-tap during the awaited insert = duplicate rows
-  _savingNew = true;
-  const cost = parseFloat(newCost) || 0;
-  const sell = calcSell(cost);
-  // Insert into the listings table so it shows up in LISTINGS search —
-  // doneData alone is not queried there
-  let sbId = null;
-  try {
-    const { data, error } = await sb.from('listings').insert({
-      title: newTitle, shopee_url: newShopeeUrl, carousell_url: newCaroUrl,
-      source_cost: cost, sell_price: sell, status: 'done'
-    }).select('id').single();
-    if (error) throw error;
-    sbId = data.id;
-  } catch (e) {
-    console.warn('Failed to insert listing row:', e);
-    toast('Saved, but not added to LISTINGS catalog');
-  }
-  _savingNew = false;   // past the only await — the rest runs synchronously
-  doneData.push({
-    index: null,
-    id: sbId,
-    title: newTitle,
-    description: newDesc,
-    shopeeUrl: newShopeeUrl,
-    carousellUrl: newCaroUrl,
-    sourceCost: cost,
-    sellPrice: sell,
-    doneAt: new Date().toISOString()
-  });
-  // Reset new tab
-  newTitle = ''; newDesc = ''; newShopeeInput = ''; newCost = '';
-  newShopeeUrl = ''; newCaroUrl = ''; newShopeeCollapsed = false;
-  newShopeeImages = []; newShopeeFetching = false;
-  localStorage.removeItem('carobiz_new_draft');
-  pushToSupabase();
-  renderSessionBar();
-  switchTab('done');
-  toast('Saved to Done ✓');
-}
 
 // Sales
 function logSale() {
@@ -2825,12 +2674,6 @@ function _renderNewView() {
   wrap.innerHTML = html;
 
   requestAnimationFrame(() => {
-    const ta = document.getElementById('new-title-ta');
-    if (ta) autoResize(ta);
-    const da = document.getElementById('new-desc-ta');
-    if (da) autoResize(da);
-    const sa = document.getElementById('new-shopee-ta');
-    if (sa) autoResize(sa);
     newBatchResults.forEach((_, i) => {
       const t = document.getElementById(`btt-${i}`); if (t) autoResize(t);
       const d = document.getElementById(`bdt-${i}`); if (d) autoResize(d);
