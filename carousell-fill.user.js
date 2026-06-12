@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.4
-// @description  After you click "Fill Carousell" in work.html, open the listing and click its Edit button yourself — the userscript fills title/description/price once the form appears, then Ctrl+Enter saves. No scripted navigation (hard-loading the edit URL is what Carousell 404s).
+// @version      1.5
+// @description  After "Fill Carousell" in work.html: on the listing, Ctrl+Enter clicks Edit; the form auto-fills; Ctrl+Enter again Saves. Clicks the real Edit button (supported in-app nav) — no hard-loading the edit URL, which is what Carousell 404s.
 // @match        https://www.carousell.sg/sell/*
 // @match        https://www.carousell.sg/p/*
 // @run-at       document-idle
@@ -81,18 +81,30 @@
     return false;
   };
 
-  // Arm Ctrl/Cmd+Enter to commit. You still review and press the key yourself —
-  // a chord (not plain Enter) so it never fires while editing the description.
-  const armSaveHotkey = () => {
+  // Click THIS listing's Edit control. It links to /sell/<id> (in-app SPA nav,
+  // the supported path) — match the id so we never hit the generic "Sell" nav.
+  const cid = (u) => { const m = String(u || '').split('?')[0].match(/\d{6,}/g); return m ? m[m.length - 1] : ''; };
+  const clickEdit = () => {
+    const id = cid(location.href);
+    let el = id && document.querySelector('a[href*="/sell/' + id + '"]');
+    if (!el) el = Array.from(document.querySelectorAll('button, a'))
+      .find(b => /^\s*edit\b/i.test(b.innerText || '') && (b.innerText || '').trim().length < 20);
+    if (el) { el.click(); return true; }
+    return false;
+  };
+
+  // Generic one-shot Ctrl/Cmd+Enter chip + handler (used for Edit and for Save).
+  const armHotkey = (label, run) => {
     const chip = document.createElement('div');
-    chip.textContent = '⌨ Ctrl+Enter to Save';
+    chip.textContent = '⌨ ' + label;
     chip.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:2147483647;background:#111827;color:#fff;padding:8px 14px;border-radius:20px;font:600 12px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.35)';
     document.body.appendChild(chip);
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        chip.textContent = clickSave() ? '✓ Saving…' : '✗ Save button not found';
         window.removeEventListener('keydown', onKey, true);
+        const msg = run();
+        chip.textContent = msg;
         setTimeout(() => chip.remove(), 2500);
       }
     };
@@ -103,7 +115,7 @@
     const p = await getPending();
     if (!p) return; // no fresh pending fill → don't disturb normal browsing
 
-    if (onListing) note('Fill ready — click Edit and it fills automatically');
+    if (onListing) armHotkey('Ctrl+Enter to Edit', () => clickEdit() ? '↗ Opening editor…' : '✗ Edit button not found');
 
     // Fill once the edit form appears — whether you reached it by clicking Edit
     // (SPA navigation, the supported path) or the page loaded on /sell/ directly.
@@ -114,7 +126,11 @@
       if (ready) {
         clearInterval(iv);
         const n = fill(p);
-        if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — Ctrl+Enter to Save'); markConsumed(); armSaveHotkey(); }
+        if (n) {
+          note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — Ctrl+Enter to Save');
+          markConsumed();
+          armHotkey('Ctrl+Enter to Save', () => clickSave() ? '✓ Saving…' : '✗ Save button not found');
+        }
       } else if (tries++ > 900) {   // ~6 min, then stop waiting
         clearInterval(iv);
       }
