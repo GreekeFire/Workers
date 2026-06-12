@@ -995,6 +995,7 @@ let _fixGenSeq = 0;   // bumped when the FIX card changes; stale generations che
 let fixCostNote = ''; // inline cost-change note on the FIX card (toast would clobber UNDO)
 let fixNoload = false;  // matched scrape couldn't load Shopee data → advisory "verify & Delete" banner
 let fixPullMiss = false; // auto-pull found no scrape for this card → inline "unable to pull" hint
+let preGenCache = {};    // listingId → {title,desc,sourceText} | {pending,sourceText}: AI generated for the NEXT card ahead of time
 let aiTitle = '';
 let aiDesc = '';
 let editedCost = null;
@@ -1781,6 +1782,7 @@ async function pullScraped(target, silent) {
   }
 
   if (target === 'fix') {
+    setTimeout(preGenerateNext, 0);   // prep the NEXT card's AI text in the background
     const L = LISTINGS[currentIndex];
     const key = shopeeKey(L && L.shopee);
     if (!key) { if (!silent) toast('This listing has no Shopee link — add one first'); return; }
@@ -1823,8 +1825,20 @@ async function pullScraped(target, silent) {
     } else if (!silent) {
       toast('Pulled ✓' + (newCostVal ? ` — cost $${newCostVal.toFixed(2)} unchanged` : ''));
     }
-    renderFixView();
-    if (shopeeInput) generateAI('both');
+    // If this card was pre-generated in the background while you worked the
+    // previous one, apply it instantly — no spinner. Guard on the exact source
+    // text so a stale/re-scraped payload never shows the wrong product's copy.
+    const cached = L.id ? preGenCache[L.id] : null;
+    if (cached && !cached.pending && cached.sourceText === shopeeInput && (cached.title || cached.desc)) {
+      aiTitle = cached.title || '';
+      aiDesc  = cached.desc  || '';
+      delete preGenCache[L.id];
+      shopeeCollapsed = true; fixFetchCollapsed = true;
+      renderFixView();
+    } else {
+      renderFixView();
+      if (shopeeInput) generateAI('both');
+    }
     return;
   }
 
@@ -1856,6 +1870,53 @@ async function pullScraped(target, silent) {
   renderNewView();
   if (newShopeeInput) generateAINew('both');
   toast('Pulled ✓' + priceNote);
+}
+
+// Pre-generate the NEXT unprocessed FIX card's AI text in the background while
+// you work the current one, so advancing shows finished copy with no spinner.
+// Reads the matching scrape WITHOUT consuming it; the row is consumed normally
+// when that card actually becomes current. Cheap-but-not-free, so it's gated:
+// needs an API key, a matching live scrape, and runs at most once per listing.
+async function preGenerateNext() {
+  if (!savedApiKey) return;                              // no key → would NO_KEY, skip
+  const ni = findNext(currentIndex + 1);
+  if (ni >= LISTINGS.length) return;
+  const L = LISTINGS[ni];
+  if (!L || !L.id || preGenCache[L.id]) return;          // already done / in flight
+  const key = shopeeKey(L.shopee);
+  if (!key) return;
+  let rows;
+  try {
+    const { data, error } = await sb.from('scrape_inbox')
+      .select('id,payload').eq('kind', 'shopee').eq('consumed', false)
+      .order('created_at', { ascending: true });
+    if (error) return;
+    rows = data || [];
+  } catch (e) { return; }
+  const match = rows.find(r => shopeeKey((r.payload || {}).url) === key);
+  if (!match) return;
+  const p = match.payload || {};
+  if (p.unloaded || p.dead) return;                      // nothing to generate
+  const text = [p.title, p.description].filter(Boolean).join('\n\n');
+  if (!text) return;
+  if (preGenCache[L.id]) return;                         // re-check after await
+  preGenCache[L.id] = { pending: true, sourceText: text };
+  try {
+    const { title, desc } = await runAIGenerate(text);
+    preGenCache[L.id] = { title, desc, sourceText: text };
+    // If you advanced onto this card while it was still generating (and it
+    // pulled the same source, isn't already filled, and no live gen is running),
+    // apply the result now so you still skip the wait.
+    const cur = LISTINGS[currentIndex];
+    if (cur && cur.id === L.id && shopeeInput === text && !aiTitle && !aiLoading) {
+      aiTitle = title || ''; aiDesc = desc || '';
+      delete preGenCache[L.id];
+      shopeeCollapsed = true; fixFetchCollapsed = true;
+      renderFixView();
+    }
+  } catch (e) {
+    delete preGenCache[L.id];                             // failed → normal gen on arrival
+  }
 }
 
 // Batch ingest of pre-scraped payloads — no /api/shopee fetch needed,
