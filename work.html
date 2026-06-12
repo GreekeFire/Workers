@@ -1957,45 +1957,15 @@ async function pullScraped(target, silent) {
     }
     return;
   }
-  if (rows.length > 1) {
-    // Don't consume yet — keep scrapes on the belt until each card is resolved
-    // (Save to Done or Clear). A refresh mid-batch then re-pulls and regenerates
-    // instead of losing the cards. Skip any scrape that already has a card
-    // showing, so re-pulls (e.g. landing back on NEW) don't duplicate or
-    // needlessly regenerate.
-    // "Showing" = every product already on the NEW tab: batch cards AND the
-    // single NEW form (newShopeeUrl). Without the latter, a product sitting in
-    // the single form would get added a second time as a batch card.
-    const showing = new Set([
-      ...newBatchResults.map(c => shopeeKey(c.url)),
-      shopeeKey(newShopeeUrl),
-    ].filter(Boolean));
-    const fresh = rows.filter(r => !showing.has(keyOf(r)));
-    if (!fresh.length) { if (!silent) toast('Already loaded — resolve the cards below'); return; }
-    toast(`Pulled ${fresh.length} scrape${fresh.length > 1 ? 's' : ''} → batch`);
-    ingestScrapedBatch(fresh.map(r => ({ payload: r.payload || {}, inboxId: r.id })));
-    return;
-  }
-
-  // Single scrape → fills the NEW form. Consume up front: the form's draft is
-  // saved to localStorage, so a refresh restores it without needing the belt.
-  sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
-  const p = rows[rows.length - 1].payload || {};
-  const text = [p.title, p.description].filter(Boolean).join('\n\n');
-  // Default cost to the most expensive variant — safest for margin
-  const defCost = highestCost(p);
-  const priceNote = defCost ? ` — cost $${defCost.toFixed(2)}` : '';
-  newShopeeInput  = text;
-  newShopeeImages = p.images || [];
-  newShopeeUrl    = p.url || newShopeeUrl;
-  if (defCost) {
-    newCost = String(defCost);
-    saveDraft();
-  }
-  newShopeeCollapsed = true;
-  renderNewView();
-  if (newShopeeInput) generateAINew('both');
-  toast('Pulled ✓' + priceNote);
+  // Every scrape becomes a card (1 or many — one consistent flow). Don't consume
+  // yet — keep scrapes on the belt until each card is resolved (Save or Clear),
+  // so a refresh re-pulls instead of losing work. Skip scrapes already shown as
+  // a card so re-pulls don't duplicate or needlessly regenerate.
+  const showing = new Set(newBatchResults.map(c => shopeeKey(c.url)).filter(Boolean));
+  const fresh = rows.filter(r => !showing.has(keyOf(r)));
+  if (!fresh.length) { if (!silent) toast('Already loaded — resolve the cards below'); return; }
+  toast(`Pulled ${fresh.length} scrape${fresh.length > 1 ? 's' : ''}`);
+  ingestScrapedBatch(fresh.map(r => ({ payload: r.payload || {}, inboxId: r.id })));
 }
 
 // Pre-generate the NEXT unprocessed FIX card's AI text in the background while
@@ -2229,11 +2199,15 @@ async function batchGenerateNew() {
   const urls = (urlsEl?.value || '').split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
   if (!urls.length) { toast('Paste at least one Shopee URL'); return; }
 
+  if (urlsEl) urlsEl.value = '';          // clear the input once queued
   newBatchRunning = true;
-  newBatchResults = urls.map(url => ({ url, status: 'loading', loadingMsg: 'Fetching…' }));
+  // Append (don't replace) so manual URLs add to any pulled cards already showing
+  const startIdx = newBatchResults.length;
+  urls.forEach(url => newBatchResults.push({ url, status: 'loading', loadingMsg: 'Fetching…' }));
   renderNewView();
 
   for (let i = 0; i < urls.length; i++) {
+    const idx = startIdx + i;
     try {
       const res  = await fetch(`/api/shopee?url=${encodeURIComponent(urls[i])}`);
       const data = await res.json();
@@ -2241,18 +2215,25 @@ async function batchGenerateNew() {
       const productText = [data.title, data.description].filter(Boolean).join('\n\n');
       if (!productText) throw new Error('No product text returned');
 
-      newBatchResults[i].loadingMsg = 'Generating…';
+      newBatchResults[idx].loadingMsg = 'Generating…';
       renderNewView();
 
+      const cost = data.price_max || data.price || 0;
       const { title, desc } = await runAIGenerate(productText);
-      newBatchResults[i] = { url: urls[i], status: 'done', title, desc };
+      newBatchResults[idx] = { url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
     } catch (e) {
-      newBatchResults[i] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
+      newBatchResults[idx] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
     }
     renderNewView();
   }
 
   newBatchRunning = false;
+  renderNewView();
+}
+
+// Add an empty card to fill in by hand (replaces the old single NEW form)
+function addBlankCard() {
+  newBatchResults.push({ url: '', status: 'done', title: '', desc: '', price: 0, images: [], sourceText: '', sourceCollapsed: true });
   renderNewView();
 }
 
@@ -2720,9 +2701,9 @@ function renderNewView() { withFocusPreserved(_renderNewView); }
 function _renderNewView() {
   const wrap = document.getElementById('new-wrap');
   const apiKey = savedApiKey;
-  const genLabel = (newTitle || newDesc) ? 'Regenerate' : '✨ Generate';
-  const sell = calcSell(parseFloat(newCost) || 0);
 
+  // Add bar — the single way to add listings. Everything below is a card; there
+  // is no separate single-listing form. Pull 1 or many, paste URLs, or + Blank.
   let html = `<div class="listing-card">`;
 
   // API key section
@@ -2737,106 +2718,22 @@ function _renderNewView() {
     </div>`;
   }
 
-  // Shopee section — fetch row collapsible after generation; images always shown; textarea toggleable
-  html += newFetchCollapsed
-    ? `<div class="shopee-collapsed" onclick="newFetchCollapsed=false;renderNewView()">▼ Change URL</div>`
-    : `<div class="shopee-fetch-row">
-        <input class="link-edit-input" id="new-shopee-fetch-url" type="url"
-          placeholder="shopee.sg/…" value="${esc(newShopeeUrl)}"
-          oninput="newShopeeUrl=this.value"
-          style="flex:1;font-size:13px;padding:9px 12px">
-        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="fetchShopeeData()">
-          ${newShopeeFetching ? 'Fetching…' : 'Fetch ↓'}
-        </button>
-        <button class="shopee-fetch-btn" ${newShopeeFetching ? 'disabled' : ''} onclick="pullScraped('new')" title="Pull latest bookmarklet/phone scrape">⬇ Pull</button>
-      </div>`;
-  if (newShopeeImages.length > 0) {
-    html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
-      `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
-        <img src="${esc(src)}" loading="lazy" alt="img ${i+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1">
-      </a>`
-    ).join('')}</div>`;
-    if (newShopeeImages.length > 1) html += `<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="copy-btn" onclick="downloadAllImages('new')">↓ All ${newShopeeImages.length}</button></div>`;
-  }
-  if (newShopeeInput) {
-    html += newShopeeCollapsed
-      ? `<div class="shopee-collapsed" onclick="newShopeeCollapsed=false;renderNewView()">▼ Shopee source</div>`
-      : `<textarea class="ai-field" id="new-shopee-ta"
-          oninput="newShopeeInput=this.value;autoResize(this)"
-          placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
-  }
-
-  if (newLoading) html += `<div class="ai-loading">✨ Generating…</div><div class="skel-line" style="width:92%"></div><div class="skel-line" style="width:70%"></div><div class="skel-line" style="width:83%"></div>`;
-
-  // Title (always visible)
-  html += `<div class="field-header" style="margin-top:12px">
-    <span class="field-label">Title</span>
-    <div style="display:flex;gap:6px">
-      ${newTitle ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('title')">↺</button>` : ''}
-      <button class="copy-btn" id="new-copy-title-btn" onclick="copyField('new-title-ta','new-copy-title-btn')">Copy</button>
-    </div>
+  html += `<div class="field-header" style="margin-bottom:8px">
+    <span class="field-label">Add listings</span>
+    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
   </div>
-  <textarea class="title-input" rows="1" id="new-title-ta"
-    oninput="newTitle=this.value;autoResize(this);updateCharCount(this.value,'new-char-count')"
-    placeholder="Type or generate a title…">${esc(newTitle)}</textarea>
-  <div class="char-counter ${newTitle.length>225?'danger':newTitle.length>=200?'warn':''}" id="new-char-count">${newTitle.length} / 225</div>
-  <div class="field-header">
-    <span class="field-label">Description</span>
-    <div style="display:flex;gap:6px">
-      ${newDesc ? `<button class="copy-btn" style="font-size:11px" ${newLoading?'disabled':''} onclick="generateAINew('desc')">↺</button>` : ''}
-      <button class="copy-btn" id="new-copy-desc-btn" onclick="copyField('new-desc-ta','new-copy-desc-btn')">Copy</button>
-    </div>
-  </div>
-  <textarea class="ai-field" id="new-desc-ta" oninput="newDesc=this.value;autoResize(this)" placeholder="Generate or type a description…">${esc(newDesc)}</textarea>`;
-
-  // Generate button row
-  html += `<div class="ai-row">
-    <button class="ai-gen-btn" ${newLoading?'disabled':''} onclick="generateAINew('both')">
-      ${(newTitle||newDesc) ? '↺ Regenerate' : '✨ Generate'}
-    </button>
-    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px;margin-left:auto" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
-  </div>`;
-
-  // Price calculator
-  html += `<div class="price-calc">
-    <div class="pcol">
-      <div class="pcol-label">Cost</div>
-      <div class="pcol-input-wrap">
-        <span class="pcol-currency">$</span>
-        <input class="cost-input" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(String(newCost))}" oninput="newCost=this.value;saveDraft();document.getElementById('new-sell-display').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="new-cost-input">
-      </div>
-    </div>
-    <div class="parrow">→</div>
-    <div class="pcol">
-      <div class="pcol-label">Sell</div>
-      <div class="sell-display" id="new-sell-display">$${sell.toFixed(2)}</div>
-    </div>
-  </div>`;
-
-  // URL inputs
-  html += `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
-    <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
-    <input class="link-edit-input" id="new-caro-url" type="url" placeholder="Carousell URL" value="${esc(newCaroUrl)}" oninput="newCaroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
-  </div>`;
-
-  html += `</div>`; // close listing-card
-
-  // Save + Clear row
-  html += `<div class="action-row" style="margin-top:16px">
-    <button class="btn-delete" onclick="newTitle='';newDesc='';newShopeeInput='';newCost='';newShopeeUrl='';newCaroUrl='';newShopeeCollapsed=false;newLoading=false;newShopeeImages=[];newShopeeFetching=false;newFetchCollapsed=false;renderNewView()">Clear</button>
-    <button class="btn-done" onclick="saveNewListing()">Save to Done →</button>
-  </div>`;
-
-  // Batch section
-  html += `<div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--card-border)">
-    <div class="field-label" style="margin-bottom:8px">Batch — Multiple URLs</div>
-    <textarea class="ai-field" id="new-batch-urls" rows="3"
-      placeholder="Paste Shopee URLs, one per line…"
-      oninput="autoResize(this)" style="margin-bottom:8px"></textarea>
+  <textarea class="ai-field" id="new-batch-urls" rows="2"
+    placeholder="Paste Shopee URL(s), one per line…"
+    oninput="autoResize(this)" style="margin-bottom:8px"></textarea>
+  <div class="ai-row" style="flex-wrap:wrap">
     <button class="ai-gen-btn" ${newBatchRunning?'disabled':''} onclick="batchGenerateNew()">
-      ${newBatchRunning ? 'Generating…' : '✨ Generate All'}
+      ${newBatchRunning ? 'Working…' : '✨ Generate from URLs'}
     </button>
+    <button class="shopee-fetch-btn" ${newBatchRunning?'disabled':''} onclick="pullScraped('new')" title="Pull products scraped from your phone/bookmarklet">⬇ Pull scraped</button>
+    <button class="copy-btn" onclick="addBlankCard()" title="Add an empty card to fill in by hand">+ Blank</button>
   </div>`;
+
+  html += `</div>`; // close add-bar card
 
   // Batch results
   if (newBatchResults.length) {
