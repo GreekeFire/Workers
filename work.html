@@ -1247,20 +1247,28 @@ function maybeBackupNudge() {
 // Open the next N unprocessed Shopee links in tabs (starting at the current
 // listing). With AUTO harvest on, each tab self-scrapes into scrape_inbox, so
 // by the time you reach it the ⬇ Pull / auto-pull already has the data matched
-// by URL. Browsers block multi-window.open without a gesture — this runs on the
-// click, but you may need to allow pop-ups for this site once.
+// by URL.
+//
+// Browsers block a burst of window.open() — typically only the first few of a
+// 10-at-once batch get through until you allow pop-ups for this site. We track
+// which URLs already opened this session (_openedLinks) so pressing the button
+// again opens ONLY the ones that didn't make it last time — never duplicates.
+const _openedLinks = new Set();
 function openNextLinks(n) {
   const urls = [];
   for (let i = currentIndex; i < LISTINGS.length && urls.length < n; i++) {
     if (doneSet.has(i) || deletedSet.has(i)) continue;
     const u = LISTINGS[i] && LISTINGS[i].shopee;
-    if (u) urls.push(u);
+    if (u && !_openedLinks.has(u)) urls.push(u);   // skip already-opened
   }
-  if (!urls.length) { toast('No upcoming Shopee links to open'); return; }
-  let opened = 0;
-  for (const u of urls) { if (window.open(u, '_blank', 'noopener')) opened++; }
-  if (opened < urls.length) {
-    toast(`Opened ${opened}/${urls.length} — allow pop-ups for this site to open the rest`);
+  if (!urls.length) { toast('No new upcoming Shopee links to open'); return; }
+  let opened = 0, blocked = 0;
+  for (const u of urls) {
+    if (window.open(u, '_blank', 'noopener')) { _openedLinks.add(u); opened++; }
+    else blocked++;
+  }
+  if (blocked) {
+    toast(`Opened ${opened}, ${blocked} blocked — allow pop-ups, then press again for the rest`);
   } else {
     toast(`Opened ${opened} tab${opened > 1 ? 's' : ''} — AUTO will scrape them`);
   }
