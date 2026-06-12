@@ -993,7 +993,7 @@ let activeTab = 'fix';
 let aiLoading = false;
 let _fixGenSeq = 0;   // bumped when the FIX card changes; stale generations check it
 let fixCostNote = ''; // inline cost-change note on the FIX card (toast would clobber UNDO)
-let fixDead = false;  // matched scrape says the Shopee source no longer exists → prompt Delete
+let fixNoload = false;  // matched scrape couldn't load Shopee data → advisory "verify & Delete" banner
 let aiTitle = '';
 let aiDesc = '';
 let editedCost = null;
@@ -1335,7 +1335,7 @@ function markDone() {
 function undoDone(s) {
   _undoFn = null;   // guard against a double-tap on the UNDO button
   _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
-  fixCostNote = ''; fixDead = false;
+  fixCostNote = ''; fixNoload = false;
   doneSet.delete(s.idx);
   doneTodayCount = Math.max(0, doneTodayCount - 1);
   let di = doneData.indexOf(s.entry);
@@ -1385,7 +1385,7 @@ function undoDelete() {
   const entry = undoStack.pop();
   if (entry === undefined) return;
   _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
-  fixCostNote = ''; fixDead = false;
+  fixCostNote = ''; fixNoload = false;
   const idx = entry.idx ?? entry; // handle old format
   deletedSet.delete(idx);
   deletedTodayCount = Math.max(0, deletedTodayCount - 1);
@@ -1423,7 +1423,7 @@ async function saveLinkEdits() {
 
 function resetAI() {
   _fixGenSeq++;        // invalidate any in-flight generation for the old card
-  fixCostNote = ''; fixDead = false;
+  fixCostNote = ''; fixNoload = false;
   aiLoading = false;
   aiTitle = '';
   aiDesc = '';
@@ -1786,16 +1786,18 @@ async function pullScraped(target, silent) {
     // Consume only the matched row; other scrapes stay queued for NEW
     sb.from('scrape_inbox').update({ consumed: true }).eq('id', match.id).then(() => {});
     const p = match.payload || {};
-    // Dead source: the scraper confirmed this Shopee listing no longer exists.
-    // Can't be fixed — surface a banner prompting Delete instead of filling.
-    if (p.dead) {
-      fixDead = true;
+    // Couldn't-load marker: the scraper sat on this product page and Shopee
+    // never populated any data — likely a delisted/dead source. Advisory only:
+    // show a banner prompting you to verify on Shopee ↗ and Delete if dead,
+    // rather than filling the card.
+    if (p.unloaded) {
+      fixNoload = true;
       fixCostNote = '';
       renderFixView();
-      if (!silent) toast('Shopee source gone — Delete this listing');
+      if (!silent) toast("Couldn't load Shopee data — verify & Delete");
       return;
     }
-    fixDead = false;
+    fixNoload = false;
     shopeeInput     = [p.title, p.description].filter(Boolean).join('\n\n');
     fixShopeeImages = p.images || [];
     shopeeCollapsed = true;
@@ -1816,8 +1818,8 @@ async function pullScraped(target, silent) {
     return;
   }
 
-  // NEW tab: drop dead-source markers (they belong to FIX, nothing to list)
-  rows = rows.filter(r => !(r.payload || {}).dead);
+  // NEW tab: drop couldn't-load markers (they belong to FIX, nothing to list)
+  rows = rows.filter(r => !(r.payload || {}).unloaded);
   if (!rows.length) { if (!silent) toast('Nothing scraped yet — use the bookmarklet first'); return; }
   // Consume everything up front so a re-render or second tap can't ingest twice
   sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
@@ -2287,8 +2289,8 @@ function _renderFixView() {
   const cost = editedCost !== null ? editedCost : L.cost;
   const sell = L.sell;
   wrap.innerHTML = `<div class="listing-card">
-    ${fixDead ? `<div style="background:#7f1d1d;color:#fee2e2;border:1px solid #b91c1c;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <span style="font-size:13px;font-weight:600">⚠ Shopee source no longer exists — can't be fixed. Delist on Carousell, then:</span>
+    ${fixNoload ? `<div style="background:#78350f;color:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px;font-weight:600">⚠ Couldn't load Shopee data — likely delisted. Verify on Shopee ↗; if dead, delist on Carousell then:</span>
       <button class="btn-delete" style="white-space:nowrap" onclick="markDeleted()">Delete</button>
     </div>` : ''}
     <div class="field-header">
