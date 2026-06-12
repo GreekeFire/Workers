@@ -109,19 +109,51 @@
   // Send a paste-box link (always fetch)
   const send = async (L) => post(await fetchItem(L));
 
-  const note = (msg, bad) => {
+  const note = (msg, bad, small) => {
     const t = document.createElement('div');
     t.textContent = msg;
-    t.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;background:' +
-      (bad ? '#dc2626' : '#16a34a') + ';color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+    t.style.cssText = small
+      ? 'position:fixed;top:14px;right:14px;z-index:999999;background:' + (bad ? '#dc2626' : '#15803d') +
+        ';color:#fff;padding:6px 12px;border-radius:6px;font:600 12px system-ui;opacity:.92;box-shadow:0 2px 8px rgba(0,0,0,.3)'
+      : 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;background:' +
+        (bad ? '#dc2626' : '#16a34a') + ';color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';
     document.body.appendChild(t);
-    setTimeout(() => t.remove(), 3500);
+    setTimeout(() => t.remove(), small ? 2200 : 3500);
   };
 
-  // Product page → try dataLayer first, fall back to fetch
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // Product page → try dataLayer first, fall back to fetch (manual click only).
+  // AUTO mode (userscript-driven, gated by the sw_auto toggle): dataLayer ONLY —
+  // poll until Shopee populates a priced copy, then send; NEVER fall back to the
+  // v4 fetch (that's what triggers bot puzzles). Dedup per item via sessionStorage.
   const cur = location.href.match(/i\.\d+\.\d+/) ? location.href.split('?')[0] : '';
   if (cur) {
     const itemid = (cur.match(/i\.\d+\.(\d+)/) || [])[1];
+    const AUTO = !!window.__swAuto;
+
+    if (AUTO) {
+      if (localStorage.getItem('sw_auto') !== '1') return;      // toggle off
+      const dkey = 'sw_sent_' + itemid;
+      if (sessionStorage.getItem(dkey)) return;                  // already sent this item
+      sessionStorage.setItem(dkey, '1');                         // claim early to avoid double-fire
+      try {
+        let dl = null;
+        for (let i = 0; i < 20 && !(dl && dl.title && dl.models.length); i++) {
+          dl = fromDataLayer(itemid);
+          if (dl && dl.title && dl.models.length) break;
+          await sleep(300);                                       // up to ~6s for dataLayer to fill
+        }
+        if (!(dl && dl.title && dl.models.length)) { sessionStorage.removeItem(dkey); return; } // give up silently, allow retry
+        const p = await post(dl);
+        note('✓ ·page $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1);
+      } catch (e) {
+        sessionStorage.removeItem(dkey);                         // let a later pass retry
+        note('✗ ' + e.message, 1, 1);
+      }
+      return;
+    }
+
     try {
       let p, via;
       const dl = fromDataLayer(itemid);
