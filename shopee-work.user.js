@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopee → Work
 // @namespace    steadymart
-// @version      1.1
+// @version      1.2
 // @description  Floating button on Shopee pages that sends the current product to work.html. Loads the hosted sc.js so all scraping logic stays in one place and auto-updates.
 // @match        https://shopee.sg/*
 // @run-at       document-idle
@@ -67,15 +67,18 @@
     document.body.appendChild(wrap);
   }
 
-  // AUTO harvest: when the toggle is on, load sc.js (dataLayer-only) once per
-  // product, re-arming on SPA navigation (Shopee never reloads between products).
-  let lastAuto = '';
+  // AUTO harvest: when the toggle is on, load sc.js (dataLayer-only) for each
+  // product. Dedup is owned by sc.js via sessionStorage 'sw_sent_<itemid>' —
+  // set on a successful scrape OR an advisory, cleared on a hidden-tab bail. So
+  // a dead tab that bailed while backgrounded RE-fires once you focus it, which
+  // is exactly when it can post the "couldn't load" advisory. (The old lastAuto
+  // latch blocked that re-fire.) __swRunning stops two loads overlapping.
   function maybeAuto() {
-    if (localStorage.getItem('sw_auto') !== '1') return;
-    const u = location.href.split('?')[0];
-    if (!/i\.\d+\.\d+/.test(u) || u === lastAuto) return;
-    lastAuto = u;
-    loadSC(true).catch(() => {});
+    if (localStorage.getItem('sw_auto') !== '1' || window.__swRunning) return;
+    const m = location.href.split('?')[0].match(/i\.\d+\.(\d+)/);
+    if (!m || sessionStorage.getItem('sw_sent_' + m[1])) return;
+    window.__swRunning = true;
+    loadSC(true).catch(() => {}).finally(() => { setTimeout(() => { window.__swRunning = false; }, 300); });
   }
 
   addBtn();
