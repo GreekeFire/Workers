@@ -815,10 +815,34 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     letter-spacing: 0.03em;
   }
   .search-result.selected { background: rgba(255,255,255,0.08); }
-  /* Touch devices: swipe replaces the buttons, keyboard hints are meaningless */
+  /* Touch devices: swipe replaces the FIX buttons, keyboard hints are meaningless.
+     Only FIX (#action-row) has swipe gestures — NEW's Save/Clear row must stay. */
   @media (hover: none) and (pointer: coarse) {
-    .action-row, .kbd-hint { display: none !important; }
+    #action-row, .kbd-hint { display: none !important; }
   }
+
+  /* Demo polish: shimmer skeleton, fades, card slide, progress bar, tap feedback */
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  .skel-line {
+    height: 13px; border-radius: 6px; margin: 9px 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: fadeIn 0.35s ease; }
+  @keyframes cardIn { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+  .card-in { animation: cardIn 0.22s ease; }
+  .progress-track { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--coral); border-radius: 2px; transition: width 0.3s ease; }
+  .next-ready-chip {
+    font-size: 10px; font-weight: 700; color: var(--success);
+    border: 1px solid rgba(107,227,164,0.3); border-radius: 999px; padding: 2px 8px;
+    white-space: nowrap; text-transform: none; letter-spacing: 0;
+  }
+  .btn-done:active, .btn-delete:active, .ai-gen-btn:active, .shopee-fetch-btn:active,
+  .copy-btn:active, .btn-log:active, .link-btn:active { transform: scale(0.97); }
+  .shopee-img-thumb img { opacity: 0; transition: opacity 0.35s ease; }
 
   /* tab bar from shared.css */
 
@@ -1689,7 +1713,9 @@ async function generateAI(mode = 'both') {
     const aiSection = document.querySelector('.ai-section');
     if (aiSection) aiSection.prepend(errEl);
   } else if (aiTitle || aiDesc) {
-    // Bring the result into view ready to copy
+    // Fade the fresh copy in, then bring it into view ready to copy
+    document.getElementById('title-ta')?.classList.add('fade-in');
+    document.getElementById('ai-desc-ta')?.classList.add('fade-in');
     document.getElementById('title-ta')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
@@ -2103,6 +2129,8 @@ async function generateAINew(mode = 'both') {
     errEl.textContent = 'Error: ' + aiError;
     document.getElementById('new-wrap')?.prepend(errEl);
   } else if (newTitle || newDesc) {
+    document.getElementById('new-title-ta')?.classList.add('fade-in');
+    document.getElementById('new-desc-ta')?.classList.add('fade-in');
     document.getElementById('new-title-ta')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }
@@ -2413,7 +2441,15 @@ function _renderFixView() {
   const total = LISTINGS.length;
   const processed = doneSet.size + deletedSet.size;
   const remaining = total - processed;
-  document.getElementById('progress-line').textContent = remaining + ' remaining';
+  // Progress bar + ⚡ chip when the next card's AI copy is already pre-generated
+  const pct = total ? Math.round((processed / total) * 100) : 0;
+  const nextIdx = findNext(currentIndex + 1);
+  const nextL = nextIdx < total ? LISTINGS[nextIdx] : null;
+  const nextReady = !!(nextL && nextL.id && preGenCache[nextL.id] && !preGenCache[nextL.id].pending);
+  document.getElementById('progress-line').innerHTML =
+    `<span style="white-space:nowrap">${remaining} left</span>` +
+    `<div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>` +
+    (nextReady ? '<span class="next-ready-chip">⚡ next ready</span>' : '');
 
   const wrap = document.getElementById('listing-wrap');
   const actionRow = document.getElementById('action-row');
@@ -2430,7 +2466,11 @@ function _renderFixView() {
   const carousellUrl = L.caro;
   const cost = editedCost !== null ? editedCost : L.cost;
   const sell = L.sell;
-  wrap.innerHTML = `<div class="listing-card">
+  // Slide the card in only when advancing to a different listing — not on
+  // every re-render (generate, pull, link edit) of the same card
+  const cardAnim = currentIndex !== _lastFixIndex ? ' card-in' : '';
+  _lastFixIndex = currentIndex;
+  wrap.innerHTML = `<div class="listing-card${cardAnim}">
     ${fixNoload ? `<div style="background:#78350f;color:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="font-size:13px;font-weight:600">⚠ Couldn't load Shopee data — likely delisted. Verify on Shopee ↗; if dead, delist on Carousell then:</span>
       <button class="btn-delete" style="white-space:nowrap" onclick="markDeleted()">Delete</button>
@@ -2514,7 +2554,7 @@ function _renderFixView() {
       }
       ${fixShopeeImages.length > 0 ? `<div class="shopee-img-grid">${fixShopeeImages.map((src, i) =>
         `<div class="shopee-img-thumb" onclick="window.open('${esc(src)}','_blank')">
-          <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+          <img src="${esc(src)}" loading="lazy" alt="img ${i+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1">
           <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
         </div>`).join('')}</div>${fixShopeeImages.length > 1 ? `<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="copy-btn" onclick="downloadAllImages('fix')">↓ All ${fixShopeeImages.length}</button></div>` : ''}` : ''}
       ${shopeeInput
@@ -2526,7 +2566,7 @@ function _renderFixView() {
               placeholder="Or paste Shopee title + description here…">${esc(shopeeInput)}</textarea>`
         : ''
       }
-      ${aiLoading ? '<div class="ai-loading">Generating…</div>' : ''}
+      ${aiLoading ? '<div class="ai-loading">✨ Generating…</div><div class="skel-line" style="width:92%"></div><div class="skel-line" style="width:70%"></div><div class="skel-line" style="width:83%"></div>' : ''}
       <div class="ai-row">
         <button class="ai-gen-btn" ${aiLoading?'disabled':''} onclick="generateAI('both')">
           ${(aiTitle||aiDesc) ? '↺ Regenerate' : '✨ Generate'}
@@ -2658,7 +2698,7 @@ function _renderNewView() {
   if (newShopeeImages.length > 0) {
     html += `<div class="shopee-img-grid">${newShopeeImages.map((src, i) =>
       `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb">
-        <img src="${esc(src)}" loading="lazy" alt="img ${i+1}">
+        <img src="${esc(src)}" loading="lazy" alt="img ${i+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1">
       </a>`
     ).join('')}</div>`;
     if (newShopeeImages.length > 1) html += `<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="copy-btn" onclick="downloadAllImages('new')">↓ All ${newShopeeImages.length}</button></div>`;
@@ -2671,7 +2711,7 @@ function _renderNewView() {
           placeholder="Or paste Shopee title + description here…">${esc(newShopeeInput)}</textarea>`;
   }
 
-  if (newLoading) html += `<div class="ai-loading">Generating…</div>`;
+  if (newLoading) html += `<div class="ai-loading">✨ Generating…</div><div class="skel-line" style="width:92%"></div><div class="skel-line" style="width:70%"></div><div class="skel-line" style="width:83%"></div>`;
 
   // Title (always visible)
   html += `<div class="field-header" style="margin-top:12px">
@@ -2751,6 +2791,7 @@ function _renderNewView() {
         return `<div class="listing-card" style="margin-top:12px">
           <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
           <div class="ai-loading">${r.loadingMsg || 'Working…'}</div>
+          <div class="skel-line" style="width:92%"></div><div class="skel-line" style="width:70%"></div>
         </div>`;
       }
       if (r.status === 'error') {
@@ -2780,7 +2821,7 @@ function _renderNewView() {
           </button>
         </div>
         ${(r.images||[]).length ? `<div class="shopee-img-grid">${r.images.map((src, n) =>
-          `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}"></a>`
+          `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1"></a>`
         ).join('')}</div>
         <div style="display:flex;justify-content:flex-end;margin:6px 0 8px"><button class="copy-btn" onclick="downloadBatchImages(${i})">↓ All ${r.images.length}</button></div>` : ''}
         <div class="price-calc" style="margin-bottom:10px">
@@ -2801,7 +2842,7 @@ function _renderNewView() {
           ? `<div class="shopee-collapsed" onclick="newBatchResults[${i}].sourceCollapsed=false;renderNewView()">▼ Shopee source</div>`
           : `<textarea class="ai-field" style="margin-bottom:4px" oninput="newBatchResults[${i}].sourceText=this.value;autoResize(this)" id="bst-${i}">${esc(srcText)}</textarea>
              <div class="shopee-collapsed" style="margin-bottom:8px" onclick="newBatchResults[${i}].sourceCollapsed=true;renderNewView()">▲ Collapse</div>`) : ''}
-        ${r.batchLoading ? `<div class="ai-loading">Generating…</div>` : ''}
+        ${r.batchLoading ? `<div class="ai-loading">✨ Generating…</div><div class="skel-line" style="width:88%"></div><div class="skel-line" style="width:64%"></div>` : ''}
         <div class="field-header">
           <span class="field-label">Title</span>
           <button class="copy-btn" id="bct-${i}" onclick="copyBatch(${i},'title')">Copy</button>
@@ -2941,6 +2982,7 @@ function switchTab(tab) {
   }
 }
 
+let _lastFixIndex = -1;   // card slide-in fires only when this changes
 let _doneSearchTimer = null;
 let _listingsEditingId = null;
 let _listingsCache = [];
