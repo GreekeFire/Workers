@@ -2364,10 +2364,12 @@ function _renderFixView() {
       <span style="font-size:13px;font-weight:600">⚠ Couldn't load Shopee data — likely delisted. Verify on Shopee ↗; if dead, delist on Carousell then:</span>
       <button class="btn-delete" style="white-space:nowrap" onclick="markDeleted()">Delete</button>
     </div>` : ''}
-    ${fixPullMiss && !fixNoload ? `<div style="background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:8px;padding:8px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <span style="font-size:12px">No Shopee data pulled — <a href="${esc(shopeeUrl)}" target="_blank" rel="noopener" style="color:#93c5fd">verify Shopee ↗</a>. Delete if the source is gone.</span>
+    ${fixPullMiss && !fixNoload ? (_openedLinks.has(shopeeUrl) ? `<div style="background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:8px;padding:8px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:12px">Opened but nothing scraped — likely delisted. <a href="${esc(shopeeUrl)}" target="_blank" rel="noopener" style="color:#93c5fd">Verify Shopee ↗</a>, Delete if gone.</span>
       <button class="btn-delete" style="white-space:nowrap;font-size:12px;padding:4px 10px" onclick="markDeleted()">Delete</button>
-    </div>` : ''}
+    </div>` : `<div style="background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:8px;padding:8px 12px;margin:0 0 12px;font-size:12px">
+      Not scraped yet — click <b>↗ Open next 10</b> (with AUTO on), or open <a href="${esc(shopeeUrl)}" target="_blank" rel="noopener" style="color:#93c5fd">Shopee ↗</a> then ⬇ Pull.
+    </div>`) : ''}
     <div class="field-header">
       <span class="field-label">Title</span>
       <div style="display:flex;gap:6px">
