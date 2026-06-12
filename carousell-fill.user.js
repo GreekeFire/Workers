@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.1
-// @description  On a Carousell listing EDIT page (/sell/<id>/), fills title, description and price from work.html's fill_outbox. You review and click Save — nothing is auto-submitted.
+// @version      1.2
+// @description  After you click "Fill Carousell" in work.html, opening the listing (even a carousell.app.link) auto-jumps to its edit page and fills title/description/price. You review and click Save — nothing is auto-submitted.
 // @match        https://www.carousell.sg/sell/*
+// @match        https://www.carousell.sg/p/*
 // @run-at       document-idle
 // @grant        none
 // @downloadURL  https://workers-v1.vercel.app/carousell-fill.user.js
@@ -15,8 +16,15 @@
   const K = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   const OUT = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/fill_outbox';
 
-  const id = (location.pathname.match(/\/sell\/(\d+)/) || [])[1];
-  if (!id) return;
+  const onEdit = /^\/sell\/\d+/.test(location.pathname);
+  const onListing = /^\/p\//.test(location.pathname);
+  if (!onEdit && !onListing) return;
+
+  // Carousell id = last long digit-run in the path (slugs hold short numbers).
+  const cid = (u) => {
+    const m = String(u || '').split('?')[0].match(/\d{6,}/g);
+    return m ? m[m.length - 1] : '';
+  };
 
   const note = (msg, bad) => {
     const t = document.createElement('div');
@@ -27,9 +35,28 @@
     setTimeout(() => t.remove(), 4000);
   };
 
-  // React-controlled inputs ignore a plain el.value = x. Use the native setter
-  // then dispatch real input/change events so React updates its state (and the
-  // edit looks like genuine typing). Returns true if it set anything.
+  // Read the single "_current" slot work.html published (the listing you clicked
+  // Fill on). consumed=false means there's a pending fill to apply.
+  const getPending = async () => {
+    try {
+      const r = await fetch(OUT + '?caro_id=eq._current&consumed=eq.false&select=payload&limit=1', {
+        headers: { apikey: K, Authorization: 'Bearer ' + K },
+      });
+      const rows = await r.json();
+      return Array.isArray(rows) && rows.length ? (rows[0].payload || {}) : null;
+    } catch (e) { return null; }
+  };
+
+  const markConsumed = () => {
+    fetch(OUT + '?caro_id=eq._current', {
+      method: 'PATCH',
+      headers: { apikey: K, Authorization: 'Bearer ' + K, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ consumed: true }),
+    }).catch(() => {});
+  };
+
+  // React-controlled inputs ignore el.value = x. Use the native setter + real
+  // input/change events so React commits the new value (and Save isn't stale).
   const setNative = (el, val) => {
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, val);
@@ -48,37 +75,27 @@
     return n;
   };
 
-  const markConsumed = () => {
-    fetch(OUT + '?caro_id=eq._current', {
-      method: 'PATCH',
-      headers: { apikey: K, Authorization: 'Bearer ' + K, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ consumed: true }),
-    }).catch(() => {});
-  };
-
   (async () => {
-    let payload;
-    try {
-      // Read the single "_current" slot work.html just published (the listing you
-      // clicked Fill on). consumed=false guard stops a stale slot re-filling an
-      // unrelated edit page you happen to open later.
-      const r = await fetch(OUT + '?caro_id=eq._current&consumed=eq.false&select=payload&limit=1', {
-        headers: { apikey: K, Authorization: 'Bearer ' + K },
-      });
-      const rows = await r.json();
-      if (!Array.isArray(rows) || !rows.length) return; // nothing queued
-      payload = rows[0].payload || {};
-    } catch (e) { note('outbox ' + e.message, 1); return; }
+    const p = await getPending();
+    if (!p) return; // no pending fill → don't disturb normal browsing
 
-    // The form mounts client-side — wait for the title field, then fill once.
+    // On the listing page: jump to its edit page (the app.link has now resolved
+    // to a /p/<slug>-<id> URL, so the id is available here).
+    if (onListing) {
+      const id = cid(location.href);
+      if (id) { note('↗ Opening edit page…'); location.href = 'https://www.carousell.sg/sell/' + id + '/'; }
+      return;
+    }
+
+    // On the edit page: the form mounts client-side — wait for the title field.
     let tries = 0;
     const iv = setInterval(() => {
       const ready = document.querySelector('input[name="field_title"]');
       if (ready || tries++ > 25) {
         clearInterval(iv);
-        const n = fill(payload);
+        const n = fill(p);
         if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — review & Save'); markConsumed(); }
-        else if (tries > 25) note('✗ Edit form not found — open the listing’s Edit page', 1);
+        else if (tries > 25) note('✗ Edit form not found', 1);
       }
     }, 300);
   })();
