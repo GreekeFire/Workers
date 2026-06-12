@@ -885,7 +885,11 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 
   <!-- FIX view -->
   <div id="view-fix">
-    <div class="progress-line" id="progress-line">Loading&hellip;</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div class="progress-line" id="progress-line">Loading&hellip;</div>
+      <button class="copy-btn" id="open-next-btn" style="font-size:11px;opacity:0.75;white-space:nowrap"
+        onclick="openNextLinks(10)" title="Open the next 10 Shopee links in tabs — with AUTO on they self-scrape into the inbox">↗ Open next 10</button>
+    </div>
     <div id="listing-wrap"></div>
     <div class="action-row" id="action-row" style="display:none">
       <button class="btn-delete" onclick="markDeleted()">Delete</button>
@@ -1237,6 +1241,28 @@ function maybeBackupNudge() {
   if (days >= 7) {
     localStorage.setItem('carobiz_backup_nudge_day', today);
     toast(last ? `Backup is ${days} days old — ⬇ Backup in LISTINGS` : 'No backup yet — ⬇ Backup in LISTINGS');
+  }
+}
+
+// Open the next N unprocessed Shopee links in tabs (starting at the current
+// listing). With AUTO harvest on, each tab self-scrapes into scrape_inbox, so
+// by the time you reach it the ⬇ Pull / auto-pull already has the data matched
+// by URL. Browsers block multi-window.open without a gesture — this runs on the
+// click, but you may need to allow pop-ups for this site once.
+function openNextLinks(n) {
+  const urls = [];
+  for (let i = currentIndex; i < LISTINGS.length && urls.length < n; i++) {
+    if (doneSet.has(i) || deletedSet.has(i)) continue;
+    const u = LISTINGS[i] && LISTINGS[i].shopee;
+    if (u) urls.push(u);
+  }
+  if (!urls.length) { toast('No upcoming Shopee links to open'); return; }
+  let opened = 0;
+  for (const u of urls) { if (window.open(u, '_blank', 'noopener')) opened++; }
+  if (opened < urls.length) {
+    toast(`Opened ${opened}/${urls.length} — allow pop-ups for this site to open the rest`);
+  } else {
+    toast(`Opened ${opened} tab${opened > 1 ? 's' : ''} — AUTO will scrape them`);
   }
 }
 
