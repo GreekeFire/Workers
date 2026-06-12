@@ -1755,13 +1755,16 @@ function shopeeKey(u) {
 }
 
 // Carousell listing id from either the edit URL (/sell/<id>/) or the public
-// listing URL (/p/<slug>-<id>). The id is the final numeric run before / ? or end.
+// listing URL (/p/<slug>-<id>). Carousell ids are long (~10 digits); slugs may
+// contain short numbers ("2-tier") and the query may carry a huge _branch id —
+// so drop the query, then take the LAST long digit-run in the path.
 function caroId(u) {
   u = String(u || '');
   let m = u.match(/\/sell\/(\d+)/);
   if (m) return m[1];
-  m = u.match(/-(\d+)(?=[/?]|$)/);
-  return m ? m[1] : '';
+  const path = u.split('?')[0];
+  const nums = path.match(/\d{6,}/g);
+  return nums ? nums[nums.length - 1] : '';
 }
 
 // Publish the current FIX card's finished copy to fill_outbox (keyed by Carousell
