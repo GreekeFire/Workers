@@ -1776,13 +1776,17 @@ function caroId(u) {
 async function sendToCarousell() {
   const L = LISTINGS[currentIndex];
   if (!L || !L.caro) { toast('No Carousell link on this listing'); return false; }
+  // Guard the race: never publish/Done while AI is still running, or before it
+  // has produced BOTH title and description — otherwise F can push the old title
+  // and an empty description to Carousell and mark it Done.
+  if (aiLoading) { toast('Still generating — wait for the copy'); return false; }
+  if (!aiTitle || !aiDesc) { toast('No AI copy yet — press G to generate first'); return false; }
   const cost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
   const payload = {
-    title: (aiTitle || L.title || '').trim(),
-    desc: (aiDesc || '').trim(),
+    title: aiTitle.trim(),
+    desc: aiDesc.trim(),
     price: cost ? calcSell(cost) : null,
   };
-  if (!payload.title && !payload.desc) { toast('Generate the listing first'); return false; }
   try {
     const { error } = await sb.from('fill_outbox')
       .upsert({ caro_id: '_current', payload, consumed: false }, { onConflict: 'caro_id' });
