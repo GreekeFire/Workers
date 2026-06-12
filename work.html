@@ -1844,7 +1844,12 @@ async function pullScraped(target, silent) {
 
   // NEW tab: drop couldn't-load markers (they belong to FIX, nothing to list)
   rows = rows.filter(r => !(r.payload || {}).unloaded);
-  if (!rows.length) { if (!silent) toast('Nothing scraped yet — use the bookmarklet first'); return; }
+  // A scrape whose URL matches an existing listing belongs to the FIX queue —
+  // never vacuum those into NEW (e.g. an accidental tab tap would otherwise
+  // consume a whole batch of FIX scrapes). Only genuinely new products ingest.
+  const fixKeys = new Set(LISTINGS.map(l => shopeeKey(l && l.shopee)).filter(Boolean));
+  rows = rows.filter(r => !fixKeys.has(shopeeKey((r.payload || {}).url)));
+  if (!rows.length) { if (!silent) toast('Nothing new to pull — scraped items match existing listings (use FIX)'); return; }
   // Consume everything up front so a re-render or second tap can't ingest twice
   sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
 
