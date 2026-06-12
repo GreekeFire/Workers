@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.3
-// @description  After you click "Fill Carousell" in work.html, opening the listing (even a carousell.app.link) auto-jumps to its edit page and fills title/description/price. You review and click Save — nothing is auto-submitted.
+// @version      1.4
+// @description  After you click "Fill Carousell" in work.html, open the listing and click its Edit button yourself — the userscript fills title/description/price once the form appears, then Ctrl+Enter saves. No scripted navigation (hard-loading the edit URL is what Carousell 404s).
 // @match        https://www.carousell.sg/sell/*
 // @match        https://www.carousell.sg/p/*
 // @run-at       document-idle
@@ -16,15 +16,8 @@
   const K = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   const OUT = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/fill_outbox';
 
-  const onEdit = /^\/sell\/\d+/.test(location.pathname);
+  if (!/^\/sell\/\d+|^\/p\//.test(location.pathname)) return;
   const onListing = /^\/p\//.test(location.pathname);
-  if (!onEdit && !onListing) return;
-
-  // Carousell id = last long digit-run in the path (slugs hold short numbers).
-  const cid = (u) => {
-    const m = String(u || '').split('?')[0].match(/\d{6,}/g);
-    return m ? m[m.length - 1] : '';
-  };
 
   const note = (msg, bad) => {
     const t = document.createElement('div');
@@ -35,15 +28,19 @@
     setTimeout(() => t.remove(), 4000);
   };
 
-  // Read the single "_current" slot work.html published (the listing you clicked
-  // Fill on). consumed=false means there's a pending fill to apply.
+  // Read the "_current" slot work.html published. consumed=false AND fresh
+  // (published in the last 2 min) means there's a pending fill to apply — the
+  // freshness guard stops a leftover slot hijacking a listing you open later.
   const getPending = async () => {
     try {
       const r = await fetch(OUT + '?caro_id=eq._current&consumed=eq.false&select=payload&limit=1', {
         headers: { apikey: K, Authorization: 'Bearer ' + K },
       });
       const rows = await r.json();
-      return Array.isArray(rows) && rows.length ? (rows[0].payload || {}) : null;
+      if (!Array.isArray(rows) || !rows.length) return null;
+      const p = rows[0].payload || {};
+      if (!p.ts || Date.now() - p.ts > 120000) return null; // stale → ignore
+      return p;
     } catch (e) { return null; }
   };
 
@@ -104,26 +101,23 @@
 
   (async () => {
     const p = await getPending();
-    if (!p) return; // no pending fill → don't disturb normal browsing
+    if (!p) return; // no fresh pending fill → don't disturb normal browsing
 
-    // On the listing page: jump to its edit page (the app.link has now resolved
-    // to a /p/<slug>-<id> URL, so the id is available here).
-    if (onListing) {
-      const id = cid(location.href);
-      if (id) { note('↗ Opening edit page…'); location.href = 'https://www.carousell.sg/sell/' + id + '/'; }
-      return;
-    }
+    if (onListing) note('Fill ready — click Edit and it fills automatically');
 
-    // On the edit page: the form mounts client-side — wait for the title field.
+    // Fill once the edit form appears — whether you reached it by clicking Edit
+    // (SPA navigation, the supported path) or the page loaded on /sell/ directly.
+    // NO scripted navigation: the hard-load of /sell/ is what Carousell 404s.
     let tries = 0;
     const iv = setInterval(() => {
-      const ready = document.querySelector('input[name="field_title"]');
-      if (ready || tries++ > 25) {
+      const ready = /^\/sell\/\d+/.test(location.pathname) && document.querySelector('input[name="field_title"]');
+      if (ready) {
         clearInterval(iv);
         const n = fill(p);
         if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — Ctrl+Enter to Save'); markConsumed(); armSaveHotkey(); }
-        else if (tries > 25) note('✗ Edit form not found', 1);
+      } else if (tries++ > 900) {   // ~6 min, then stop waiting
+        clearInterval(iv);
       }
-    }, 300);
+    }, 400);
   })();
 })();

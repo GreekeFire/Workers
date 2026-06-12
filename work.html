@@ -1787,20 +1787,18 @@ async function sendToCarousell() {
     title: aiTitle.trim(),
     desc: aiDesc.trim(),
     price: cost ? calcSell(cost) : null,
-  };
+    ts: Date.now(),   // freshness stamp — the userscript ignores stale slots so a
+  };                  // leftover pending fill can't hijack a listing you open later
   try {
     const { error } = await sb.from('fill_outbox')
       .upsert({ caro_id: '_current', payload, consumed: false }, { onConflict: 'caro_id' });
     if (error) throw error;
   } catch (e) { toast('Outbox error — ' + (e.message || 'unknown')); return false; }
-  const id = caroId(L.caro);   // works for full /p/ or /sell/ URLs; empty for app.link
-  if (id) {
-    window.open('https://www.carousell.sg/sell/' + id + '/', '_blank', 'noopener');
-    toast('Published — auto-filling the edit page…');
-  } else {
-    window.open(L.caro, '_blank', 'noopener');
-    toast('Published — on the listing, click Edit to auto-fill');
-  }
+  // Open the LISTING (not /sell/ directly) — hard-loading the edit URL is the
+  // pattern Carousell 404s. You click its Edit button (the supported in-app
+  // path) and the userscript fills once the form appears.
+  window.open(L.caro, '_blank', 'noopener');
+  toast('Published — click Edit on the listing; it fills automatically');
   return true;
 }
 
