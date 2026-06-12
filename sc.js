@@ -109,6 +109,30 @@
   // Send a paste-box link (always fetch)
   const send = async (L) => post(await fetchItem(L));
 
+  // Classify a product whose dataLayer never populated. One v4 fetch, used ONLY
+  // on the AUTO timeout path and ONLY when the tab is visible. Returns:
+  //   { dead: true }  — Shopee explicitly says the item no longer exists
+  //   { item }        — it does exist (dataLayer was just slow); caller can send
+  //   { unknown: true } — bot block / login / network; do NOT mark dead (unsafe)
+  const classify = async (L) => {
+    const m = L.match(/i\.(\d+)\.(\d+)/) || L.match(/\/product\/(\d+)\/(\d+)/);
+    if (!m) return { unknown: true };
+    let d;
+    try {
+      const r = await fetch('https://shopee.sg/api/v4/item/get?itemid=' + m[2] + '&shopid=' + m[1], {
+        credentials: 'include',
+        headers: { 'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest' },
+      });
+      d = await r.json();
+    } catch (e) { return { unknown: true }; }
+    const it = d.item || (d.data && (d.data.item || d.data));
+    if (it && it.name) return { item: it };
+    // Be conservative: only "not found / deleted / invalid item" counts as dead.
+    // The bot block is error 90309999 (is_login:false) — never matches this.
+    if (/not.?found|delete|invalid.?item|unavailable|removed/i.test(d.error_msg || '')) return { dead: true };
+    return { unknown: true };
+  };
+
   const note = (msg, bad, small) => {
     const t = document.createElement('div');
     t.textContent = msg;
@@ -144,7 +168,21 @@
           if (dl && dl.title && dl.models.length) break;
           await sleep(300);                                       // up to ~6s for dataLayer to fill
         }
-        if (!(dl && dl.title && dl.models.length)) { sessionStorage.removeItem(dkey); return; } // give up silently, allow retry
+        if (!(dl && dl.title && dl.models.length)) {
+          // dataLayer never filled. In a background tab this is just throttling —
+          // bail and let a later focus retry. When the tab is VISIBLE, the user
+          // is looking at it, so confirm once via the API: a genuinely deleted
+          // listing gets flagged dead in the inbox so work.html can prompt Delete.
+          if (document.visibilityState !== 'visible') { sessionStorage.removeItem(dkey); return; }
+          const c = await classify(cur);
+          if (c.dead) { await post({ url: cur, dead: true }); note('✗ source gone — Delete in work', 1, 1); return; }
+          if (c.item) {                                              // dataLayer was just slow
+            const p = await send(cur);
+            note('✓ ·api $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1);
+            return;
+          }
+          sessionStorage.removeItem(dkey); return;                   // unknown — retry later, never mark dead
+        }
         const p = await post(dl);
         note('✓ ·page $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1);
       } catch (e) {
