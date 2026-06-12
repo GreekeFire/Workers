@@ -1754,6 +1754,37 @@ function shopeeKey(u) {
   return m ? m[1] + '.' + m[2] : '';
 }
 
+// Carousell listing id from either the edit URL (/sell/<id>/) or the public
+// listing URL (/p/<slug>-<id>). The id is the final numeric run before / ? or end.
+function caroId(u) {
+  u = String(u || '');
+  let m = u.match(/\/sell\/(\d+)/);
+  if (m) return m[1];
+  m = u.match(/-(\d+)(?=[/?]|$)/);
+  return m ? m[1] : '';
+}
+
+// Publish the current FIX card's finished copy to fill_outbox (keyed by Carousell
+// id), then open that listing's edit page — the carousell-fill userscript fills
+// the form there and you click Save. No copy-paste.
+async function sendToCarousell() {
+  const L = LISTINGS[currentIndex];
+  const id = caroId(L && L.caro);
+  if (!id) { toast('No Carousell link on this listing'); return; }
+  const cost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
+  const payload = {
+    title: (aiTitle || L.title || '').trim(),
+    desc: (aiDesc || '').trim(),
+    price: cost ? calcSell(cost) : null,
+  };
+  if (!payload.title && !payload.desc) { toast('Generate the listing first'); return; }
+  try {
+    const { error } = await sb.from('fill_outbox').upsert({ caro_id: id, payload }, { onConflict: 'caro_id' });
+    if (error) throw error;
+  } catch (e) { toast('Outbox error — ' + (e.message || 'unknown')); return; }
+  window.open('https://www.carousell.sg/sell/' + id + '/', '_blank', 'noopener');
+}
+
 // Pull unconsumed bookmarklet/phone scrapes from scrape_inbox.
 // NEW: one scrape fills the form, several feed the batch generator.
 // FIX: takes ONLY the scrape whose URL matches the current listing's stored
@@ -2404,6 +2435,7 @@ function _renderFixView() {
       ` : `
         ${shopeeUrl ? `<a class="link-btn" href="${esc(shopeeUrl)}" target="_blank" rel="noopener">Shopee ↗</a>` : ''}
         ${carousellUrl ? `<a class="link-btn" href="${esc(carousellUrl)}" target="_blank" rel="noopener">Carousell ↗</a>` : ''}
+        ${carousellUrl ? `<button class="link-btn" style="background:#16a34a;border-color:#16a34a;color:#fff" onclick="sendToCarousell()" title="Publish this copy + open the Carousell edit page (auto-fills there)">→ Fill Carousell</button>` : ''}
         <button class="copy-btn" style="opacity:0.4;font-size:10px" onclick="linkEditing=true;renderFixView()">Edit</button>
       `}
     </div>
