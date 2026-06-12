@@ -2941,7 +2941,28 @@ function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
   const list = document.getElementById('done-list');
   if (!query) {
-    list.innerHTML = '<p class="done-empty">Type to search all listings</p>';
+    // Recently-done list (newest first) so you can spot-check the last ones you
+    // marked Done. Flags entries whose Carousell link isn't a listing link
+    // (/p/, /sell/, or app.link) — e.g. a homepage URL that filled nothing.
+    const recent = doneData.slice()
+      .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''))
+      .slice(0, 25);
+    if (!recent.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
+    list.innerHTML = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>' +
+      recent.map(d => {
+        const caro = d.carousellUrl || '';
+        const bad = caro && !/\/p\/|\/sell\/|app\.link/i.test(caro);
+        const t = new Date(d.doneAt || '');
+        const time = isNaN(t.getTime()) ? '' : t.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return `<div style="padding:10px 12px;border:1px solid ${bad ? '#d97706' : 'rgba(255,255,255,0.08)'};border-radius:10px;margin-bottom:8px;${bad ? 'background:rgba(217,119,6,0.08)' : ''}">
+          <div style="font-size:13px;font-weight:600;margin-bottom:5px">${bad ? '⚠ ' : ''}${esc((d.title || '(no title)').slice(0, 90))}</div>
+          <div style="font-size:11px;color:var(--text-secondary);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span>${time}</span>
+            ${caro ? `<a href="${esc(caro)}" target="_blank" rel="noopener" style="color:${bad ? '#fbbf24' : '#93c5fd'}">${bad ? '⚠ not a listing link' : 'Carousell ↗'}</a>` : '<span>no caro link</span>'}
+            ${d.id ? `<button onclick="listingsSendToFix(${d.id}).then(renderDoneView)" style="margin-left:auto;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:11px;cursor:pointer">↩ Send back to FIX</button>` : ''}
+          </div>
+        </div>`;
+      }).join('');
     return;
   }
   clearTimeout(_doneSearchTimer);
