@@ -127,9 +127,11 @@
   // AUTO mode (userscript-driven, gated by the sw_auto toggle): dataLayer ONLY —
   // poll until Shopee populates a priced copy, then send; NEVER fall back to the
   // v4 fetch (that's what triggers bot puzzles). Dedup per item via sessionStorage.
-  const cur = location.href.match(/i\.\d+\.\d+/) ? location.href.split('?')[0] : '';
+  // Shopee product URLs come in two shapes: …-i.<shopid>.<itemid> and
+  // /product/<shopid>/<itemid>. Recognise both.
+  const cur = /i\.\d+\.\d+|\/product\/\d+\/\d+/.test(location.href) ? location.href.split('?')[0] : '';
   if (cur) {
-    const itemid = (cur.match(/i\.\d+\.(\d+)/) || [])[1];
+    const itemid = ((cur.match(/i\.\d+\.(\d+)/) || cur.match(/\/product\/\d+\/(\d+)/)) || [])[1];
     const AUTO = !!window.__swAuto;
 
     if (AUTO) {

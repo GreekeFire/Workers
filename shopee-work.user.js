@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopee → Work
 // @namespace    steadymart
-// @version      1.2
+// @version      1.3
 // @description  Floating button on Shopee pages that sends the current product to work.html. Loads the hosted sc.js so all scraping logic stays in one place and auto-updates.
 // @match        https://shopee.sg/*
 // @run-at       document-idle
@@ -75,7 +75,8 @@
   // latch blocked that re-fire.) __swRunning stops two loads overlapping.
   function maybeAuto() {
     if (localStorage.getItem('sw_auto') !== '1' || window.__swRunning) return;
-    const m = location.href.split('?')[0].match(/i\.\d+\.(\d+)/);
+    const u = location.href.split('?')[0];
+    const m = u.match(/i\.\d+\.(\d+)/) || u.match(/\/product\/\d+\/(\d+)/);
     if (!m || sessionStorage.getItem('sw_sent_' + m[1])) return;
     window.__swRunning = true;
     loadSC(true).catch(() => {}).finally(() => { setTimeout(() => { window.__swRunning = false; }, 300); });
