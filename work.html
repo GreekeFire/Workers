@@ -1957,15 +1957,23 @@ async function pullScraped(target, silent) {
     }
     return;
   }
-  // Consume everything up front so a re-render or second tap can't ingest twice
-  sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
-
   if (rows.length > 1) {
-    toast(`Pulled ${rows.length} scrapes → batch`);
-    ingestScrapedBatch(rows.map(r => r.payload || {}));
+    // Don't consume yet — keep scrapes on the belt until each card is resolved
+    // (Save to Done or Clear). A refresh mid-batch then re-pulls and regenerates
+    // instead of losing the cards. Skip any scrape that already has a card
+    // showing, so re-pulls (e.g. landing back on NEW) don't duplicate or
+    // needlessly regenerate.
+    const showing = new Set(newBatchResults.map(c => shopeeKey(c.url)).filter(Boolean));
+    const fresh = rows.filter(r => !showing.has(keyOf(r)));
+    if (!fresh.length) { if (!silent) toast('Already loaded — resolve the cards below'); return; }
+    toast(`Pulled ${fresh.length} scrape${fresh.length > 1 ? 's' : ''} → batch`);
+    ingestScrapedBatch(fresh.map(r => ({ payload: r.payload || {}, inboxId: r.id })));
     return;
   }
 
+  // Single scrape → fills the NEW form. Consume up front: the form's draft is
+  // saved to localStorage, so a refresh restores it without needing the belt.
+  sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
   const p = rows[rows.length - 1].payload || {};
   const text = [p.title, p.description].filter(Boolean).join('\n\n');
   // Default cost to the most expensive variant — safest for margin
@@ -2033,13 +2041,19 @@ async function preGenerateNext() {
 
 // Batch ingest of pre-scraped payloads — no /api/shopee fetch needed,
 // the bookmarklet already delivered the full product text + price
-async function ingestScrapedBatch(payloads) {
+async function ingestScrapedBatch(items) {
   if (newBatchRunning) return;
   newBatchRunning = true;
-  newBatchResults = payloads.map(p => ({ url: p.url || '', status: 'loading', loadingMsg: 'Generating…' }));
+  // Append (don't replace) so a re-pull adds fresh cards without wiping unsaved
+  // ones already on screen. Each card remembers its source inbox row (inboxId)
+  // so saving or clearing it can take that exact scrape off the belt.
+  const startIdx = newBatchResults.length;
+  items.forEach(it => newBatchResults.push({ url: (it.payload || {}).url || '', inboxId: it.inboxId, status: 'loading', loadingMsg: 'Generating…' }));
   renderNewView();
-  for (let i = 0; i < payloads.length; i++) {
-    const p = payloads[i];
+  for (let i = 0; i < items.length; i++) {
+    const idx = startIdx + i;
+    const p = items[i].payload || {};
+    const inboxId = items[i].inboxId;
     try {
       const text = [p.title, p.description].filter(Boolean).join('\n\n');
       if (!text) throw new Error('Empty scrape');
@@ -2047,16 +2061,16 @@ async function ingestScrapedBatch(payloads) {
       const imgs = p.images || [];
       try {
         const { title, desc } = await runAIGenerate(text);
-        newBatchResults[i] = { url: p.url || '', status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
+        newBatchResults[idx] = { url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
       } catch (e) {
         // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
-        newBatchResults[i] = {
-          url: p.url || '', status: 'done', price: cost, images: imgs,
+        newBatchResults[idx] = {
+          url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
           title: '', desc: '', sourceText: text, sourceCollapsed: true,
         };
       }
     } catch (e) {
-      newBatchResults[i] = { url: p.url || '', status: 'error', error: e.message || 'unknown' };
+      newBatchResults[idx] = { url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
     }
     renderNewView();
   }
@@ -2170,6 +2184,15 @@ function copyBatch(i, field) {
   });
 }
 
+// Clear (your "delete") also resolves the scrape — take it off the belt so a
+// re-pull or refresh doesn't bring a card you've rejected back.
+function clearBatchItem(i) {
+  const r = newBatchResults[i];
+  if (r && r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
+  newBatchResults.splice(i, 1);
+  renderNewView();
+}
+
 async function saveBatchItem(i) {
   const r = newBatchResults[i];
   if (!r || !r.title) { toast('No title to save'); return; }
@@ -2185,8 +2208,12 @@ async function saveBatchItem(i) {
     shopeeUrl: r.url, carousellUrl: r.caroUrl || '', sourceCost: cost, sellPrice: sell,
     doneAt: new Date().toISOString()
   });
+  // Resolved — take the source scrape off the belt and drop the card
+  if (r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
+  newBatchResults.splice(i, 1);
   pushToSupabase();
   renderSessionBar();
+  renderNewView();
   toast('Saved ✓');
 }
 
@@ -2878,7 +2905,7 @@ function _renderNewView() {
           <input class="link-edit-input" type="url" placeholder="Carousell URL" value="${esc(r.caroUrl||'')}" oninput="newBatchResults[${i}].caroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
         </div>
         <div class="action-row" style="margin-top:10px">
-          <button class="btn-delete" onclick="newBatchResults.splice(${i},1);renderNewView()">Clear</button>
+          <button class="btn-delete" onclick="clearBatchItem(${i})">Clear</button>
           <button class="btn-done" onclick="saveBatchItem(${i})">Save to Done →</button>
         </div>
       </div>`;
