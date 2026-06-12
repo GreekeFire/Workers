@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Shopee → Work
 // @namespace    steadymart
-// @version      1.0
+// @version      1.1
 // @description  Floating button on Shopee pages that sends the current product to work.html. Loads the hosted sc.js so all scraping logic stays in one place and auto-updates.
 // @match        https://shopee.sg/*
 // @run-at       document-idle
