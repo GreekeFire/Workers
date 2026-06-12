@@ -2640,9 +2640,16 @@ function autoResize(el) {
   el.style.height = el.scrollHeight + 'px';
 }
 
+// FIX card: swipe left = Done, swipe right = Delete
 function addSwipeGestures() {
   const card = document.querySelector('#listing-wrap .listing-card');
   if (!card) return;
+  attachCardSwipe(card, markDone, markDeleted);
+}
+
+// Generic swipe handler shared by FIX and NEW batch cards. onLeft fires on a
+// left swipe (green "Done ✓"), onRight on a right swipe (red "Delete ✕").
+function attachCardSwipe(card, onLeft, onRight) {
   let startX = 0, startY = 0, swiping = false, cancelled = false, buzzed = false;
 
   // Swipe reveal overlay
@@ -2704,7 +2711,7 @@ function addSwipeGestures() {
     card.style.transform = '';
     reveal.style.opacity = 0;
     if (Math.abs(dx) >= THRESHOLD) {
-      if (dx > 0) markDeleted(); else markDone();
+      if (dx > 0) onRight(); else onLeft();
     }
   }, { passive: true });
 }
@@ -2851,7 +2858,7 @@ function _renderNewView() {
       const tlen = (r.title||'').length;
       const srcText = r.sourceText || '';
       const srcCollapsed = r.sourceCollapsed !== false;
-      return `<div class="listing-card" style="margin-top:12px">
+      return `<div class="listing-card" style="margin-top:12px" data-batch="${i}">
         <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
         ${(!savedApiKey || r.keyVisible) ? `<div class="field-header" style="margin-bottom:8px">
           <span class="field-label">Claude API Key</span>
@@ -2930,6 +2937,11 @@ function _renderNewView() {
     newBatchResults.forEach((_, i) => {
       const t = document.getElementById(`btt-${i}`); if (t) autoResize(t);
       const d = document.getElementById(`bdt-${i}`); if (d) autoResize(d);
+    });
+    // Swipe each batch card like a FIX card: left = Save to Done, right = Clear
+    document.querySelectorAll('#new-wrap [data-batch]').forEach(el => {
+      const i = parseInt(el.getAttribute('data-batch'), 10);
+      attachCardSwipe(el, () => saveBatchItem(i), () => clearBatchItem(i));
     });
   });
 }
