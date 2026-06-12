@@ -1963,7 +1963,13 @@ async function pullScraped(target, silent) {
     // instead of losing the cards. Skip any scrape that already has a card
     // showing, so re-pulls (e.g. landing back on NEW) don't duplicate or
     // needlessly regenerate.
-    const showing = new Set(newBatchResults.map(c => shopeeKey(c.url)).filter(Boolean));
+    // "Showing" = every product already on the NEW tab: batch cards AND the
+    // single NEW form (newShopeeUrl). Without the latter, a product sitting in
+    // the single form would get added a second time as a batch card.
+    const showing = new Set([
+      ...newBatchResults.map(c => shopeeKey(c.url)),
+      shopeeKey(newShopeeUrl),
+    ].filter(Boolean));
     const fresh = rows.filter(r => !showing.has(keyOf(r)));
     if (!fresh.length) { if (!silent) toast('Already loaded — resolve the cards below'); return; }
     toast(`Pulled ${fresh.length} scrape${fresh.length > 1 ? 's' : ''} → batch`);
