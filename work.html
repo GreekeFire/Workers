@@ -939,6 +939,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <div id="view-done" style="display:none">
     <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
       <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
+      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">⚠ Scan links</button>
       <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
     </div>
     <div class="done-list" id="done-list"></div>
@@ -2972,6 +2973,34 @@ function renderDoneView() {
   _doneSearchTimer = setTimeout(() => _searchAllListings(query), 300);
 }
 
+// A valid Carousell listing link points at a specific listing (/p/, /sell/) or
+// is a Branch share link; a valid Shopee link is a product URL. Anything else —
+// a homepage/category/search URL, the wrong platform, or empty — is "bad".
+function validCaroLink(u) { return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u); }
+function validShopeeLink(u) { return !!u && /shopee\./i.test(u) && (/i\.\d+\.\d+/.test(u) || /\/product\/\d+\/\d+/.test(u)); }
+
+// Scan ALL listings for links that don't belong: missing/wrong/homepage Shopee
+// or Carousell links. Renders the offenders into the editable list so you can
+// fix or delete each. Runs in your authed session (listings are owner-only RLS).
+async function scanBadLinks() {
+  const list = document.getElementById('done-list');
+  list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
+  try {
+    const { data, error } = await sb.from('listings')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
+      .limit(5000);
+    if (error) throw error;
+    const bad = (data || []).filter(d =>
+      !validCaroLink(d.carousell_url) || !validShopeeLink(d.shopee_url));
+    if (!bad.length) { list.innerHTML = '<p class="done-empty">✓ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
+    _listingsCache = bad;
+    _listingsEditingId = null;
+    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad Shopee/Carousell link — fix or delete below.</p>');
+  } catch (e) {
+    list.innerHTML = '<p class="done-empty">Scan failed — ' + (e.message || 'are you logged in?') + '</p>';
+  }
+}
+
 async function _searchAllListings(query) {
   const list = document.getElementById('done-list');
   try {
@@ -3033,10 +3062,16 @@ function _renderListingsResults(data, prefix) {
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          ${d.shopee_url ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
-          ${d.carousell_url ? (/\/p\/|\/sell\/|app\.link/i.test(d.carousell_url)
+          ${validShopeeLink(d.shopee_url)
+            ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>`
+            : (d.shopee_url
+              ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ bad Shopee link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Shopee link</span>`)}
+          ${validCaroLink(d.carousell_url)
             ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>`
-            : `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ not a listing link</a>`) : ''}
+            : (d.carousell_url
+              ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ not a listing link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Carousell link</span>`)}
         </div>
       </div>
       <div class="done-edit-icon">✎</div>
