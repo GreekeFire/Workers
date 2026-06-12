@@ -1767,13 +1767,14 @@ function caroId(u) {
   return nums ? nums[nums.length - 1] : '';
 }
 
-// Publish the current FIX card's finished copy to fill_outbox (keyed by Carousell
-// id), then open that listing's edit page — the carousell-fill userscript fills
-// the form there and you click Save. No copy-paste.
+// Publish the current FIX card's finished copy to fill_outbox, then open the
+// listing. Most caro links are Branch deep links (carousell.app.link/…) with no
+// id, so we publish to a single "_current" slot rather than keying by id; the
+// carousell-fill userscript on the edit page reads that slot and fills the form.
+// You work one listing at a time, so the latest publish is always the right one.
 async function sendToCarousell() {
   const L = LISTINGS[currentIndex];
-  const id = caroId(L && L.caro);
-  if (!id) { toast('No Carousell link on this listing'); return; }
+  if (!L || !L.caro) { toast('No Carousell link on this listing'); return; }
   const cost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
   const payload = {
     title: (aiTitle || L.title || '').trim(),
@@ -1782,10 +1783,18 @@ async function sendToCarousell() {
   };
   if (!payload.title && !payload.desc) { toast('Generate the listing first'); return; }
   try {
-    const { error } = await sb.from('fill_outbox').upsert({ caro_id: id, payload }, { onConflict: 'caro_id' });
+    const { error } = await sb.from('fill_outbox')
+      .upsert({ caro_id: '_current', payload, consumed: false }, { onConflict: 'caro_id' });
     if (error) throw error;
   } catch (e) { toast('Outbox error — ' + (e.message || 'unknown')); return; }
-  window.open('https://www.carousell.sg/sell/' + id + '/', '_blank', 'noopener');
+  const id = caroId(L.caro);   // works for full /p/ or /sell/ URLs; empty for app.link
+  if (id) {
+    window.open('https://www.carousell.sg/sell/' + id + '/', '_blank', 'noopener');
+    toast('Published — auto-filling the edit page…');
+  } else {
+    window.open(L.caro, '_blank', 'noopener');
+    toast('Published — on the listing, click Edit to auto-fill');
+  }
 }
 
 // Pull unconsumed bookmarklet/phone scrapes from scrape_inbox.

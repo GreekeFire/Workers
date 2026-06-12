@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.0
+// @version      1.1
 // @description  On a Carousell listing EDIT page (/sell/<id>/), fills title, description and price from work.html's fill_outbox. You review and click Save — nothing is auto-submitted.
 // @match        https://www.carousell.sg/sell/*
 // @run-at       document-idle
@@ -48,14 +48,25 @@
     return n;
   };
 
+  const markConsumed = () => {
+    fetch(OUT + '?caro_id=eq._current', {
+      method: 'PATCH',
+      headers: { apikey: K, Authorization: 'Bearer ' + K, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ consumed: true }),
+    }).catch(() => {});
+  };
+
   (async () => {
     let payload;
     try {
-      const r = await fetch(OUT + '?caro_id=eq.' + id + '&select=payload&limit=1', {
+      // Read the single "_current" slot work.html just published (the listing you
+      // clicked Fill on). consumed=false guard stops a stale slot re-filling an
+      // unrelated edit page you happen to open later.
+      const r = await fetch(OUT + '?caro_id=eq._current&consumed=eq.false&select=payload&limit=1', {
         headers: { apikey: K, Authorization: 'Bearer ' + K },
       });
       const rows = await r.json();
-      if (!Array.isArray(rows) || !rows.length) return; // nothing queued for this listing
+      if (!Array.isArray(rows) || !rows.length) return; // nothing queued
       payload = rows[0].payload || {};
     } catch (e) { note('outbox ' + e.message, 1); return; }
 
@@ -66,7 +77,7 @@
       if (ready || tries++ > 25) {
         clearInterval(iv);
         const n = fill(payload);
-        if (n) note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — review & Save');
+        if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — review & Save'); markConsumed(); }
         else if (tries > 25) note('✗ Edit form not found — open the listing’s Edit page', 1);
       }
     }, 300);
