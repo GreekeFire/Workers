@@ -1936,12 +1936,27 @@ async function pullScraped(target, silent) {
 
   // NEW tab: drop couldn't-load markers (they belong to FIX, nothing to list)
   rows = rows.filter(r => !(r.payload || {}).unloaded);
-  // A scrape whose URL matches an existing listing belongs to the FIX queue —
-  // never vacuum those into NEW (e.g. an accidental tab tap would otherwise
-  // consume a whole batch of FIX scrapes). Only genuinely new products ingest.
-  const fixKeys = new Set(LISTINGS.map(l => shopeeKey(l && l.shopee)).filter(Boolean));
-  rows = rows.filter(r => !fixKeys.has(shopeeKey((r.payload || {}).url)));
-  if (!rows.length) { if (!silent) toast('Nothing new to pull — scraped items match existing listings (use FIX)'); return; }
+  // Sort each scrape by what it already matches, by stable Shopee id:
+  //  - active listing → belongs to the FIX queue; leave it on the belt for FIX
+  //  - done listing   → already finished; a useless re-scrape, so consume it to
+  //                     stop already-done products piling back up in the inbox
+  //  - neither        → genuinely new; ingest into NEW
+  const keyOf = r => shopeeKey((r.payload || {}).url);
+  const activeKeys = new Set(LISTINGS.map(l => shopeeKey(l && l.shopee)).filter(Boolean));
+  const doneKeys   = new Set(doneData.map(d => shopeeKey(d.shopeeUrl)).filter(Boolean));
+  const matchedDone   = rows.filter(r => !activeKeys.has(keyOf(r)) && doneKeys.has(keyOf(r)));
+  const matchedActive = rows.filter(r => activeKeys.has(keyOf(r)));
+  rows = rows.filter(r => !activeKeys.has(keyOf(r)) && !doneKeys.has(keyOf(r)));
+  // Clear already-done re-scrapes off the belt so they don't keep returning
+  if (matchedDone.length) sb.from('scrape_inbox').update({ consumed: true }).in('id', matchedDone.map(r => r.id)).then(() => {});
+  if (!rows.length) {
+    if (!silent) {
+      if (matchedDone.length) toast(matchedDone.length === 1 ? 'You already did this one ✓' : `You already did these ${matchedDone.length} ✓`);
+      else if (matchedActive.length) toast('Already in your FIX queue — fix it there');
+      else toast('Nothing new to pull — scrape a product first');
+    }
+    return;
+  }
   // Consume everything up front so a re-render or second tap can't ingest twice
   sb.from('scrape_inbox').update({ consumed: true }).in('id', rows.map(r => r.id)).then(() => {});
 
