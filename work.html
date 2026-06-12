@@ -2937,32 +2937,29 @@ let _doneSearchTimer = null;
 let _listingsEditingId = null;
 let _listingsCache = [];
 
+const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
+
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
   const list = document.getElementById('done-list');
   if (!query) {
-    // Recently-done list (newest first) so you can spot-check the last ones you
-    // marked Done. Flags entries whose Carousell link isn't a listing link
-    // (/p/, /sell/, or app.link) — e.g. a homepage URL that filled nothing.
-    const recent = doneData.slice()
+    // Recently-done list (newest first) loaded into the same editor as search —
+    // so you can edit title/cost/links, open Shopee, Delete, or Send back to
+    // FIX. Bad Carousell links (not /p/, /sell/, app.link) get flagged below.
+    if (_listingsCache.length && _listingsEditingId) { _renderListingsResults(_listingsCache, RECENT_HDR); return; }
+    const ids = [...new Set(doneData.slice()
       .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''))
-      .slice(0, 25);
-    if (!recent.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
-    list.innerHTML = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>' +
-      recent.map(d => {
-        const caro = d.carousellUrl || '';
-        const bad = caro && !/\/p\/|\/sell\/|app\.link/i.test(caro);
-        const t = new Date(d.doneAt || '');
-        const time = isNaN(t.getTime()) ? '' : t.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        return `<div style="padding:10px 12px;border:1px solid ${bad ? '#d97706' : 'rgba(255,255,255,0.08)'};border-radius:10px;margin-bottom:8px;${bad ? 'background:rgba(217,119,6,0.08)' : ''}">
-          <div style="font-size:13px;font-weight:600;margin-bottom:5px">${bad ? '⚠ ' : ''}${esc((d.title || '(no title)').slice(0, 90))}</div>
-          <div style="font-size:11px;color:var(--text-secondary);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <span>${time}</span>
-            ${caro ? `<a href="${esc(caro)}" target="_blank" rel="noopener" style="color:${bad ? '#fbbf24' : '#93c5fd'}">${bad ? '⚠ not a listing link' : 'Carousell ↗'}</a>` : '<span>no caro link</span>'}
-            ${d.id ? `<button onclick="listingsSendToFix(${d.id}).then(renderDoneView)" style="margin-left:auto;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:11px;cursor:pointer">↩ Send back to FIX</button>` : ''}
-          </div>
-        </div>`;
-      }).join('');
+      .map(d => d.id).filter(Boolean))].slice(0, 25);
+    if (!ids.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
+    list.innerHTML = '<p class="done-empty">Loading recent…</p>';
+    sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
+      .in('id', ids).then(({ data, error }) => {
+        if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
+        const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order
+        data.sort((a, b) => (ord.get(a.id) ?? 99) - (ord.get(b.id) ?? 99));
+        _listingsCache = data;
+        _renderListingsResults(data, RECENT_HDR);
+      });
     return;
   }
   clearTimeout(_doneSearchTimer);
@@ -2996,12 +2993,12 @@ async function _searchAllListings(query) {
   }
 }
 
-function _renderListingsResults(data) {
+function _renderListingsResults(data, prefix) {
   const list = document.getElementById('done-list');
   const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
   const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
 
-  list.innerHTML = data.map(d => {
+  list.innerHTML = (prefix || '') + data.map(d => {
     const cost = parseFloat(d.source_cost) || 0;
     const sell = parseFloat(d.sell_price) || 0;
 
@@ -3037,7 +3034,9 @@ function _renderListingsResults(data) {
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${d.shopee_url ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>` : ''}
-          ${d.carousell_url ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>` : ''}
+          ${d.carousell_url ? (/\/p\/|\/sell\/|app\.link/i.test(d.carousell_url)
+            ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>`
+            : `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ not a listing link</a>`) : ''}
         </div>
       </div>
       <div class="done-edit-icon">✎</div>
