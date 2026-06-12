@@ -994,6 +994,7 @@ let aiLoading = false;
 let _fixGenSeq = 0;   // bumped when the FIX card changes; stale generations check it
 let fixCostNote = ''; // inline cost-change note on the FIX card (toast would clobber UNDO)
 let fixNoload = false;  // matched scrape couldn't load Shopee data → advisory "verify & Delete" banner
+let fixPullMiss = false; // auto-pull found no scrape for this card → inline "unable to pull" hint
 let aiTitle = '';
 let aiDesc = '';
 let editedCost = null;
@@ -1335,7 +1336,7 @@ function markDone() {
 function undoDone(s) {
   _undoFn = null;   // guard against a double-tap on the UNDO button
   _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
-  fixCostNote = ''; fixNoload = false;
+  fixCostNote = ''; fixNoload = false; fixPullMiss = false;
   doneSet.delete(s.idx);
   doneTodayCount = Math.max(0, doneTodayCount - 1);
   let di = doneData.indexOf(s.entry);
@@ -1385,7 +1386,7 @@ function undoDelete() {
   const entry = undoStack.pop();
   if (entry === undefined) return;
   _fixGenSeq++;     // cancel any generation started for the next card's auto-pull
-  fixCostNote = ''; fixNoload = false;
+  fixCostNote = ''; fixNoload = false; fixPullMiss = false;
   const idx = entry.idx ?? entry; // handle old format
   deletedSet.delete(idx);
   deletedTodayCount = Math.max(0, deletedTodayCount - 1);
@@ -1423,7 +1424,7 @@ async function saveLinkEdits() {
 
 function resetAI() {
   _fixGenSeq++;        // invalidate any in-flight generation for the old card
-  fixCostNote = ''; fixNoload = false;
+  fixCostNote = ''; fixNoload = false; fixPullMiss = false;
   aiLoading = false;
   aiTitle = '';
   aiDesc = '';
@@ -1772,7 +1773,12 @@ async function pullScraped(target, silent) {
     if (!silent) toast('Inbox error — ' + (e.message || 'unknown'));
     return;
   }
-  if (!rows.length) { if (!silent) toast('Nothing scraped yet — use the bookmarklet first'); return; }
+  if (!rows.length) {
+    // FIX: empty inbox means nothing's been scraped for the current card → hint.
+    if (target === 'fix') { fixPullMiss = true; renderFixView(); }
+    else if (!silent) toast('Nothing scraped yet — use the bookmarklet first');
+    return;
+  }
 
   if (target === 'fix') {
     const L = LISTINGS[currentIndex];
@@ -1780,9 +1786,13 @@ async function pullScraped(target, silent) {
     if (!key) { if (!silent) toast('This listing has no Shopee link — add one first'); return; }
     const match = rows.find(r => shopeeKey((r.payload || {}).url) === key);
     if (!match) {
-      if (!silent) toast('No scrape for this listing yet — open its Shopee ↗ link and click the bookmark');
+      // No scrape matched this listing — likely not opened yet or delisted.
+      fixPullMiss = true;
+      renderFixView();
+      if (!silent) toast('No scrape for this listing — Shopee ↗ to verify');
       return;
     }
+    fixPullMiss = false;
     // Consume only the matched row; other scrapes stay queued for NEW
     sb.from('scrape_inbox').update({ consumed: true }).eq('id', match.id).then(() => {});
     const p = match.payload || {};
@@ -2292,6 +2302,10 @@ function _renderFixView() {
     ${fixNoload ? `<div style="background:#78350f;color:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="font-size:13px;font-weight:600">⚠ Couldn't load Shopee data — likely delisted. Verify on Shopee ↗; if dead, delist on Carousell then:</span>
       <button class="btn-delete" style="white-space:nowrap" onclick="markDeleted()">Delete</button>
+    </div>` : ''}
+    ${fixPullMiss && !fixNoload ? `<div style="background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:8px;padding:8px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:12px">No Shopee data pulled — <a href="${esc(shopeeUrl)}" target="_blank" rel="noopener" style="color:#93c5fd">verify Shopee ↗</a>. Delete if the source is gone.</span>
+      <button class="btn-delete" style="white-space:nowrap;font-size:12px;padding:4px 10px" onclick="markDeleted()">Delete</button>
     </div>` : ''}
     <div class="field-header">
       <span class="field-label">Title</span>
