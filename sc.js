@@ -55,7 +55,7 @@
 
     const priced = copies.find(c => c.models.some(m => m && m.price != null));
     if (!priced) return null; // prices nulled everywhere → let caller fetch
-    const withDesc = copies.find(c => c.description) || priced;
+    const withDesc = copies.find(c => c.description || c.rich_text_description) || priced;
     const withImgs = copies.find(c => Array.isArray(c.images) && c.images.length) || priced;
 
     const models = priced.models
@@ -65,7 +65,7 @@
 
     return {
       title: priced.name || priced.title || withDesc.name || '',
-      description: withDesc.description || '',
+      description: withDesc.description || withDesc.rich_text_description || '',
       price_min: priced.price_min != null ? priced.price_min / 1e5 : Math.min(...prices),
       price_max: priced.price_max != null ? priced.price_max / 1e5 : Math.max(...prices),
       models,
@@ -109,14 +109,15 @@
   // Send a paste-box link (always fetch)
   const send = async (L) => post(await fetchItem(L));
 
-  const note = (msg, bad, small) => {
+  const note = (msg, bad, small, amber) => {
     const t = document.createElement('div');
     t.textContent = msg;
+    const bg = bad ? '#dc2626' : amber ? '#b45309' : (small ? '#15803d' : '#16a34a');
     t.style.cssText = small
-      ? 'position:fixed;top:14px;right:14px;z-index:999999;background:' + (bad ? '#dc2626' : '#15803d') +
+      ? 'position:fixed;top:14px;right:14px;z-index:999999;background:' + bg +
         ';color:#fff;padding:6px 12px;border-radius:6px;font:600 12px system-ui;opacity:.92;box-shadow:0 2px 8px rgba(0,0,0,.3)'
       : 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999999;background:' +
-        (bad ? '#dc2626' : '#16a34a') + ';color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+        bg + ';color:#fff;padding:10px 18px;border-radius:8px;font:600 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.3)';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), small ? 2200 : 3500);
   };
@@ -158,7 +159,7 @@
           return;
         }
         const p = await post(dl);
-        note('✓ ·page $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1);
+        note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1, false);
       } catch (e) {
         sessionStorage.removeItem(dkey);                         // let a later pass retry
         note('✗ ' + e.message, 1, 1);
@@ -168,35 +169,21 @@
 
     try {
       let p, via;
-      const dl = fromDataLayer(itemid);
+      let dl = null;
+      for (let i = 0; i < 10 && !(dl && dl.title && dl.models.length); i++) {
+        dl = fromDataLayer(itemid);
+        if (dl && dl.title && dl.models.length) break;
+        await sleep(300);
+      }
       if (dl && dl.title && dl.models.length) { p = await post(dl); via = 'page'; }
       else { p = await send(cur); via = 'api'; }
-      note('✓ Sent ·' + via + ' — $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs');
+      note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs', false, false, via === 'api');
     } catch (e) {
       note('✗ ' + e.message, 1);
     }
     return;
   }
 
-  // Not a product page → paste-box (same as sc.js)
-  const w = document.createElement('div');
-  w.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999999;background:#111827;color:#fff;padding:16px;border-radius:12px;font:13px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.5);width:min(480px,90vw)';
-  w.innerHTML = '<b>Send to work.html</b><br><textarea id=whx rows=5 style="width:100%;margin:8px 0;background:#1f2937;color:#fff;border:1px solid #374151;border-radius:8px;padding:8px;font:12px monospace;box-sizing:border-box" placeholder="One Shopee link per line"></textarea><div style="display:flex;gap:8px;justify-content:flex-end"><button id=whc style="padding:6px 14px;border-radius:8px;border:1px solid #374151;background:none;color:#9ca3af;cursor:pointer">Cancel</button><button id=whg style="padding:6px 14px;border-radius:8px;border:0;background:#16a34a;color:#fff;font-weight:700;cursor:pointer">Send</button></div><div id=whs style="margin-top:8px;color:#9ca3af"></div>';
-  document.body.appendChild(w);
-  const ta = w.querySelector('#whx');
-  w.querySelector('#whc').onclick = () => w.remove();
-  w.querySelector('#whg').onclick = async () => {
-    const st = w.querySelector('#whs');
-    const links = ta.value.split(/\s+/).filter(Boolean);
-    if (!links.length) { st.textContent = 'No links'; return; }
-    let ok = 0, fail = 0;
-    for (let i = 0; i < links.length; i++) {
-      st.textContent = 'Fetching ' + (i + 1) + '/' + links.length + '…';
-      try { await send(links[i]); ok++; } catch (e) { fail++; }
-      if (i < links.length - 1) await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
-    }
-    st.innerHTML = '<b style=color:#4ade80>✓ ' + ok + ' sent</b>' +
-      (fail ? ' · <span style=color:#f87171>' + fail + ' failed — solve the bot check on any product page, then retry those links</span>' : '');
-    setTimeout(() => w.remove(), fail ? 6000 : 2500);
-  };
+  // Not a product page — prompt the user to navigate to one
+  note('Go to a Shopee product page first', true);
 })();

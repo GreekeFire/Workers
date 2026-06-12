@@ -1091,7 +1091,14 @@ async function syncFromSupabase() {
     ]);
 
     if (dRes.data?.data) {
-      doneData = dRes.data.data;
+      const cloud = dRes.data.data;
+      // Merge instead of replace: an item marked done on Device A while Device B
+      // was open would be lost if Device B pushed later. Keep any local entries
+      // not already in the cloud copy (matched by stable id + doneAt timestamp).
+      const cloudKeys = new Set(cloud.map(d => (d.id ?? '') + '|' + (d.doneAt || '')));
+      const localOnly = doneData.filter(d => !cloudKeys.has((d.id ?? '') + '|' + (d.doneAt || '')));
+      doneData = [...cloud, ...localOnly].sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+      if (localOnly.length) pushToSupabase();   // persist recovered entries
       // Rebuild doneSet by matching each done entry's stable Supabase id to its
       // current position in the active list. Done rows are excluded from the
       // active query, so this is empty in the normal case — it only re-marks an
@@ -1852,8 +1859,10 @@ async function pullScraped(target, silent) {
       return;
     }
     fixPullMiss = false;
-    // Consume only the matched row; other scrapes stay queued for NEW
-    sb.from('scrape_inbox').update({ consumed: true }).eq('id', match.id).then(() => {});
+    // Consume the matched row plus any duplicates with the same URL (two devices
+    // scraping the same tab creates extra rows that would otherwise pile up forever)
+    const dupeIds = rows.filter(r => shopeeKey((r.payload || {}).url) === key).map(r => r.id);
+    sb.from('scrape_inbox').update({ consumed: true }).in('id', dupeIds).then(() => {});
     const p = match.payload || {};
     // Couldn't-load marker: the scraper sat on this product page and Shopee
     // never populated any data — likely a delisted/dead source. Advisory only:
