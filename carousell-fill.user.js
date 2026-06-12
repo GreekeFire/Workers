@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.2
+// @version      1.3
 // @description  After you click "Fill Carousell" in work.html, opening the listing (even a carousell.app.link) auto-jumps to its edit page and fills title/description/price. You review and click Save — nothing is auto-submitted.
 // @match        https://www.carousell.sg/sell/*
 // @match        https://www.carousell.sg/p/*
@@ -75,6 +75,33 @@
     return n;
   };
 
+  // The form's submit button (Carousell's "Update"). Obfuscated classes change
+  // per build, so match the stable type="submit" + Update/Save/List text.
+  const clickSave = () => {
+    const btn = Array.from(document.querySelectorAll('button[type="submit"]'))
+      .find(b => /update|save|list/i.test(b.innerText || '') && !b.disabled);
+    if (btn) { btn.click(); return true; }
+    return false;
+  };
+
+  // Arm Ctrl/Cmd+Enter to commit. You still review and press the key yourself —
+  // a chord (not plain Enter) so it never fires while editing the description.
+  const armSaveHotkey = () => {
+    const chip = document.createElement('div');
+    chip.textContent = '⌨ Ctrl+Enter to Save';
+    chip.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:2147483647;background:#111827;color:#fff;padding:8px 14px;border-radius:20px;font:600 12px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.35)';
+    document.body.appendChild(chip);
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        chip.textContent = clickSave() ? '✓ Saving…' : '✗ Save button not found';
+        window.removeEventListener('keydown', onKey, true);
+        setTimeout(() => chip.remove(), 2500);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+  };
+
   (async () => {
     const p = await getPending();
     if (!p) return; // no pending fill → don't disturb normal browsing
@@ -94,7 +121,7 @@
       if (ready || tries++ > 25) {
         clearInterval(iv);
         const n = fill(p);
-        if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — review & Save'); markConsumed(); }
+        if (n) { note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — Ctrl+Enter to Save'); markConsumed(); armSaveHotkey(); }
         else if (tries > 25) note('✗ Edit form not found', 1);
       }
     }, 300);
