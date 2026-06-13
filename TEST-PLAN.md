@@ -93,7 +93,7 @@
 1. Scrape the product you saved in 2.4 again.
 2. NEW → ⬇ Pull scraped.
 3. ✅ Toast: **"You already did this one ✓"** — no card.
-4. Pull again → ✅ "Nothing new to pull — scrape a product first."
+4. Pull again → ✅ "Nothing scraped yet — use the bookmarklet first." (the already-done re-scrape was consumed off the belt by step 2/3, so the inbox is now empty)
 
 ### Test 2.8 — Generate from URLs
 1. Paste 2 fresh links (products #4, #5), one per line → **✨ Generate from URLs**.
@@ -107,7 +107,7 @@
 
 ### Test 2.9 — + Blank
 1. Click **+ Blank** → ✅ empty card.
-2. Type any title, cost 10 → ✅ Sell shows **$40** (calculator rounds to neat numbers).
+2. Type any title, cost 10 → ✅ Sell shows **$35** (calculator rounds up to the next $5, with a +$24 minimum margin: max(10×1.5, 10+24)=34 → 35).
 3. Save → ✅ saved. Check LISTINGS tab — it's there.
 
 ### Test 2.10 — Append, not wipe

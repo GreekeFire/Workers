@@ -2073,6 +2073,12 @@ function clearBatchItem(i) {
 async function saveBatchItem(i) {
   const r = newBatchResults[i];
   if (!r || !r.title) { toast('No title to save'); return; }
+  // Guard a fast double-tap: the insert below is awaited and the card isn't
+  // spliced out until it resolves, so a second call would read the same `r`
+  // and insert a duplicate listings row. The card is always removed on
+  // completion (even on insert error), so the flag never needs resetting.
+  if (r._saving) return;
+  r._saving = true;
   const cost = r.price || 0;
   const sell = cost ? calcSell(cost) : 0;
   const { data, error } = await sb.from('listings').insert({

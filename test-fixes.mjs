@@ -6,12 +6,12 @@
 //
 // P1: FIX-tab "Edit links" saves to Supabase by stable id (no urlOverrides)
 // P2: SALES search resolves done entries by id, never by stored position
-// P3: NEW-tab save inserts a row into the listings table
+// P3: NEW-tab card Save (saveBatchItem) inserts a row into the listings table
 // S1: null source_cost can't slip through markDone as the string 'null'
-// S2: extension price autofill sets editedCost (was a dead DOM write)
-// T4: double-tap Save can't insert duplicate rows
+// S2: FIX pull refreshes cost from the highest live variant price + change note
+// T4: double-tap Save can't insert duplicate rows (saveBatchItem r._saving guard)
 // T5: entering the LISTINGS tab clears the stale search cache
-// Q2: NEW-tab draft persists and restores the cost field
+// Q2: resolving a NEW card consumes its belt scrape (refresh-safe queue)
 // Q1: export backup reads all listings and downloads
 
 import fs from 'node:fs';
@@ -79,6 +79,7 @@ const sbStub = {
       upsert(p) { call.op = 'upsert'; call.payload = p; return b; },
       delete() { call.op = 'delete'; return b; },
       eq(col, val) { call.filters.push([col, val]); return b; },
+      in(col, vals) { call.filters.push([col, vals]); return b; },
       order() { return b; }, limit() { return b; },
       ilike(col, pat) { (call.ilikes ||= []).push(pat); return b; },
       single() { call.single = true; return b; },
@@ -202,32 +203,39 @@ const testCode = `
     document.getElementById('sale-listing').value === 'Capybara Plush Pillow',
     document.getElementById('sale-listing').value);
 
-  // ── P3: NEW-tab save inserts a listings row ──
+  // ── P3: NEW-tab card Save inserts a listings row ──
+  // The single NEW form was unified into card-based newBatchResults[]; saving a
+  // card is saveBatchItem(i). Carousell url lives on the done-history entry, not
+  // the listings row insert.
   __sbCalls.length = 0;
-  document.getElementById('new-title-ta').value        = 'Brand New Lamp';
-  document.getElementById('new-desc-ta').value         = 'A lamp.';
-  document.getElementById('new-cost-input').value      = '15';
-  document.getElementById('new-shopee-fetch-url').value = 'https://shopee/new';
-  document.getElementById('new-caro-url').value        = 'https://caro/new';
+  newBatchResults.length = 0;
+  newBatchResults.push({
+    url: 'https://shopee/new', status: 'done',
+    title: 'Brand New Lamp', desc: 'A lamp.', price: 15,
+    caroUrl: 'https://caro/new', images: [], sourceText: '', inboxId: 'inbox-new',
+  });
   const doneCountBefore = doneData.length;
-  await saveNewListing();
+  await saveBatchItem(0);
   const ins = __sbCalls.find(c => c.op === 'insert' && c.table === 'listings');
   __report('P3: inserts a row into the listings table',
     !!ins, JSON.stringify(ins && ins.payload));
-  __report('P3: row is complete (title/urls/cost/sell/status done)',
+  __report('P3: row is complete (title/shopee_url/cost/sell/status done)',
     !!ins && ins.payload.title === 'Brand New Lamp'
           && ins.payload.shopee_url === 'https://shopee/new'
-          && ins.payload.carousell_url === 'https://caro/new'
           && ins.payload.source_cost === 15
           && ins.payload.sell_price === 40
           && ins.payload.status === 'done',
     JSON.stringify(ins && ins.payload));
   const added = doneData[doneData.length - 1];
-  __report('P3: doneData entry stamped with the returned row id',
-    doneData.length === doneCountBefore + 1 && added.id === 501 && added.title === 'Brand New Lamp',
-    JSON.stringify({ id: added.id, title: added.title }));
-  __report('P3: NEW tab reset after save', newTitle === '' && newDesc === '' && newCost === '',
-    JSON.stringify({ newTitle, newDesc, newCost }));
+  __report('P3: doneData entry stamped with the returned row id and Carousell url',
+    doneData.length === doneCountBefore + 1 && added.id === 501
+      && added.title === 'Brand New Lamp' && added.carousellUrl === 'https://caro/new',
+    JSON.stringify({ id: added.id, title: added.title, caro: added.carousellUrl }));
+  __report('P3: card removed from batch after save and its belt scrape consumed',
+    newBatchResults.length === 0
+      && __sbCalls.some(c => c.op === 'update' && c.table === 'scrape_inbox'
+            && c.payload.consumed === true && eq(c.filters, [['id', 'inbox-new']])),
+    JSON.stringify({ remaining: newBatchResults.length }));
 
   // ── S1: null cost can't slip through markDone ──
   __sb.__nextSelectData = [
@@ -275,37 +283,47 @@ const testCode = `
     JSON.stringify({ len: doneData.length, cur: currentIndex, upd: uUpd && uUpd.payload, aiTitle }));
   aiTitle = ''; editedCost = null;
 
-  // ── S2: extension price autofill sets editedCost ──
-  LISTINGS = [{ id: 301, title: 'No Cost Item', shopee: 'https://shopee/X', caro: '', cost: '', sell: '' }];
+  // ── S2: FIX pull refreshes cost from the live scrape ──
+  // The old extension postMessage price bridge (window.__product.price_min_sgd
+  // → fetchShopeeDataFix) was removed; cost now refreshes when you pull the
+  // matching belt scrape in FIX, taking the highest variant price and surfacing
+  // any change as an inline note. The matched row is keyed by Shopee SHOPID.ITEMID.
+  const scrape = url => [{ id: 'sx', payload: {
+    url, title: 'Foo Product', description: 'Nice thing', images: [],
+    price_max: 25, price_min: 18, models: [{ name: 'A', price: 25 }],
+  }}];
+  LISTINGS = [{ id: 301, title: 'No Cost Item', shopee: 'https://shopee.sg/x-i.111.222', caro: '', cost: '', sell: '' }];
   currentIndex = 0;
   doneSet = new Set(); deletedSet = new Set();
-  editedCost = null; shopeeInput = '';
-  window.__product = { name: 'Foo Product', description: 'Nice thing', images: [], price_min_sgd: 25 };
-  document.getElementById('fix-shopee-fetch-url').value = 'https://shopee.sg/foo';
-  await fetchShopeeDataFix();
-  await tick(20);
-  __report('S2: extension price autofills editedCost when listing has no cost',
-    editedCost === 25, String(editedCost));
-  __report('S2: autofill survives the re-render (cost input shows 25)',
-    document.getElementById('listing-wrap').innerHTML.includes('value="25"'),
-    'editedCost=' + editedCost);
+  editedCost = null; shopeeInput = ''; fixCostNote = '';
+  __sb.__nextSelectData = scrape('https://shopee.sg/x-i.111.222');
+  await pullScraped('fix', true);
+  __sb.__nextSelectData = null;
+  __report('S2: FIX pull autofills cost from the highest variant price when listing has none',
+    editedCost === '25', String(editedCost));
+  __report('S2: the cost change is surfaced as an inline note',
+    /\\$25\\.00/.test(fixCostNote), JSON.stringify(fixCostNote));
 
-  editedCost = null; shopeeInput = '';
-  LISTINGS[0].cost = '29.4';
-  await fetchShopeeDataFix();
-  await tick(20);
-  __report('S2: an existing valid cost is not overwritten by the fetch',
-    editedCost === null, String(editedCost));
+  // A matching (unchanged) price leaves the cost alone and sets no change note
+  editedCost = null; shopeeInput = ''; fixCostNote = '';
+  LISTINGS[0].cost = '25';
+  __sb.__nextSelectData = scrape('https://shopee.sg/x-i.111.222');
+  await pullScraped('fix', true);
+  __sb.__nextSelectData = null;
+  __report('S2: an unchanged price does not overwrite editedCost or set a change note',
+    editedCost === null && fixCostNote === '', JSON.stringify({ editedCost, fixCostNote }));
 
-  // ── T4: double-tap Save inserts exactly one row ──
+  // ── T4: double-tap Save inserts exactly one row (guarded by r._saving) ──
+  // saveBatchItem awaits the insert before splicing the card; without the guard
+  // a second synchronous call reads the same card object and inserts a duplicate.
   __sbCalls.length = 0;
   const beforeLen = doneData.length;
-  document.getElementById('new-title-ta').value        = 'Dup Test Item';
-  document.getElementById('new-desc-ta').value         = '';
-  document.getElementById('new-cost-input').value      = '10';
-  document.getElementById('new-shopee-fetch-url').value = '';
-  document.getElementById('new-caro-url').value        = '';
-  const q1 = saveNewListing(); const q2 = saveNewListing();
+  newBatchResults.length = 0;
+  newBatchResults.push({
+    url: '', status: 'done', title: 'Dup Test Item', desc: '', price: 10,
+    caroUrl: '', images: [], sourceText: '',
+  });
+  const q1 = saveBatchItem(0); const q2 = saveBatchItem(0);
   await q1; await q2;
   const inserts = __sbCalls.filter(c => c.op === 'insert' && c.table === 'listings');
   __report('T4: double-tap Save inserts exactly one row',
@@ -319,17 +337,20 @@ const testCode = `
     _listingsCache.length === 0 && _listingsEditingId === null,
     JSON.stringify([_listingsCache.length, _listingsEditingId]));
 
-  // ── Q2: NEW-tab draft persists the cost ──
-  newTitle = 'Draft Item'; newDesc = ''; newShopeeInput = '';
-  newShopeeUrl = ''; newCaroUrl = ''; newCost = '33';
-  saveDraft();
-  const draft = JSON.parse(localStorage.getItem('carobiz_new_draft'));
-  __report('Q2: draft includes the cost field', draft.cost === '33', JSON.stringify(draft));
-  newCost = ''; newTitle = '';
-  loadLocal();
-  __report('Q2: loadLocal restores the cost from the draft',
-    newCost === '33' && newTitle === 'Draft Item', JSON.stringify({ newCost, newTitle }));
-  localStorage.removeItem('carobiz_new_draft');
+  // ── Q2: resolving a NEW card consumes its belt scrape (refresh-safe) ──
+  // The old localStorage draft was replaced by the cloud "belt": scraped cards
+  // stay in scrape_inbox until Saved or Cleared, so a refresh re-pulls only
+  // unresolved work and never resurfaces a card you already rejected.
+  __sbCalls.length = 0;
+  newBatchResults.length = 0;
+  newBatchResults.push({ url: 'https://shopee/belt', status: 'done', title: 'Belt Item',
+    desc: '', price: 20, caroUrl: '', images: [], sourceText: '', inboxId: 'inbox-9' });
+  clearBatchItem(0);
+  __report('Q2: clearing a card drops it and consumes its belt scrape by inboxId',
+    newBatchResults.length === 0
+      && __sbCalls.some(c => c.op === 'update' && c.table === 'scrape_inbox'
+            && c.payload.consumed === true && eq(c.filters, [['id', 'inbox-9']])),
+    JSON.stringify(__sbCalls.filter(c => c.table === 'scrape_inbox').map(c => c.filters)));
 
   // ── Q1: export backup ──
   __sbCalls.length = 0;
