@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Shopee → Work
 // @namespace    steadymart
-// @version      1.3
-// @description  Floating button on Shopee pages that sends the current product to work.html. Loads the hosted sc.js so all scraping logic stays in one place and auto-updates.
+// @version      1.4
+// @description  Floating button on Shopee pages that sends the current product to work.html. Loads the hosted sc.js so all scraping logic stays in one place and auto-updates. Shows the live scrape result on the button and an AUTO session counter.
 // @match        https://shopee.sg/*
 // @run-at       document-idle
 // @grant        none
@@ -24,6 +24,48 @@
       .finally(() => { setTimeout(() => { window.__swAuto = 0; }, 100); });
   };
 
+  // Products auto-scraped this browsing session (sc.js sets sw_sent_<itemid>).
+  const sentCount = () => Object.keys(sessionStorage).filter(k => k.indexOf('sw_sent_') === 0).length;
+
+  let autoChip, workBtn, awaiting = false, revertTimer;
+
+  function paintAuto() {
+    if (!autoChip) return;
+    const on = localStorage.getItem('sw_auto') === '1';
+    const n = sentCount();
+    autoChip.textContent = (on ? 'AUTO ●' : 'auto ○') + (n ? ' · ' + n : '');
+    autoChip.style.background = on ? '#16a34a' : '#374151';
+  }
+
+  function idleBtn() {
+    awaiting = false;
+    workBtn.disabled = false;
+    workBtn.textContent = '→ Work';
+    workBtn.style.background = '#16a34a';
+  }
+
+  // Flash success (✓ $price) or failure (✗) on the button, then revert.
+  function flashBtn(ok, label) {
+    clearTimeout(revertTimer);
+    workBtn.disabled = false;
+    workBtn.textContent = ok ? ('✓ ' + (label || 'sent')) : '✗ retry';
+    workBtn.style.background = ok ? '#15803d' : '#dc2626';
+    revertTimer = setTimeout(idleBtn, 1800);
+  }
+
+  // sc.js dispatches sw:result on every toast. Reflect a manual scrape on the
+  // button, and repaint the AUTO counter for both manual and auto scrapes.
+  window.addEventListener('sw:result', (e) => {
+    const ok = !!(e.detail && e.detail.ok);
+    const msg = (e.detail && e.detail.msg) || '';
+    if (awaiting) {
+      awaiting = false;
+      const price = (msg.match(/\$[\d.]+/) || [''])[0];   // pull "$x.xx" from the toast text
+      flashBtn(ok, price || 'sent');
+    }
+    paintAuto();
+  });
+
   function addBtn() {
     if (!document.body || document.getElementById('sw-fab')) return;
     const wrap = document.createElement('div');
@@ -32,47 +74,45 @@
       'position:fixed;bottom:20px;right:20px;z-index:2147483647;' +
       'display:flex;flex-direction:column;gap:6px;align-items:flex-end';
 
-    // Auto toggle chip — flips the sw_auto localStorage flag (read by maybeAuto + sc.js)
-    const auto = document.createElement('button');
-    const paint = () => {
-      const on = localStorage.getItem('sw_auto') === '1';
-      auto.textContent = on ? 'AUTO ●' : 'auto ○';
-      auto.style.background = on ? '#16a34a' : '#374151';
-    };
-    auto.style.cssText =
+    // AUTO toggle chip — flips the sw_auto localStorage flag (read by maybeAuto + sc.js)
+    autoChip = document.createElement('button');
+    autoChip.style.cssText =
       'border:0;border-radius:16px;padding:6px 12px;font:700 11px system-ui;' +
       'color:#fff;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)';
-    auto.onclick = () => {
+    autoChip.onclick = () => {
       localStorage.setItem('sw_auto', localStorage.getItem('sw_auto') === '1' ? '0' : '1');
-      paint();
+      paintAuto();
     };
-    paint();
 
-    const b = document.createElement('button');
-    b.textContent = '→ Work';
-    b.style.cssText =
+    workBtn = document.createElement('button');
+    workBtn.textContent = '→ Work';
+    workBtn.style.cssText =
       'background:#16a34a;color:#fff;border:0;border-radius:24px;padding:12px 18px;' +
       'font:700 14px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';
-    b.onclick = () => {
-      b.disabled = true;
-      b.textContent = '…';
-      // Cache-bust so each click runs the latest sc.js (manual = fetch fallback allowed)
-      loadSC(false)
-        .catch(e => alert('load ' + e))
-        .finally(() => { setTimeout(() => { b.disabled = false; b.textContent = '→ Work'; }, 1500); });
+    workBtn.onclick = () => {
+      clearTimeout(revertTimer);
+      awaiting = true;
+      workBtn.disabled = true;
+      workBtn.textContent = '…';
+      workBtn.style.background = '#374151';
+      // Cache-bust so each click runs the latest sc.js (manual = fetch fallback allowed).
+      // Fallback revert in case no sw:result arrives (e.g. an older sc.js without the event).
+      revertTimer = setTimeout(idleBtn, 8000);
+      loadSC(false).catch((err) => { console.warn('sc load', err); flashBtn(false); });
     };
 
-    wrap.appendChild(auto);
-    wrap.appendChild(b);
+    wrap.appendChild(autoChip);
+    wrap.appendChild(workBtn);
     document.body.appendChild(wrap);
+    paintAuto();
   }
 
   // AUTO harvest: when the toggle is on, load sc.js (dataLayer-only) for each
   // product. Dedup is owned by sc.js via sessionStorage 'sw_sent_<itemid>' —
   // set on a successful scrape OR an advisory, cleared on a hidden-tab bail. So
   // a dead tab that bailed while backgrounded RE-fires once you focus it, which
-  // is exactly when it can post the "couldn't load" advisory. (The old lastAuto
-  // latch blocked that re-fire.) __swRunning stops two loads overlapping.
+  // is exactly when it can post the "couldn't load" advisory. __swRunning stops
+  // two loads overlapping.
   function maybeAuto() {
     if (localStorage.getItem('sw_auto') !== '1' || window.__swRunning) return;
     const u = location.href.split('?')[0];
@@ -83,6 +123,7 @@
   }
 
   addBtn();
-  // Shopee is a single-page app — re-add the button + check for auto navigation
-  setInterval(() => { addBtn(); maybeAuto(); }, 1500);
+  // Shopee is a single-page app — re-add the button + check for auto navigation,
+  // and keep the AUTO counter fresh as scrapes land.
+  setInterval(() => { addBtn(); maybeAuto(); paintAuto(); }, 1500);
 })();

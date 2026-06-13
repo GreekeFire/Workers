@@ -120,6 +120,9 @@
   const send = async (L) => post(await fetchItem(L));
 
   const note = (msg, bad, small, amber) => {
+    // Signal the host userscript (shopee-work.user.js) so the → Work button can
+    // reflect the real outcome (✓ price / ✗) and the AUTO counter can repaint.
+    try { window.dispatchEvent(new CustomEvent('sw:result', { detail: { ok: !bad, msg } })); } catch (e) {}
     const t = document.createElement('div');
     t.textContent = msg;
     const bg = bad ? '#dc2626' : amber ? '#b45309' : (small ? '#15803d' : '#16a34a');

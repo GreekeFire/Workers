@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Carousell Auto-fill
 // @namespace    steadymart
-// @version      1.5
+// @version      1.6
 // @description  After "Fill Carousell" in work.html: on the listing, Ctrl+Enter clicks Edit; the form auto-fills; Ctrl+Enter again Saves. Clicks the real Edit button (supported in-app nav) — no hard-loading the edit URL, which is what Carousell 404s.
 // @match        https://www.carousell.sg/sell/*
 // @match        https://www.carousell.sg/p/*
@@ -117,22 +117,41 @@
 
     if (onListing) armHotkey('Ctrl+Enter to Edit', () => clickEdit() ? '↗ Opening editor…' : '✗ Edit button not found');
 
+    // A small progress chip so a slow Carousell editor load doesn't look like
+    // nothing is happening. Only shown once we're on the /sell/ edit page and
+    // still waiting for the form to mount; cleared on fill or timeout.
+    let waitChip = null;
+    const showWait = () => {
+      if (waitChip) return;
+      waitChip = document.createElement('div');
+      waitChip.textContent = '⏳ filling…';
+      waitChip.style.cssText = 'position:fixed;bottom:20px;left:20px;z-index:2147483647;background:#111827;color:#fff;padding:8px 14px;border-radius:20px;font:600 12px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.35)';
+      document.body.appendChild(waitChip);
+    };
+    const hideWait = () => { if (waitChip) { waitChip.remove(); waitChip = null; } };
+
     // Fill once the edit form appears — whether you reached it by clicking Edit
     // (SPA navigation, the supported path) or the page loaded on /sell/ directly.
     // NO scripted navigation: the hard-load of /sell/ is what Carousell 404s.
     let tries = 0;
     const iv = setInterval(() => {
-      const ready = /^\/sell\/\d+/.test(location.pathname) && document.querySelector('input[name="field_title"]');
+      const onEdit = /^\/sell\/\d+/.test(location.pathname);
+      const ready = onEdit && document.querySelector('input[name="field_title"]');
       if (ready) {
         clearInterval(iv);
+        hideWait();
         const n = fill(p);
         if (n) {
           note('✓ Filled ' + n + ' field' + (n > 1 ? 's' : '') + ' — Ctrl+Enter to Save');
           markConsumed();
           armHotkey('Ctrl+Enter to Save', () => clickSave() ? '✓ Saving…' : '✗ Save button not found');
         }
-      } else if (tries++ > 900) {   // ~6 min, then stop waiting
-        clearInterval(iv);
+      } else {
+        if (onEdit) showWait();       // on the edit page, form not yet mounted
+        if (tries++ > 900) {          // ~6 min, then stop waiting
+          clearInterval(iv);
+          hideWait();
+        }
       }
     }, 400);
   })();
