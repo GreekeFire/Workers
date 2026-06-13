@@ -152,22 +152,30 @@
       sessionStorage.setItem(dkey, '1');                         // claim early to avoid double-fire
       try {
         let dl = null;
-        for (let i = 0; i < 20 && !(dl && dl.title && dl.models.length); i++) {
+        for (let i = 0; i < 30 && !(dl && dl.title && dl.models.length); i++) {
           dl = fromDataLayer(itemid);
           if (dl && dl.title && dl.models.length) break;
-          await sleep(300);                                       // up to ~6s for dataLayer to fill
+          await sleep(500);                                       // up to ~15s for dataLayer to fill
         }
         if (!(dl && dl.title && dl.models.length)) {
-          // dataLayer never filled. In a background tab this is just throttling —
-          // bail and let a later focus retry. When the tab is VISIBLE, you're
-          // looking at it and it STILL has no product data → likely a delisted/
-          // dead source. Post an ADVISORY marker (no API fetch, no bot puzzle);
-          // work.html shows a yellow "couldn't load — verify & Delete" banner.
+          // dataLayer never filled within the window. In a background tab this is
+          // just throttling — bail and let a later focus retry.
           if (document.visibilityState !== 'visible') { sessionStorage.removeItem(dkey); return; }
+          // Visible but still empty. Could be a SLOW page (the priced impression
+          // event just hasn't fired yet) or a genuinely dead/delisted source.
+          // Don't declare it dead on the first miss — release the dedup key so
+          // maybeAuto re-fires and polls again. Only after a few full attempts do
+          // we post the ADVISORY marker (work.html shows "verify & Delete").
+          const tkey = 'sw_tries_' + itemid;
+          const tries = (+sessionStorage.getItem(tkey) || 0) + 1;
+          sessionStorage.setItem(tkey, String(tries));
+          if (tries < 3) { sessionStorage.removeItem(dkey); return; } // retry on next tick
+          sessionStorage.removeItem(tkey);
           await post({ url: cur, unloaded: true });
           note('⚠ no data — verify in work', 1, 1);
           return;
         }
+        sessionStorage.removeItem('sw_tries_' + itemid);          // clear retry counter on success
         const p = await post(dl);
         note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1, false);
       } catch (e) {
