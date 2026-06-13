@@ -36,19 +36,18 @@ Float buffer **≥$150–200** to cover refunds and Shopee orders that fail afte
 
 ```js
 function calcSell(cost) {
-  return Math.ceil(Math.max(cost * 1.5, cost + 24) / 5) * 5 - 0.1;
+  return Math.ceil(Math.max(cost * 1.5, cost + 24) / 5) * 5;
 }
 ```
-Always resolves to a **`$X.90`** ending — the psychological anchor (buyers file $44.90 as "forty-something", not $45).
+Resolves to a clean round multiple of **$5**.
 
 | Cost | Sell |
 |---|---|
-| $15 | $39.90 |
-| $20 | $44.90 |
-| $30 | $54.90 |
-| $50 | $79.90 |
-
-> ⚠️ **Doc vs. live code:** the live `work.html` `calcSell` currently **omits the `- 0.1`**, so it rounds to whole $5 ($15 → $40, not $39.90). If you want the `.90` anchor back, restore the `- 0.1` in the deployed function. (Flagged 2026-06-13.)
+| $10 | $35 |
+| $15 | $40 |
+| $20 | $45 |
+| $30 | $55 |
+| $50 | $75 |
 
 **Sweet spot:** high-perceived-value items under $20 that list for $40–50+.
 
@@ -58,8 +57,6 @@ Always resolves to a **`$X.90`** ending — the psychological anchor (buyers fil
 
 ### Psychological pricing tricks
 - **Anchor high** — "worth $X" / "retails at $X" in the description makes your price feel like a deal.
-- **Odd specificity** — $47.90 reads as more calculated than $45.90.
-- **Stay below round thresholds** — $79.90 files as "seventy-something".
 - **Scarcity** — "last 2 available" / "limited stock".
 - **Social proof** — "popular pick" / "bestseller on Shopee".
 - **Problem-solution framing** — lead with the pain ("Tired of tangled cables?") not the product.
