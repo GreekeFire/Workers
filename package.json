@@ -1,6 +1,0 @@
-{
-  "type": "module",
-  "devDependencies": {
-    "@supabase/supabase-js": "^2.107.0"
-  }
-}

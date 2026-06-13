@@ -8,5 +8,3 @@ Thumbs.db
 # Tooling
 .claude/
 .vercel/
-node_modules/
-package-lock.json
