@@ -1976,34 +1976,37 @@ async function ingestScrapedBatch(items) {
   // ones already on screen. Each card remembers its source inbox row (inboxId)
   // so saving or clearing it can take that exact scrape off the belt.
   const startIdx = newBatchResults.length;
-  items.forEach(it => newBatchResults.push({ url: (it.payload || {}).url || '', inboxId: it.inboxId, status: 'loading', loadingMsg: 'Generating…' }));
-  renderNewView();
-  for (let i = 0; i < items.length; i++) {
-    const idx = startIdx + i;
-    const p = items[i].payload || {};
-    const inboxId = items[i].inboxId;
-    try {
-      const text = [p.title, p.description].filter(Boolean).join('\n\n');
-      if (!text) throw new Error('Empty scrape');
-      const cost = highestCost(p);
-      const imgs = p.images || [];
+  try {
+    items.forEach(it => newBatchResults.push({ url: (it.payload || {}).url || '', inboxId: it.inboxId, status: 'loading', loadingMsg: 'Generating…' }));
+    renderNewView();
+    for (let i = 0; i < items.length; i++) {
+      const idx = startIdx + i;
+      const p = items[i].payload || {};
+      const inboxId = items[i].inboxId;
       try {
-        const { title, desc } = await runAIGenerate(text);
-        newBatchResults[idx] = { url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
+        const text = [p.title, p.description].filter(Boolean).join('\n\n');
+        if (!text) throw new Error('Empty scrape');
+        const cost = highestCost(p);
+        const imgs = p.images || [];
+        try {
+          const { title, desc } = await runAIGenerate(text);
+          newBatchResults[idx] = { url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
+        } catch (e) {
+          // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
+          newBatchResults[idx] = {
+            url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
+            title: '', desc: '', sourceText: text, sourceCollapsed: true,
+          };
+        }
       } catch (e) {
-        // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
-        newBatchResults[idx] = {
-          url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
-          title: '', desc: '', sourceText: text, sourceCollapsed: true,
-        };
+        newBatchResults[idx] = { url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
       }
-    } catch (e) {
-      newBatchResults[idx] = { url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
+      renderNewView();
     }
+  } finally {
+    newBatchRunning = false;
     renderNewView();
   }
-  newBatchRunning = false;
-  renderNewView();
 }
 
 function saveApiKeyBatch(i) {
@@ -2134,32 +2137,34 @@ async function batchGenerateNew() {
   newBatchRunning = true;
   // Append (don't replace) so manual URLs add to any pulled cards already showing
   const startIdx = newBatchResults.length;
-  urls.forEach(url => newBatchResults.push({ url, status: 'loading', loadingMsg: 'Fetching…' }));
-  renderNewView();
+  try {
+    urls.forEach(url => newBatchResults.push({ url, status: 'loading', loadingMsg: 'Fetching…' }));
+    renderNewView();
 
-  for (let i = 0; i < urls.length; i++) {
-    const idx = startIdx + i;
-    try {
-      const res  = await fetch(`/api/shopee?url=${encodeURIComponent(urls[i])}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Fetch failed');
-      const productText = [data.title, data.description].filter(Boolean).join('\n\n');
-      if (!productText) throw new Error('No product text returned');
+    for (let i = 0; i < urls.length; i++) {
+      const idx = startIdx + i;
+      try {
+        const res  = await fetch(`/api/shopee?url=${encodeURIComponent(urls[i])}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fetch failed');
+        const productText = [data.title, data.description].filter(Boolean).join('\n\n');
+        if (!productText) throw new Error('No product text returned');
 
-      newBatchResults[idx].loadingMsg = 'Generating…';
+        newBatchResults[idx].loadingMsg = 'Generating…';
+        renderNewView();
+
+        const cost = data.price_max || data.price || 0;
+        const { title, desc } = await runAIGenerate(productText);
+        newBatchResults[idx] = { url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
+      } catch (e) {
+        newBatchResults[idx] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
+      }
       renderNewView();
-
-      const cost = data.price_max || data.price || 0;
-      const { title, desc } = await runAIGenerate(productText);
-      newBatchResults[idx] = { url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
-    } catch (e) {
-      newBatchResults[idx] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
     }
+  } finally {
+    newBatchRunning = false;
     renderNewView();
   }
-
-  newBatchRunning = false;
-  renderNewView();
 }
 
 // Add an empty card to fill in by hand (replaces the old single NEW form)
