@@ -2,6 +2,9 @@
  * Loaded by a tiny bookmarklet on every device:
  *   javascript:fetch('https://workers-v1.vercel.app/sc.js').then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load '+e))
  *
+ * VA bookmarklet (UUID hardcoded per worker):
+ *   javascript:window.__swWorker='WORKER-UUID-HERE';fetch('https://workers-v1.vercel.app/sc.js').then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load '+e))
+ *
  * On a product page it FIRST reads the full item (title, description, images,
  * exact variant prices) out of window.dataLayer — which Shopee already
  * populated via its own signed request, so there's no fetch of ours and no
@@ -10,17 +13,28 @@
  *
  * Toast is tagged ·page (read from memory, puzzle-free) or ·api (fetched).
  * Edit here and every device picks it up on next click — no re-pasting bookmarks.
+ *
+ * worker_id = null  → owner scrape (existing behaviour, zero regression)
+ * worker_id = UUID  → VA scrape: /api/worker-scrape runs guards + AI gen
  */
 (async () => {
   const K = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   const INBOX = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/rest/v1/scrape_inbox';
   const CDN = 'https://down-sg.img.susercontent.com/file/';
 
+  // Read worker UUID injected by the VA's personalised bookmarklet, or null for owner.
+  const wid = window.__swWorker || null;
+
   const post = async (p) => {
+    const body = { kind: 'shopee', payload: p };
+    // Include worker_id at top level on the scrape_inbox row so
+    // /api/worker-scrape can find it without parsing the payload JSON.
+    if (wid) body.worker_id = wid;
+
     const s = await fetch(INBOX, {
       method: 'POST',
       headers: { apikey: K, Authorization: 'Bearer ' + K, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ kind: 'shopee', payload: p }),
+      body: JSON.stringify(body),
     });
     if (!s.ok) throw new Error('Supabase ' + s.status);
     return p;
@@ -32,6 +46,10 @@
   // several copies (some with prices nulled for analytics); we collect every
   // matching copy and merge — prices from the priced copy, description/images
   // from whichever copy has them. Returns null if no priced copy is present.
+  //
+  // NOTE: categories, shop_location, rating_star are marked TEST LATER — the
+  // dataLayer schema varies. If a field isn't present we leave it undefined
+  // so the server skips that guard (no false blocks). See VA-PLAN §guards.
   const fromDataLayer = (itemid) => {
     const dl = window.dataLayer;
     if (!Array.isArray(dl)) return null;
@@ -63,6 +81,20 @@
       .map(m => ({ name: m.name, price: m.price / 1e5 }));
     const prices = models.map(m => m.price);
 
+    // TEST LATER: confirm these field names exist in the dataLayer shape.
+    // If absent, the keys are simply not included — server skips those guards.
+    const extra = {};
+    const cats = priced.categories || priced.breadcrumb || priced.category_list;
+    if (Array.isArray(cats) && cats.length) {
+      extra.categories = cats.map(c => (typeof c === 'string' ? c : c.name || c.display_name || String(c)));
+    }
+    const loc = priced.shop_location || (priced.shop && priced.shop.location);
+    if (loc) extra.shop_location = String(loc);
+    const rat = (priced.item_rating && priced.item_rating.rating_star) != null
+      ? priced.item_rating.rating_star
+      : priced.rating_star != null ? priced.rating_star : priced.shop_rating;
+    if (rat != null) extra.rating_star = Number(rat);
+
     return {
       title: priced.name || priced.title || withDesc.name || '',
       description: withDesc.description || withDesc.rich_text_description || '',
@@ -73,10 +105,13 @@
       sold: priced.historical_sold || priced.global_sold || 0,
       stock: priced.stock || 0,
       url: location.href.split('?')[0],
+      worker_id: wid,
+      ...extra,
     };
   };
 
-  // Fetch path (v4 API) — used for paste-box links and as fallback
+  // Fetch path (v4 API) — used for paste-box links and as fallback.
+  // This path definitively has categories, shop_location, rating_star.
   const fetchItem = async (L) => {
     if (/shp\.ee/.test(L)) {
       try {
@@ -86,8 +121,6 @@
     }
     const m = L.match(/i\.(\d+)\.(\d+)/) || L.match(/\/product\/(\d+)\/(\d+)/);
     if (!m) throw new Error('not a product link');
-    // Abort if the v4 call hangs (e.g. a bot challenge). Without this, a
-    // backgrounded iOS tab can stall here forever with no error surfaced.
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     let r;
@@ -103,6 +136,19 @@
     const d = await r.json();
     const it = d.item || (d.data && (d.data.item || d.data));
     if (!it || !it.name) throw new Error('Shopee returned no item — solve the bot check, retry');
+
+    // Extract categories: v4 returns categories[] array of objects with display_name
+    let categories;
+    if (Array.isArray(it.categories) && it.categories.length) {
+      categories = it.categories.map(c => c.display_name || c.name || String(c.catid || ''));
+    } else if (Array.isArray(it.fe_categories) && it.fe_categories.length) {
+      categories = it.fe_categories.map(c => c.display_name || c.name || String(c.catid || ''));
+    }
+
+    const shop_location = it.shop_location || null;
+    const rating_star = (it.item_rating && it.item_rating.rating_star != null)
+      ? it.item_rating.rating_star : null;
+
     return {
       title: it.name,
       description: it.description || '',
@@ -113,6 +159,10 @@
       sold: it.historical_sold || it.sold || 0,
       stock: it.stock || 0,
       url: L.split('?')[0],
+      worker_id: wid,
+      ...(categories ? { categories } : {}),
+      ...(shop_location != null ? { shop_location } : {}),
+      ...(rating_star != null ? { rating_star } : {}),
     };
   };
 
@@ -120,8 +170,6 @@
   const send = async (L) => post(await fetchItem(L));
 
   const note = (msg, bad, small, amber) => {
-    // Signal the host userscript (shopee-work.user.js) so the → Work button can
-    // reflect the real outcome (✓ price / ✗) and the AUTO counter can repaint.
     try { window.dispatchEvent(new CustomEvent('sw:result', { detail: { ok: !bad, msg } })); } catch (e) {}
     const t = document.createElement('div');
     t.textContent = msg;
@@ -137,52 +185,39 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // Product page → try dataLayer first, fall back to fetch (manual click only).
-  // AUTO mode (userscript-driven, gated by the sw_auto toggle): dataLayer ONLY —
-  // poll until Shopee populates a priced copy, then send; NEVER fall back to the
-  // v4 fetch (that's what triggers bot puzzles). Dedup per item via sessionStorage.
-  // Shopee product URLs come in two shapes: …-i.<shopid>.<itemid> and
-  // /product/<shopid>/<itemid>. Recognise both.
   const cur = /i\.\d+\.\d+|\/product\/\d+\/\d+/.test(location.href) ? location.href.split('?')[0] : '';
   if (cur) {
     const itemid = ((cur.match(/i\.\d+\.(\d+)/) || cur.match(/\/product\/\d+\/(\d+)/)) || [])[1];
     const AUTO = !!window.__swAuto;
 
     if (AUTO) {
-      if (localStorage.getItem('sw_auto') !== '1') return;      // toggle off
+      if (localStorage.getItem('sw_auto') !== '1') return;
       const dkey = 'sw_sent_' + itemid;
-      if (sessionStorage.getItem(dkey)) return;                  // already sent this item
-      sessionStorage.setItem(dkey, '1');                         // claim early to avoid double-fire
+      if (sessionStorage.getItem(dkey)) return;
+      sessionStorage.setItem(dkey, '1');
       try {
         let dl = null;
         for (let i = 0; i < 30 && !(dl && dl.title && dl.models.length); i++) {
           dl = fromDataLayer(itemid);
           if (dl && dl.title && dl.models.length) break;
-          await sleep(500);                                       // up to ~15s for dataLayer to fill
+          await sleep(500);
         }
         if (!(dl && dl.title && dl.models.length)) {
-          // dataLayer never filled within the window. In a background tab this is
-          // just throttling — bail and let a later focus retry.
           if (document.visibilityState !== 'visible') { sessionStorage.removeItem(dkey); return; }
-          // Visible but still empty. Could be a SLOW page (the priced impression
-          // event just hasn't fired yet) or a genuinely dead/delisted source.
-          // Don't declare it dead on the first miss — release the dedup key so
-          // maybeAuto re-fires and polls again. Only after a few full attempts do
-          // we post the ADVISORY marker (work.html shows "verify & Delete").
           const tkey = 'sw_tries_' + itemid;
           const tries = (+sessionStorage.getItem(tkey) || 0) + 1;
           sessionStorage.setItem(tkey, String(tries));
-          if (tries < 3) { sessionStorage.removeItem(dkey); return; } // retry on next tick
+          if (tries < 3) { sessionStorage.removeItem(dkey); return; }
           sessionStorage.removeItem(tkey);
-          await post({ url: cur, unloaded: true });
+          await post({ url: cur, unloaded: true, worker_id: wid });
           note('⚠ no data — verify in work', 1, 1);
           return;
         }
-        sessionStorage.removeItem('sw_tries_' + itemid);          // clear retry counter on success
+        sessionStorage.removeItem('sw_tries_' + itemid);
         const p = await post(dl);
         note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2), 0, 1, false);
       } catch (e) {
-        sessionStorage.removeItem(dkey);                         // let a later pass retry
+        sessionStorage.removeItem(dkey);
         note('✗ ' + e.message, 1, 1);
       }
       return;
@@ -205,6 +240,5 @@
     return;
   }
 
-  // Not a product page — prompt the user to navigate to one
   note('Go to a Shopee product page first', true);
 })();

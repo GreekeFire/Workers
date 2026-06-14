@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Steadymart VA</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VA Work">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050506">
+<style>
+  :root {
+    --bg-deep: #050506;
+    --text-primary: #FAFAFA;
+    --text-secondary: #B8B6B0;
+    --text-tertiary: #76746E;
+    --success: #6BE3A4;
+    --warning: #F2C063;
+    --accent: #E07658;
+    --danger: #E05858;
+    --card-bg: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.06);
+    --card-radius: 16px;
+    --coral: #E07658;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: #050506;
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 82% 14%, rgba(224,118,88,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse at 18% 90%, rgba(180,180,200,0.06) 0%, transparent 60%);
+    filter: blur(40px);
+    animation: bgDrift 36s ease-in-out infinite alternate;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Crect width='1' height='1' fill='rgba(255,255,255,0.014)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes bgDrift {
+    0%   { transform: translate(0,0) scale(1); }
+    50%  { transform: translate(20px,-15px) scale(1.04); }
+    100% { transform: translate(-10px,10px) scale(0.97); }
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: env(safe-area-inset-top, 24px) 20px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  /* ── Header ── */
+  .va-header {
+    margin-bottom: 24px;
+  }
+  .va-name {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+  }
+  .progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .progress-bar-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+  .progress-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--success);
+    white-space: nowrap;
+    min-width: 52px;
+    text-align: right;
+  }
+
+  /* ── Warning chips ── */
+  .warn-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .warn-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: rgba(242,192,99,0.10);
+    border: 1px solid rgba(242,192,99,0.25);
+    color: var(--warning);
+  }
+  .warn-chip .chip-ack {
+    background: none;
+    border: none;
+    color: var(--warning);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+  .warn-chip .chip-ack:hover { opacity: 1; }
+  .warn-chip.acked {
+    background: rgba(107,227,164,0.08);
+    border-color: rgba(107,227,164,0.2);
+    color: var(--success);
+    opacity: 0.6;
+  }
+
+  /* ── Listing card ── */
+  .listing-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 24px 20px;
+    margin-bottom: 16px;
+  }
+
+  .sell-price-block {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .sell-price-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+  .sell-price-value {
+    font-size: 42px;
+    font-weight: 800;
+    color: var(--success);
+    line-height: 1;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+    display: block;
+  }
+  .field-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .ai-title-box {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    display: block;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+    cursor: default;
+  }
+
+  .desc-toggle {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 12px;
+    display: block;
+    transition: color 0.15s;
+  }
+  .desc-toggle:hover { color: var(--text-secondary); }
+
+  .ai-desc-box {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    resize: none;
+    overflow: hidden;
+    font-family: inherit;
+    display: block;
+    cursor: default;
+  }
+
+  /* ── Image strip ── */
+  .img-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-bottom: 12px;
+  }
+  .img-strip::-webkit-scrollbar { display: none; }
+  .img-thumb {
+    flex-shrink: 0;
+    width: 72px;
+    height: 72px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+  }
+  .img-thumb img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+
+  /* ── Copy / Download buttons ── */
+  .copy-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .copy-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+  .copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+  .dl-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 16px;
+    font-family: inherit;
+  }
+  .dl-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+
+  /* ── Action row ── */
+  .action-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .btn-skip {
+    flex: 1;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--card-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-secondary);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-skip:hover { background: rgba(255,255,255,0.08); }
+  .btn-done {
+    flex: 2;
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(107,227,164,0.25);
+    background: rgba(107,227,164,0.08);
+    color: var(--success);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .btn-done:hover:not(:disabled) { background: rgba(107,227,164,0.16); }
+  .btn-done:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* ── Empty state ── */
+  .empty-card {
+    text-align: center;
+    padding: 52px 24px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    margin-bottom: 16px;
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 16px; }
+  .empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+  .empty-sub { font-size: 14px; color: var(--text-tertiary); line-height: 1.5; }
+
+  /* ── Bookmarklet card ── */
+  .bm-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .bm-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+  }
+  .bm-code {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 10px 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    resize: none;
+    overflow-x: auto;
+    white-space: nowrap;
+    margin-bottom: 8px;
+    display: block;
+    cursor: text;
+  }
+  .bm-instructions {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+  }
+
+  /* ── Error / loading ── */
+  .status-msg {
+    text-align: center;
+    padding: 60px 24px;
+    color: var(--text-tertiary);
+    font-size: 14px;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 999999;
+    background: #16a34a;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font: 600 14px system-ui;
+    box-shadow: 0 4px 14px rgba(0,0,0,.3);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { background: #dc2626; }
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="status-msg">Loading…</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+const params   = new URLSearchParams(location.search);
+const WORKER_ID = params.get('w');
+
+let profile     = null;   // { id, name, daily_target, count_today, bookmarklet }
+let listings    = [];     // active assigned listings from API
+let skipSet     = new Set();  // listing IDs the VA has skipped this session
+let ackedWarns  = new Set();  // listing IDs whose warnings the VA has acked
+let pollTimer   = null;
+let busy        = false;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const app = () => document.getElementById('app');
+
+function showToast(msg, err = false, ms = 2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._to);
+  t._to = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function calcPct(count, target) {
+  return Math.min(100, Math.round((count / (target || 100)) * 100));
+}
+
+function warnLabel(w) {
+  const map = {
+    'category':      '⚠ Category',
+    'non-sg-seller': '⚠ Non-SG seller',
+    'low-rating':    '⚠ Low rating',
+    'price-too-low': '⚠ Price low',
+    'price-too-high':'⚠ Price high',
+  };
+  return map[w] || ('⚠ ' + w);
+}
+
+// ── Copy helper ───────────────────────────────────────────────────────────────
+function copyText(text, btnId) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (btnId) {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+      }
+    }
+    showToast('Copied ✓');
+  }).catch(() => showToast('Copy failed', true));
+}
+
+// ── Download images ───────────────────────────────────────────────────────────
+function downloadImages(images) {
+  if (!images || !images.length) { showToast('No images', true); return; }
+  images.forEach((url, i) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'img-' + (i + 1) + '.jpg';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 500);
+  });
+  showToast('Downloading ' + images.length + ' images…');
+}
+
+// ── API calls ─────────────────────────────────────────────────────────────────
+async function fetchProfile() {
+  const r = await fetch('/api/worker-profile?w=' + WORKER_ID);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+  return r.json();
+}
+
+async function fetchListings() {
+  const r = await fetch('/api/worker-listings?w=' + WORKER_ID);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+  const d = await r.json();
+  return d.listings || [];
+}
+
+async function postDone(listing_id, warnings_overridden) {
+  const r = await fetch('/api/worker-done', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ worker_id: WORKER_ID, listing_id, warnings_overridden }),
+  });
+  const d = await r.json();
+  if (!r.ok || !d.ok) throw new Error(d.error || r.status);
+  return d;
+}
+
+async function postSkip(listing_id) {
+  await fetch('/api/worker-skip', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ worker_id: WORKER_ID, listing_id }),
+  }).catch(() => {});
+}
+
+// ── Poll ──────────────────────────────────────────────────────────────────────
+async function poll() {
+  try {
+    const fresh = await fetchListings();
+    // Merge: keep existing order, append truly new IDs
+    const known = new Set(listings.map(l => l.id));
+    for (const l of fresh) {
+      if (!known.has(l.id)) listings.push(l);
+    }
+    // Remove any that are no longer active (done/deleted elsewhere)
+    const freshIds = new Set(fresh.map(l => l.id));
+    listings = listings.filter(l => freshIds.has(l.id));
+    render();
+  } catch (e) {
+    // Silent — keep showing whatever we had
+  }
+  pollTimer = setTimeout(poll, 10000);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function currentListing() {
+  return listings.find(l => !skipSet.has(l.id)) || null;
+}
+
+function render() {
+  if (!profile) { app().innerHTML = '<div class="status-msg">Loading…</div>'; return; }
+
+  const pct   = calcPct(profile.count_today, profile.daily_target);
+  const cur   = currentListing();
+
+  let html = '';
+
+  // Header
+  html += `
+    <div class="va-header">
+      <div class="va-name">${esc(profile.name)}</div>
+      <div class="progress-wrap">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="progress-label">${profile.count_today} / ${profile.daily_target}</div>
+      </div>
+    </div>`;
+
+  if (!cur) {
+    // Queue empty
+    html += `
+      <div class="empty-card">
+        <div class="empty-icon">📦</div>
+        <div class="empty-title">Queue empty</div>
+        <div class="empty-sub">Go source more products on Shopee — use your bookmarklet below.<br>New listings appear here automatically.</div>
+      </div>`;
+
+    // Bookmarklet
+    if (profile.bookmarklet) {
+      html += `
+        <div class="bm-card">
+          <div class="bm-label">Your Shopee bookmarklet</div>
+          <textarea class="bm-code" rows="3" readonly onclick="this.select()">${esc(profile.bookmarklet)}</textarea>
+          <div class="bm-instructions">Add this as a bookmark on your phone and laptop. Click it on any Shopee product page to send it here.</div>
+        </div>`;
+    }
+
+  } else {
+    const warnings     = cur.guard_warnings || [];
+    const hasWarnings  = warnings.length > 0;
+    const acked        = ackedWarns.has(cur.id);
+    const doneEnabled  = !hasWarnings || acked;
+    const title        = cur.ai_title || cur.title || '';
+    const desc         = cur.ai_description || '';
+    const images       = cur.images || [];
+
+    // Warning chips (if any)
+    if (hasWarnings) {
+      html += `<div class="warn-chips">`;
+      for (const w of warnings) {
+        if (acked) {
+          html += `<div class="warn-chip acked">${esc(warnLabel(w))} ✓</div>`;
+        } else {
+          html += `
+            <div class="warn-chip" id="chip-${esc(w)}">
+              ${esc(warnLabel(w))}
+              <button class="chip-ack" onclick="ackWarning(${cur.id})">Add anyway</button>
+            </div>`;
+        }
+      }
+      html += `</div>`;
+    }
+
+    html += `<div class="listing-card">`;
+
+    // Sell price — large + prominent
+    if (cur.sell_price) {
+      html += `
+        <div class="sell-price-block">
+          <div class="sell-price-label">Sell price</div>
+          <div class="sell-price-value">$${cur.sell_price}</div>
+        </div>`;
+    }
+
+    // Title
+    html += `
+      <div class="field-header">
+        <span class="field-label">Title</span>
+        <button class="copy-btn" id="copy-title-btn" onclick="copyText(${JSON.stringify(title)}, 'copy-title-btn')">Copy</button>
+      </div>
+      <textarea class="ai-title-box" readonly rows="3" id="title-ta">${esc(title)}</textarea>`;
+
+    // Description (collapsed by default)
+    html += `
+      <div class="field-header">
+        <span class="field-label">Description</span>
+        <button class="copy-btn" id="copy-desc-btn" onclick="copyText(${JSON.stringify(desc)}, 'copy-desc-btn')">Copy</button>
+      </div>
+      <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">▶ Show description</button>
+      <textarea class="ai-desc-box" readonly id="desc-ta" style="display:none">${esc(desc)}</textarea>`;
+
+    // Images
+    if (images.length) {
+      html += `<div class="img-strip">`;
+      for (const url of images.slice(0, 12)) {
+        html += `<div class="img-thumb"><img src="${esc(url)}" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
+      }
+      html += `</div>`;
+      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">⬇ Download all images (${images.length})</button>`;
+    }
+
+    // Actions
+    html += `
+      <div class="action-row">
+        <button class="btn-skip" onclick="doSkip(${cur.id})">Skip →</button>
+        <button class="btn-done" id="done-btn" ${doneEnabled ? '' : 'disabled'} onclick="doDone(${cur.id}, ${acked})">Done ✓</button>
+      </div>`;
+
+    html += `</div>`; // .listing-card
+
+    // Remaining count
+    const remaining = listings.filter(l => !skipSet.has(l.id)).length;
+    if (remaining > 1) {
+      html += `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:4px">${remaining - 1} more in queue</div>`;
+    }
+  }
+
+  app().innerHTML = html;
+
+  // Auto-resize textareas
+  document.querySelectorAll('textarea').forEach(autoResize);
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+function ackWarning(listingId) {
+  ackedWarns.add(listingId);
+  render();
+}
+
+function toggleDesc() {
+  const ta  = document.getElementById('desc-ta');
+  const btn = document.getElementById('desc-toggle');
+  if (!ta || !btn) return;
+  const showing = ta.style.display !== 'none';
+  ta.style.display = showing ? 'none' : 'block';
+  btn.textContent  = showing ? '▶ Show description' : '▼ Hide description';
+  if (!showing) autoResize(ta);
+}
+
+async function doDone(listingId, warningsOverridden) {
+  if (busy) return;
+  busy = true;
+  const btn = document.getElementById('done-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+  try {
+    const result = await postDone(listingId, warningsOverridden);
+    profile.count_today = result.count_today;
+    // Remove from queue
+    listings = listings.filter(l => l.id !== listingId);
+    ackedWarns.delete(listingId);
+    showToast('Done ✓  ' + result.count_today + ' / ' + profile.daily_target + ' today');
+    render();
+  } catch (e) {
+    showToast('Error: ' + e.message, true);
+    if (btn) { btn.disabled = false; btn.textContent = 'Done ✓'; }
+  }
+  busy = false;
+}
+
+async function doSkip(listingId) {
+  if (busy) return;
+  skipSet.add(listingId);
+  await postSkip(listingId);
+  render();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  if (!WORKER_ID) {
+    app().innerHTML = '<div class="status-msg">No worker ID in URL.<br>Check your link.</div>';
+    return;
+  }
+
+  try {
+    profile  = await fetchProfile();
+    listings = await fetchListings();
+    render();
+    pollTimer = setTimeout(poll, 10000);
+  } catch (e) {
+    const msg = e.message || 'unknown error';
+    if (msg === 'worker-inactive') {
+      app().innerHTML = '<div class="status-msg">This link has been deactivated.<br>Contact your manager.</div>';
+    } else if (msg === 'worker-not-found') {
+      app().innerHTML = '<div class="status-msg">Link not recognised.<br>Check the URL and try again.</div>';
+    } else {
+      app().innerHTML = `<div class="status-msg">Failed to load: ${esc(msg)}<br><button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;border-radius:8px;border:1px solid var(--card-border);background:none;color:var(--text-secondary);cursor:pointer;font-size:13px">Retry</button></div>`;
+    }
+  }
+})();
+</script>
+</body>
+</html>
