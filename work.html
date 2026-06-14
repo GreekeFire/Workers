@@ -2794,7 +2794,7 @@ function renderBreakdown() {
       <div class="breakdown-stats">
         <span>${g.count} sale${g.count > 1 ? 's' : ''}</span>
         <span class="breakdown-profit">+$${g.profit.toFixed(0)}</span>
-        <span>avg $${(g.profit / g.count).toFixed(0)}/sale</span>
+        <span>avg +$${(g.profit / g.count).toFixed(0)}/sale</span>
       </div>
     </div>`).join('');
   el.innerHTML = `<div class="breakdown-card"><div class="breakdown-title">What's Selling</div>${rows}</div>`;
@@ -3379,9 +3379,15 @@ async function workerRotateLink(workerId, name) {
   const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
   const newId = data.id;
-  // Transfer assigned active listings to new worker
-  await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
-  // Deactivate old
+  // Transfer assigned active listings to new worker — check for error before deactivating the old one
+  const { error: tErr } = await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
+  if (tErr) {
+    // Roll back: delete the new worker record so we don't leave an orphan
+    await sb.from('workers').delete().eq('id', newId).catch(() => {});
+    toast('Rotate failed (listing transfer): ' + tErr.message);
+    return;
+  }
+  // Deactivate old only after listings are safely transferred
   await sb.from('workers').update({ active: false }).eq('id', workerId);
   toast('New VA link created ✓');
   _workersData = null;
