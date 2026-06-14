@@ -307,6 +307,15 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 3. ✅ The worker assigned to that listing shows **Sold: 1** (or incremented if already had sales).
 4. In Supabase `sales_log` table → ✅ new row exists with correct `listing_id`, `price`, `ts`.
 
+### Test 8.18 — Carousell URL required before Done
+1. On a listing card with all warnings acked and AI title present, tap **Done ✓** without pasting a URL.
+2. ✅ Toast: "Paste your Carousell listing link first" — Done does not proceed.
+3. Paste a non-Carousell URL (e.g. `https://shopee.sg/...`) → ✅ input border stays grey, Done still blocked.
+4. Paste a valid Carousell listing URL (e.g. `https://www.carousell.sg/p/...`) → ✅ input border turns green.
+5. Tap **Done ✓** → ✅ count increments, listing removed from queue.
+6. In Supabase → `listings` → ✅ `carousell_url` column now contains the pasted URL.
+7. In owner's LISTINGS tab → tap the listing → ✅ "Carousell ↗" link is present and opens the correct URL.
+
 ### Test 8.17 — Fuzzy duplicate log
 1. Scrape a product whose title and cost are very similar (≥60% title match, cost within 10%) to an existing listing.
 2. ✅ The listing is NOT blocked — it still creates normally with no warning shown to VA.
@@ -359,6 +368,7 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 | 8.15| LISTINGS filters: All / Assigned / Unassigned                       |       |
 | 8.16| Sold count in WORKERS tab after logging a linked sale               |       |
 | 8.17| Fuzzy dupe → listing created, duplicate_log row written             |       |
+| 8.18| Carousell URL required: blocked without, green on valid, saved to DB |       |
 
 ---
 
