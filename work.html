@@ -2211,7 +2211,11 @@ let _selectedListingId = null;   // Supabase listings.id of the sale being logge
 
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
-  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; _selectedListingId = null; return; }
+  // Any keystroke means the user is re-searching — clear the prior selection so
+  // a sale never gets attributed to the listing they had selected before they
+  // changed the text. selectMatch() will re-set it when they pick from the dropdown.
+  _selectedListingId = null;
+  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
   // Word-based match (same approach as the LISTINGS search): every word must
   // appear, any order — immune to pasted non-breaking spaces, pipes, dashes
   const terms = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
