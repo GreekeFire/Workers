@@ -3220,20 +3220,24 @@ async function refreshWorkers() {
     const pendingCountMap = {};
     (pRes.data || []).forEach(r => { pendingCountMap[r.assigned_worker_id] = (pendingCountMap[r.assigned_worker_id] || 0) + 1; });
 
-    // Sales attribution: join salesLog.listing_id → listings.assigned_worker_id
-    // salesLog is loaded globally during app init; entries may have listing_id (Phase2+)
+    // Sales attribution: query sales_log table (authoritative, cross-device) and
+    // join to listings.assigned_worker_id. This is more reliable than the in-memory
+    // salesLog which only reflects the current session / device.
     const soldCountMap = {};
     try {
-      const salesWithId = (salesLog || []).filter(s => s.listing_id);
-      if (salesWithId.length > 0) {
-        const listingIds = [...new Set(salesWithId.map(s => s.listing_id).filter(Boolean))];
+      const { data: salesRows, error: slErr } = await sb
+        .from('sales_log')
+        .select('listing_id')
+        .not('listing_id', 'is', null);
+      if (!slErr && salesRows && salesRows.length > 0) {
+        const listingIds = [...new Set(salesRows.map(s => s.listing_id).filter(Boolean))];
         const { data: listingRows } = await sb
           .from('listings')
           .select('id,assigned_worker_id')
           .in('id', listingIds);
         const listingToWorker = {};
         (listingRows || []).forEach(l => { if (l.assigned_worker_id) listingToWorker[l.id] = l.assigned_worker_id; });
-        salesWithId.forEach(s => {
+        salesRows.forEach(s => {
           const wid = listingToWorker[s.listing_id];
           if (wid) soldCountMap[wid] = (soldCountMap[wid] || 0) + 1;
         });
