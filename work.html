@@ -2080,8 +2080,18 @@ function copyBatch(i, field) {
 
 // Clear (your "delete") also resolves the scrape — take it off the belt so a
 // re-pull or refresh doesn't bring a card you've rejected back.
+//
+// Guard: refuse to splice while a batch is actively running. The batch loops
+// track cards by a fixed integer index (startIdx + i); splicing an earlier card
+// shifts those indices and causes the loop to write results into the wrong slot,
+// silently corrupting another card's title/description. Users should wait for the
+// spinner to finish (a few seconds per card) before clearing.
 function clearBatchItem(i) {
   const r = newBatchResults[i];
+  if (newBatchRunning && r && r.status === 'loading') {
+    toast('Wait for this card to finish loading, then clear it');
+    return;
+  }
   if (r && r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
   newBatchResults.splice(i, 1);
   renderNewView();
