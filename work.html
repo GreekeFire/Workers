@@ -903,6 +903,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
       <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
       <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
+      <button class="seg-btn" id="btn-workers" onclick="switchTab('workers')">WORKERS</button>
     </div>
     <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">⟳</button>
   </div>
@@ -969,6 +970,11 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <div class="done-list" id="done-list"></div>
   </div>
 
+
+  <!-- WORKERS view -->
+  <div id="view-workers" style="display:none">
+    <div id="workers-wrap"></div>
+  </div>
 
 
 </div>
@@ -1062,14 +1068,15 @@ async function loadListingsFromSupabase() {
   try {
     const { data, error } = await sb
       .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,assigned_worker_id')
       .eq('status', 'active')
       .order('id');
     if (error) throw error;
     LISTINGS = data.map(r => ({
       id: r.id, title: r.title, shopee: r.shopee_url, caro: r.carousell_url,
       cost: r.source_cost == null ? '' : String(r.source_cost),
-      sell: r.sell_price  == null ? '' : String(r.sell_price)
+      sell: r.sell_price  == null ? '' : String(r.sell_price),
+      assigned_worker_id: r.assigned_worker_id || null
     }));
   } catch (e) {
     console.error('Failed to load listings from Supabase:', e);
@@ -1331,7 +1338,9 @@ function markDone() {
     status: 'done',
     title: entry.title,
     source_cost: costVal,
-    sell_price: calcSell(costVal)
+    sell_price: calcSell(costVal),
+    ai_title: aiTitle || null,
+    ai_description: aiDesc || null
   }).eq('id', sbId)
     .then(({ error }) => { if (error) toast('Status sync failed — item may reappear'); });
   resetAI();
@@ -2355,6 +2364,9 @@ function _renderFixView() {
   const cardAnim = currentIndex !== _lastFixIndex ? ' card-in' : '';
   _lastFixIndex = currentIndex;
   wrap.innerHTML = `<div class="listing-card${cardAnim}">
+    ${L.assigned_worker_id ? `<div style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);border-radius:8px;padding:6px 12px;margin:0 0 10px;font-size:12px;color:#a5b4fc;font-weight:600">
+      👤 Assigned to VA — this listing is in a VA's queue
+    </div>` : ''}
     ${fixNoload ? `<div style="background:#78350f;color:#fef3c7;border:1px solid #d97706;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="font-size:13px;font-weight:600">⚠ Couldn't load Shopee data — likely delisted. Verify on Shopee ↗; if dead, delist on Carousell then:</span>
       <button class="btn-delete" style="white-space:nowrap" onclick="markDeleted()">Delete</button>
@@ -2771,11 +2783,13 @@ function switchTab(tab) {
   document.getElementById('view-fix').style.display   = tab === 'fix'   ? 'block' : 'none';
   document.getElementById('view-new').style.display   = tab === 'new'   ? 'block' : 'none';
   document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
-  document.getElementById('view-done').style.display  = tab === 'done'  ? 'block' : 'none';
-  document.getElementById('btn-fix').classList.toggle('active',   tab === 'fix');
-  document.getElementById('btn-new').classList.toggle('active',   tab === 'new');
-  document.getElementById('btn-sales').classList.toggle('active', tab === 'sales');
-  document.getElementById('btn-done').classList.toggle('active',  tab === 'done');
+  document.getElementById('view-done').style.display    = tab === 'done'    ? 'block' : 'none';
+  document.getElementById('view-workers').style.display = tab === 'workers' ? 'block' : 'none';
+  document.getElementById('btn-fix').classList.toggle('active',     tab === 'fix');
+  document.getElementById('btn-new').classList.toggle('active',     tab === 'new');
+  document.getElementById('btn-sales').classList.toggle('active',   tab === 'sales');
+  document.getElementById('btn-done').classList.toggle('active',    tab === 'done');
+  document.getElementById('btn-workers').classList.toggle('active', tab === 'workers');
   if (tab === 'fix') { renderFixView(); pullScraped('fix', true); }
   else if (tab === 'new') { renderNewView(); pullScraped('new', true); }
   else if (tab === 'sales') renderSalesView();
@@ -2785,6 +2799,9 @@ function switchTab(tab) {
     _listingsCache = [];
     _listingsEditingId = null;
     renderDoneView();
+  }
+  else if (tab === 'workers') {
+    renderWorkersView();
   }
 }
 
@@ -2808,7 +2825,7 @@ function renderDoneView() {
       .map(d => d.id).filter(Boolean))].slice(0, 25);
     if (!ids.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
     list.innerHTML = '<p class="done-empty">Loading recent…</p>';
-    sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
+    sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .in('id', ids).then(({ data, error }) => {
         if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
         const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order
@@ -2842,7 +2859,7 @@ async function scanBadLinks() {
   list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
   try {
     const { data, error } = await sb.from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status')
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .limit(5000);
     if (error) throw error;
     const bad = (data || []).filter(d =>
@@ -2865,7 +2882,7 @@ async function _searchAllListings(query) {
     const terms = query.split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1).slice(0, 8);
     let q = sb
       .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status');
+      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
     for (const t of terms.length ? terms : [query.trim()]) q = q.ilike('title', `%${t}%`);
     const { data, error } = await q.order('status').limit(30);
     if (error) throw error;
@@ -2915,6 +2932,7 @@ function _renderListingsResults(data, prefix) {
         <div class="done-meta">
           Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
+          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> · 👤 VA</span>' : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${validShopeeLink(d.shopee_url)
@@ -3125,6 +3143,229 @@ async function doLogin() {
   if (error) { err.textContent = error.message; return; }
   document.getElementById('login-overlay').style.display = 'none';
   init();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// WORKERS TAB  (Step 7 — VA-PLAN)
+// ═══════════════════════════════════════════════════════════════════
+let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
+let _workersLoading = false;
+
+async function renderWorkersView() {
+  const wrap = document.getElementById('workers-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<p style="color:var(--text-tertiary);padding:24px 0">Loading…</p>';
+  await refreshWorkers();
+}
+
+async function refreshWorkers() {
+  if (_workersLoading) return;
+  _workersLoading = true;
+  const wrap = document.getElementById('workers-wrap');
+  try {
+    // Load workers + today's done counts + pending assigned listings
+    const today = getToday();
+    const [wRes, dRes, pRes] = await Promise.all([
+      sb.from('workers').select('id,name,daily_target,active').order('name'),
+      sb.from('worker_done').select('worker_id').eq('date', today),
+      sb.from('listings').select('id,assigned_worker_id').eq('status', 'active').not('assigned_worker_id', 'is', null)
+    ]);
+    if (wRes.error) throw wRes.error;
+
+    const doneCountMap = {};
+    (dRes.data || []).forEach(r => { doneCountMap[r.worker_id] = (doneCountMap[r.worker_id] || 0) + 1; });
+    const pendingCountMap = {};
+    (pRes.data || []).forEach(r => { pendingCountMap[r.assigned_worker_id] = (pendingCountMap[r.assigned_worker_id] || 0) + 1; });
+
+    _workersData = (wRes.data || []).map(w => ({
+      ...w,
+      count_today: doneCountMap[w.id] || 0,
+      pending: pendingCountMap[w.id] || 0
+    }));
+
+    _renderWorkersView();
+  } catch (e) {
+    wrap.innerHTML = `<p style="color:var(--danger);padding:16px">Failed to load: ${esc(e.message)}</p>`;
+  } finally {
+    _workersLoading = false;
+  }
+}
+
+function _renderWorkersView() {
+  const wrap = document.getElementById('workers-wrap');
+  if (!wrap) return;
+
+  const workers = _workersData || [];
+
+  // Count unassigned active listings
+  const unassignedBlock = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap">
+      <h2 style="font-size:18px;font-weight:700;margin:0">Workers</h2>
+      <div style="display:flex;gap:8px">
+        <button class="copy-btn" onclick="workersAssignBatch()" style="background:rgba(107,227,164,0.1);border-color:rgba(107,227,164,0.3);color:var(--success)">
+          ⚡ Auto-assign queue
+        </button>
+        <button class="copy-btn" onclick="showAddWorkerForm()">+ Add worker</button>
+        <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">↺</button>
+      </div>
+    </div>
+
+    <div id="add-worker-form" style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px">Add new worker</div>
+      <input id="wf-name" class="link-edit-input" placeholder="Name" style="margin-bottom:8px">
+      <input id="wf-target" class="link-edit-input" type="number" placeholder="Daily target (default 100)" style="margin-bottom:12px">
+      <div style="display:flex;gap:8px">
+        <button class="copy-btn" onclick="document.getElementById('add-worker-form').style.display='none'">Cancel</button>
+        <button class="ai-gen-btn" style="flex:1" onclick="doAddWorker()">Create worker</button>
+      </div>
+    </div>`;
+
+  const rows = workers.length === 0
+    ? '<p style="color:var(--text-tertiary);padding:16px 0">No workers yet. Add one above.</p>'
+    : workers.map(w => {
+        const pct = w.daily_target ? Math.min(100, Math.round(w.count_today / w.daily_target * 100)) : 0;
+        const vaUrl = `${location.origin}/va?w=${w.id}`;
+        return `
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:16px;margin-bottom:12px${w.active ? '' : ';opacity:0.45'}">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(w.name)}${w.active ? '' : ' <span style="font-size:11px;color:var(--text-tertiary)">(inactive)</span>'}</div>
+                <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:10px">
+                  ${w.count_today} / ${w.daily_target} today &nbsp;·&nbsp;
+                  ${w.pending} pending in queue
+                </div>
+                <div style="background:rgba(255,255,255,0.06);border-radius:6px;height:6px;overflow:hidden;margin-bottom:12px">
+                  <div style="background:var(--success);width:${pct}%;height:100%;border-radius:6px;transition:width 0.3s"></div>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button class="copy-btn" onclick="copyVaLink('${w.id}')" title="${esc(vaUrl)}">
+                    🔗 Copy VA link
+                  </button>
+                  <button class="copy-btn" onclick="workerAssignListings('${w.id}', '${esc(w.name)}')">
+                    + Assign listings
+                  </button>
+                  <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
+                    🔄 Rotate link
+                  </button>
+                  <button class="copy-btn" onclick="workerToggleActive('${w.id}', ${w.active})" style="opacity:0.5">
+                    ${w.active ? 'Deactivate' : 'Reactivate'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+  wrap.innerHTML = unassignedBlock + rows;
+}
+
+function showAddWorkerForm() {
+  const f = document.getElementById('add-worker-form');
+  if (f) { f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
+}
+
+async function doAddWorker() {
+  const name = (document.getElementById('wf-name')?.value || '').trim();
+  const target = parseInt(document.getElementById('wf-target')?.value || '100') || 100;
+  if (!name) { toast('Enter a name'); return; }
+  const { error } = await sb.from('workers').insert({ name, daily_target: target, active: true });
+  if (error) { toast('Failed: ' + error.message); return; }
+  document.getElementById('add-worker-form').style.display = 'none';
+  toast('Worker created ✓');
+  _workersData = null;
+  await refreshWorkers();
+}
+
+async function workerToggleActive(workerId, currentlyActive) {
+  const { error } = await sb.from('workers').update({ active: !currentlyActive }).eq('id', workerId);
+  if (error) { toast('Failed'); return; }
+  toast(currentlyActive ? 'Worker deactivated' : 'Worker reactivated');
+  _workersData = null;
+  await refreshWorkers();
+}
+
+async function copyVaLink(workerId) {
+  const url = `${location.origin}/va?w=${workerId}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('VA link copied ✓');
+  } catch (e) {
+    prompt('Copy this VA link:', url);
+  }
+}
+
+async function workerRotateLink(workerId, name) {
+  // Rotating the link = create a new worker record with same name/target, deactivate the old one
+  // For MVP: just confirm and generate a new worker (old one deactivated)
+  if (!confirm(`Rotate VA link for ${name}?\n\nThe old link will stop working. Copy and send the new link to the worker.`)) return;
+  const w = (_workersData || []).find(x => x.id === workerId);
+  if (!w) { toast('Worker not found'); return; }
+  // Deactivate old
+  await sb.from('workers').update({ active: false }).eq('id', workerId);
+  // Create new
+  const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
+  if (error) { toast('Failed to rotate: ' + error.message); return; }
+  toast('New VA link created ✓');
+  _workersData = null;
+  await refreshWorkers();
+  // Show new link
+  const newId = data.id;
+  const url = `${location.origin}/va?w=${newId}`;
+  try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
+  catch (e) { prompt('New VA link (old one is now deactivated):', url); }
+}
+
+async function workerAssignListings(workerId, workerName) {
+  // Assign up to N unassigned active listings to this worker
+  const n = parseInt(prompt(`Assign how many unassigned listings to ${workerName}?`, '20'));
+  if (!n || n < 1) return;
+  // Fetch unassigned active listings
+  const { data, error } = await sb.from('listings')
+    .select('id')
+    .eq('status', 'active')
+    .is('assigned_worker_id', null)
+    .order('id')
+    .limit(n);
+  if (error) { toast('Failed to fetch listings: ' + error.message); return; }
+  if (!data || !data.length) { toast('No unassigned listings available'); return; }
+  const ids = data.map(r => r.id);
+  const { error: uErr } = await sb.from('listings')
+    .update({ assigned_worker_id: workerId })
+    .in('id', ids);
+  if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
+  toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
+  _workersData = null;
+  await refreshWorkers();
+}
+
+async function workersAssignBatch() {
+  // Auto-distribute all unassigned active listings evenly across active workers
+  const workers = (_workersData || []).filter(w => w.active);
+  if (!workers.length) { toast('No active workers'); return; }
+  const { data, error } = await sb.from('listings')
+    .select('id')
+    .eq('status', 'active')
+    .is('assigned_worker_id', null)
+    .order('id');
+  if (error) { toast('Failed: ' + error.message); return; }
+  if (!data || !data.length) { toast('No unassigned listings'); return; }
+  if (!confirm(`Distribute ${data.length} unassigned listings across ${workers.length} active workers?`)) return;
+
+  // Round-robin assignment
+  const updates = data.map((r, i) => ({ id: r.id, assigned_worker_id: workers[i % workers.length].id }));
+  // Batch in groups of 100 (Supabase limit)
+  for (let i = 0; i < updates.length; i += 100) {
+    const batch = updates.slice(i, i + 100);
+    // upsert approach: group by worker and do per-worker updates
+    for (const w of workers) {
+      const wIds = batch.filter(u => u.assigned_worker_id === w.id).map(u => u.id);
+      if (!wIds.length) continue;
+      await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
+    }
+  }
+  toast(`Distributed ${data.length} listings ✓`);
+  _workersData = null;
+  await refreshWorkers();
 }
 
 // Boot: if a session already exists (persisted in localStorage), start the app;
