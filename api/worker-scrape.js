@@ -231,7 +231,6 @@ module.exports = async function handler(req, res) {
       source_cost:        cost || null,
       sell_price:         sellPrice,
       images:             p.images && p.images.length ? p.images : null,
-      description:        p.description || '',
       status:             'active',
       assigned_worker_id: worker_id,
       guard_warnings:     warnings.length ? warnings : null,
