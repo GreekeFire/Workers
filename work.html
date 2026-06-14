@@ -3612,30 +3612,40 @@ async function _doRotateLink(workerId, name) {
   catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
 }
 
+let _assignListingsBusy = false;
 async function workerAssignListings(workerId, workerName) {
   // Assign up to N unassigned active listings to this worker.
   // Read N from the inline input (avoids prompt() which is disabled in iOS PWA mode).
+  if (_assignListingsBusy) return;
   const inputEl = document.getElementById('assign-n-' + workerId);
   const n = parseInt(inputEl?.value || '20');
   if (!n || n < 1) { toast('Enter a number of listings to assign'); return; }
-  // Fetch unassigned active listings
-  const { data, error } = await sb.from('listings')
-    .select('id')
-    .eq('status', 'active')
-    .is('assigned_worker_id', null)
-    .order('id')
-    .limit(n);
-  if (error) { toast('Failed to fetch listings: ' + error.message); return; }
-  if (!data || !data.length) { toast('No unassigned listings available'); return; }
-  const ids = data.map(r => r.id);
-  const { error: uErr } = await sb.from('listings')
-    .update({ assigned_worker_id: workerId })
-    .in('id', ids);
-  if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
-  toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
-  _workerAssignExpanded = null;
-  _workersData = null;
-  await refreshWorkers();
+  _assignListingsBusy = true;
+  // Disable the Assign button for feedback
+  const btn = inputEl?.parentElement?.querySelector('.ai-gen-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Assigning…'; }
+  try {
+    // Fetch unassigned active listings
+    const { data, error } = await sb.from('listings')
+      .select('id')
+      .eq('status', 'active')
+      .is('assigned_worker_id', null)
+      .order('id')
+      .limit(n);
+    if (error) { toast('Failed to fetch listings: ' + error.message); return; }
+    if (!data || !data.length) { toast('No unassigned listings available'); return; }
+    const ids = data.map(r => r.id);
+    const { error: uErr } = await sb.from('listings')
+      .update({ assigned_worker_id: workerId })
+      .in('id', ids);
+    if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
+    toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
+    _workerAssignExpanded = null;
+    _workersData = null;
+    await refreshWorkers();
+  } finally {
+    _assignListingsBusy = false;
+  }
 }
 
 let _assignBatchBusy = false;
