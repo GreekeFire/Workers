@@ -2834,6 +2834,7 @@ function switchTab(tab) {
     // device) would otherwise show stale until the query is retyped
     _listingsCache = [];
     _listingsEditingId = null;
+    _listingsCacheIsRecent = false;
     // Sync filter button visual state (buttons start at full opacity in HTML;
     // setListingsFilter is never called on init so the active indicator is wrong
     // until the user clicks a filter button)
@@ -2852,6 +2853,7 @@ let _lastFixIndex = -1;   // card slide-in fires only when this changes
 let _doneSearchTimer = null;
 let _listingsEditingId = null;
 let _listingsCache = [];
+let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
 let _listingsFilter = 'all'; // 'all' | 'assigned' | 'unassigned'
 
 const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
@@ -2863,7 +2865,12 @@ function renderDoneView() {
     // Recently-done list (newest first) loaded into the same editor as search —
     // so you can edit title/cost/links, open Shopee, Delete, or Send back to
     // FIX. Bad Carousell links (not /p/, /sell/, app.link) get flagged below.
-    if (_listingsCache.length && _listingsEditingId) { _renderListingsResults(_listingsCache, RECENT_HDR); return; }
+    //
+    // Only reuse cache when the user is actively editing an entry from the
+    // recent list. If _listingsEditingId is set but _listingsCacheIsRecent is
+    // not, the cache came from a search and clearing the query should reload
+    // recent items — not show stale search results.
+    if (_listingsCache.length && _listingsEditingId && _listingsCacheIsRecent) { _renderListingsResults(_listingsCache, RECENT_HDR); return; }
     const ids = [...new Set(doneData.slice()
       .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''))
       .map(d => d.id).filter(Boolean))].slice(0, 25);
@@ -2876,6 +2883,7 @@ function renderDoneView() {
         const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order
         data.sort((a, b) => (ord.get(a.id) ?? 99) - (ord.get(b.id) ?? 99));
         _listingsCache = data;
+        _listingsCacheIsRecent = true;
         _renderListingsResults(data, RECENT_HDR);
       });
     return;
@@ -2912,6 +2920,7 @@ async function scanBadLinks() {
     if (!bad.length) { list.innerHTML = '<p class="done-empty">✓ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
     _listingsCache = bad;
     _listingsEditingId = null;
+    _listingsCacheIsRecent = false;
     _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad Shopee/Carousell link — fix or delete below.</p>');
   } catch (e) {
     list.innerHTML = '<p class="done-empty">Scan failed — ' + (e.message || 'are you logged in?') + '</p>';
@@ -2934,6 +2943,7 @@ async function _searchAllListings(query) {
     if (error) throw error;
     if (!data.length) { list.innerHTML = '<p class="done-empty">No matches</p>'; return; }
     _listingsCache = data;
+    _listingsCacheIsRecent = false;
     _renderListingsResults(data);
   } catch (e) {
     list.innerHTML = `<p class="done-empty">Search failed</p>`;
@@ -2944,6 +2954,7 @@ function setListingsFilter(f) {
   _listingsFilter = f;
   _listingsCache = [];
   _listingsEditingId = null;
+  _listingsCacheIsRecent = false;
   ['all', 'assigned', 'unassigned'].forEach(k => {
     const el = document.getElementById('lf-' + k);
     if (el) el.style.opacity = k === f ? '1' : '0.45';
