@@ -3075,7 +3075,7 @@ async function listingsSave(id) {
   }).eq('id', id);
   if (error) { toast('Save failed'); return; }
   const item = _listingsCache.find(l => l.id === id);
-  if (item) { item.title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
+  if (item) { item.title = title; item.ai_title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
   _listingsEditingId = null;
   toast('Saved ✓');
   _renderListingsResults(_listingsCache);
