@@ -2672,7 +2672,11 @@ function _renderNewView() {
       if (r.status === 'error') {
         return `<div class="listing-card" style="margin-top:12px">
           <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
-          <div style="color:var(--danger);font-size:12px">Error: ${esc(r.error)}</div>
+          <div style="color:var(--danger);font-size:12px;margin-bottom:12px">Error: ${esc(r.error)}</div>
+          <div class="action-row">
+            <button class="btn-delete" onclick="clearBatchItem(${i})">Clear</button>
+            <button class="shopee-fetch-btn" onclick="fetchBatchShopee(${i})">Retry ↓</button>
+          </div>
         </div>`;
       }
       const tlen = (r.title||'').length;
@@ -3063,7 +3067,7 @@ async function listingsSave(id) {
   if (!title) { toast('Title cannot be empty'); return; }
   const sell = calcSell(cost);
   const { error } = await sb.from('listings').update({
-    title, shopee_url: shopeeUrl, carousell_url: carousellUrl, source_cost: cost, sell_price: sell
+    title, ai_title: title, shopee_url: shopeeUrl, carousell_url: carousellUrl, source_cost: cost, sell_price: sell
   }).eq('id', id);
   if (error) { toast('Save failed'); return; }
   const item = _listingsCache.find(l => l.id === id);
