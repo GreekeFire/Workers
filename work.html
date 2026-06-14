@@ -3274,18 +3274,26 @@ async function refreshWorkers() {
     // Sales attribution: query sales_log table (authoritative, cross-device) and
     // join to listings.assigned_worker_id. This is more reliable than the in-memory
     // salesLog which only reflects the current session / device.
+    // Cap at 2 000 rows — enough to count all historical sales per worker without
+    // risking a Supabase URL-length overflow on the follow-up .in() query.
     const soldCountMap = {};
     try {
       const { data: salesRows, error: slErr } = await sb
         .from('sales_log')
         .select('listing_id')
-        .not('listing_id', 'is', null);
+        .not('listing_id', 'is', null)
+        .limit(2000);
       if (!slErr && salesRows && salesRows.length > 0) {
+        // Deduplicate listing IDs before the second query so the .in() list is
+        // at most len(unique listings sold), not len(all sales rows).
         const listingIds = [...new Set(salesRows.map(s => s.listing_id).filter(Boolean))];
+        // Supabase .in() encodes IDs in the URL; cap at 500 unique IDs to avoid
+        // a 414 Request-URI Too Large error on very large catalogues.
+        const safeIds = listingIds.slice(0, 500);
         const { data: listingRows } = await sb
           .from('listings')
           .select('id,assigned_worker_id')
-          .in('id', listingIds);
+          .in('id', safeIds);
         const listingToWorker = {};
         (listingRows || []).forEach(l => { if (l.assigned_worker_id) listingToWorker[l.id] = l.assigned_worker_id; });
         salesRows.forEach(s => {
