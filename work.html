@@ -3390,13 +3390,37 @@ async function workerToggleActive(workerId, currentlyActive) {
   await refreshWorkers();
 }
 
+// Show a selectable URL in a dismissable overlay when the clipboard API is
+// unavailable (iOS PWA standalone mode blocks prompt() silently; this is the
+// safe fallback the owner can long-press → Copy on).
+function showUrlFallback(label, url) {
+  const existing = document.getElementById('url-fallback-overlay');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'url-fallback-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:24px';
+  overlay.innerHTML = `<div style="background:#1a1a1e;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:20px;width:100%;max-width:420px">
+    <div style="font-size:13px;font-weight:600;color:var(--text-tertiary);margin-bottom:10px">${esc(label)}</div>
+    <input id="url-fallback-input" type="text" value="${esc(url)}" readonly
+      style="width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-size:12px;padding:10px 12px;font-family:ui-monospace,monospace;box-sizing:border-box"
+      onclick="this.select()">
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="document.getElementById('url-fallback-overlay').remove()"
+        style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:none;color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  requestAnimationFrame(() => document.getElementById('url-fallback-input')?.select());
+}
+
 async function copyVaLink(workerId) {
   const url = `${location.origin}/va?w=${workerId}`;
   try {
     await navigator.clipboard.writeText(url);
     toast('VA link copied ✓');
   } catch (e) {
-    prompt('Copy this VA link:', url);
+    showUrlFallback('VA link — long-press to copy:', url);
   }
 }
 
@@ -3426,7 +3450,7 @@ async function workerRotateLink(workerId, name) {
   // Show new link
   const url = `${location.origin}/va?w=${newId}`;
   try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
-  catch (e) { prompt('New VA link (old one is now deactivated):', url); }
+  catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
 }
 
 async function workerAssignListings(workerId, workerName) {
