@@ -686,7 +686,7 @@ function render() {
         <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
           value="${esc(caroUrlDraft[cur.id] || '')}"
           style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid ${/carousell\./i.test(caroUrlDraft[cur.id]||'') ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)'};background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
-          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=/carousell\\./i.test(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';const _b=document.getElementById('done-btn');if(_b)_b.disabled=!(_v&&(${!hasWarnings || acked}))">
+          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=/carousell\\./i.test(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';const _b=document.getElementById('done-btn');if(_b)_b.disabled=!(_v&&(${!hasWarnings || acked})&&${!aiMissing}&&${!aiEmpty})">
       </div>`;
 
     // Actions
