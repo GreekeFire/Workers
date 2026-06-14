@@ -323,52 +323,88 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 
 ---
 
+## 🕐 Manual Testing Queue (run 2026-06-16)
+
+Automated tests were run on 2026-06-15. The following could not be automated — they require Shopee access, a real VA session, an iPhone, or two devices. Run these tomorrow in order.
+
+### Needs laptop + Shopee bookmarklet (Parts 1–4)
+- **1.1** Scraper green toast on a fresh product
+- **1.2** Scraper red guard on Shopee homepage
+- **1.3** Scraper AUTO mode
+- **2.1–2.10** Full NEW tab flow (pull, refresh, save, clear, swipe, already-done, generate from URLs, blank, append)
+- **3.1–3.4** FIX tab loop, advance, undo, keyboard shortcuts
+- **4** Carousell fill via Ctrl+Enter
+
+### Needs real VA session (open VA link + scrape a product first)
+- **8.4** Bookmarklet sends product to VA queue → listing card appears
+- **8.5** Guards show for non-SG / wrong category / price out of range
+- **8.6** AI title null vs empty string shows different red messages; Done blocked in both cases
+- **8.7** Copy title + description buttons copy correct text
+- **8.8** Done flow: paste Carousell URL → tap Done → count increments, `listings.status = done`, `carousell_url` saved, `worker_done` row written
+- **8.9** Skip flow: listing hidden, count unchanged, still `active` in DB
+- **8.11** Owner's WORKERS tab count refreshes after VA taps Done
+- **8.17** Fuzzy dupe: near-match product doesn't block VA, `duplicate_log` row written
+- **8.18** Carousell URL required: blocked without URL, grey → green on valid URL, saved to DB on Done
+
+### Needs clean manual test
+- **6.1 UNDO** — log a sale, tap ✕ to delete, press UNDO within 6 seconds, confirm sale returns
+
+### Needs iPhone (Part 5)
+- **5.1** Scraper green toast on Safari
+- **5.2** NEW tab cards + swipe on mobile (Save/Clear visible)
+- **5.3** FIX swipe on mobile, Done/Delete buttons hidden
+
+### Needs two devices (Part 7)
+- **7** Cross-device handoff: scrape on laptop → resolve on iPhone → laptop confirms gone
+
+---
+
 ## 📋 Scorecard
 
 | #   | Test                                                                | Pass? |
 |-----|---------------------------------------------------------------------|-------|
-| 1.1 | Scraper: green toast                                                |       |
-| 1.2 | Scraper: non-product red guard                                      |       |
-| 1.3 | Scraper: AUTO mode                                                  |       |
-| 2.1 | NEW: empty state = add bar only                                     |       |
-| 2.2 | NEW: pull scraped → cards                                           |       |
-| 2.3 | NEW: refresh recovery                                               |       |
-| 2.4 | NEW: save resolves                                                  |       |
-| 2.5 | NEW: clear resolves                                                 |       |
-| 2.6 | NEW: swipe                                                          |       |
-| 2.7 | NEW: already-done message                                           |       |
-| 2.8 | NEW: generate from URLs                                             |       |
-| 2.9 | NEW: + Blank                                                        |       |
-| 2.10| NEW: append, not wipe                                               |       |
-| 3.1 | FIX: loop + auto-pull + cost update                                 |       |
-| 3.2 | FIX: slide-in + progress + ⚡ chip                                  |       |
-| 3.3 | FIX: undo                                                           |       |
-| 3.4 | FIX: keyboard shortcuts                                             |       |
-| 4   | Carousell fill via Ctrl+Enter                                       |       |
-| 5.1 | iPhone: scraper green                                               |       |
-| 5.2 | iPhone: NEW buttons + swipe                                         |       |
-| 5.3 | iPhone: FIX swipe, buttons hidden                                   |       |
-| 6.1 | Sales: log, autofill, undo                                          |       |
-| 6.2 | Listings: editor, scan links, backup                                |       |
-| 7   | Cross-device handoff                                                |       |
-| 8.1 | WORKERS tab loads with worker list                                  |       |
-| 8.2 | Create worker → appears in list + VA link correct                   |       |
-| 8.3 | VA page loads with name + progress bar                              |       |
-| 8.4 | Bookmarklet sends product to VA queue                               |       |
-| 8.5 | Guards show + Done blocked until acknowledged                       |       |
-| 8.6 | AI title missing → red notice + Done blocked                        |       |
-| 8.7 | Copy title + description buttons work                               |       |
-| 8.8 | Done → count increments, listing marked done in DB                  |       |
-| 8.9 | Skip → listing hidden, count unchanged, still active in DB          |       |
-| 8.10| Deactivate worker → VA link shows deactivated message               |       |
-| 8.11| WORKERS tab count updates after VA taps Done                        |       |
-| 8.12| Assign listings → appears in VA queue                               |       |
-| 8.13| Rotate link → old dead, new works                                   |       |
-| 8.14| Batch distribute → listings split across workers                    |       |
-| 8.15| LISTINGS filters: All / Assigned / Unassigned                       |       |
-| 8.16| Sold count in WORKERS tab after logging a linked sale               |       |
-| 8.17| Fuzzy dupe → listing created, duplicate_log row written             |       |
-| 8.18| Carousell URL required: blocked without, green on valid, saved to DB |       |
+| 1.1 | Scraper: green toast                                                | ⏳ manual |
+| 1.2 | Scraper: non-product red guard                                      | ⏳ manual |
+| 1.3 | Scraper: AUTO mode                                                  | ⏳ manual |
+| 2.1 | NEW: empty state = add bar only                                     | ⏳ manual |
+| 2.2 | NEW: pull scraped → cards                                           | ⏳ manual |
+| 2.3 | NEW: refresh recovery                                               | ⏳ manual |
+| 2.4 | NEW: save resolves                                                  | ⏳ manual |
+| 2.5 | NEW: clear resolves                                                 | ⏳ manual |
+| 2.6 | NEW: swipe                                                          | ⏳ manual |
+| 2.7 | NEW: already-done message                                           | ⏳ manual |
+| 2.8 | NEW: generate from URLs                                             | ⏳ manual |
+| 2.9 | NEW: + Blank                                                        | ⏳ manual |
+| 2.10| NEW: append, not wipe                                               | ⏳ manual |
+| 3.1 | FIX: loop + auto-pull + cost update                                 | ⏳ manual |
+| 3.2 | FIX: slide-in + progress + ⚡ chip                                  | ⏳ manual |
+| 3.3 | FIX: undo                                                           | ⏳ manual |
+| 3.4 | FIX: keyboard shortcuts                                             | ⏳ manual |
+| 4   | Carousell fill via Ctrl+Enter                                       | ⏳ manual |
+| 5.1 | iPhone: scraper green                                               | ⏳ manual |
+| 5.2 | iPhone: NEW buttons + swipe                                         | ⏳ manual |
+| 5.3 | iPhone: FIX swipe, buttons hidden                                   | ⏳ manual |
+| 6.1 | Sales: log, autofill, undo                                          | ✅ log+DB / ⏳ undo manual |
+| 6.2 | Listings: editor, scan links, backup                                | ⏳ manual |
+| 7   | Cross-device handoff                                                | ⏳ manual |
+| 8.1 | WORKERS tab loads with worker list                                  | ✅ |
+| 8.2 | Create worker → appears in list + VA link correct                   | ✅ |
+| 8.3 | VA page loads with name + progress bar                              | ✅ |
+| 8.4 | Bookmarklet sends product to VA queue                               | ⏳ manual |
+| 8.5 | Guards show + Done blocked until acknowledged                       | ⏳ manual |
+| 8.6 | AI title missing → red notice + Done blocked                        | ⏳ manual |
+| 8.7 | Copy title + description buttons work                               | ⏳ manual |
+| 8.8 | Done → count increments, listing marked done in DB                  | ⏳ manual |
+| 8.9 | Skip → listing hidden, count unchanged, still active in DB          | ⏳ manual |
+| 8.10| Deactivate worker → VA link shows deactivated message               | ✅ |
+| 8.11| WORKERS tab count updates after VA taps Done                        | ⏳ manual |
+| 8.12| Assign listings → appears in VA queue                               | ✅ |
+| 8.13| Rotate link → old dead, new works                                   | ✅ |
+| 8.14| Batch distribute → listings split across workers                    | ✅ |
+| 8.15| LISTINGS filters: All / Assigned / Unassigned                       | ✅ |
+| 8.16| Sold count in WORKERS tab after logging a linked sale               | ✅ |
+| 8.17| Fuzzy dupe → listing created, duplicate_log row written             | ⏳ manual |
+| 8.18| Carousell URL required: blocked without, green on valid, saved to DB | ⏳ manual |
 
 ---
 
