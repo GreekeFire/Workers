@@ -2845,6 +2845,7 @@ function switchTab(tab) {
     _listingsCache = [];
     _listingsEditingId = null;
     _listingsCacheIsRecent = false;
+    _recentReqSeq++;   // cancel any in-flight recent-items response from the previous visit
     // Sync filter button visual state (buttons start at full opacity in HTML;
     // setListingsFilter is never called on init so the active indicator is wrong
     // until the user clicks a filter button)
@@ -2861,6 +2862,7 @@ function switchTab(tab) {
 
 let _lastFixIndex = -1;   // card slide-in fires only when this changes
 let _doneSearchTimer = null;
+let _recentReqSeq = 0;    // incremented on every recent-items fetch; stale callbacks compare against it
 let _listingsEditingId = null;
 let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
@@ -2886,9 +2888,16 @@ function renderDoneView() {
       .map(d => d.id).filter(Boolean))].slice(0, 25);
     if (!ids.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
     list.innerHTML = '<p class="done-empty">Loading recent…</p>';
+    // Tag this request so a stale response never overwrites a search the user
+    // started while the network round-trip was in flight.
+    const reqSeq = ++_recentReqSeq;
     let rq = sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids);
     rq = _applyListingsFilter(rq);
     rq.then(({ data, error }) => {
+        // Bail if a newer request superseded us, or if the user has since typed a query
+        if (reqSeq !== _recentReqSeq) return;
+        const currentQuery = (document.getElementById('done-search')?.value || '').trim();
+        if (currentQuery) return;
         if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
         const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order
         data.sort((a, b) => (ord.get(a.id) ?? 99) - (ord.get(b.id) ?? 99));
