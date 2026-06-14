@@ -1220,6 +1220,7 @@ async function refreshFromCloud() {
     undoStack = [];
   }
   deletedSet = new Set();
+  resetAI();    // clear stale AI copy / cost from the old card before the list changes
   setSyncStatus('syncing');
   await loadListingsFromSupabase();
   await syncFromSupabase();
