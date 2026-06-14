@@ -3370,13 +3370,15 @@ async function workerRotateLink(workerId, name) {
   // Create new first — only deactivate old if insert succeeds
   const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
+  const newId = data.id;
+  // Transfer assigned active listings to new worker
+  await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
   // Deactivate old
   await sb.from('workers').update({ active: false }).eq('id', workerId);
   toast('New VA link created ✓');
   _workersData = null;
   await refreshWorkers();
   // Show new link
-  const newId = data.id;
   const url = `${location.origin}/va?w=${newId}`;
   try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
   catch (e) { prompt('New VA link (old one is now deactivated):', url); }

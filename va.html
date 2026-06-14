@@ -432,6 +432,7 @@ let profile     = null;   // { id, name, daily_target, count_today, bookmarklet 
 let listings    = [];     // active assigned listings from API
 let skipSet     = new Set();  // listing IDs the VA has skipped this session
 let ackedWarns  = new Set();  // listing IDs whose warnings the VA has acked
+let caroUrlDraft = {};        // listing id → carousell URL typed by VA (survives render)
 let pollTimer   = null;
 let busy        = false;
 
@@ -680,8 +681,9 @@ function render() {
           Post this listing on Carousell first, then paste the link below. <span style="color:#f87171">Required to mark Done.</span>
         </div>
         <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
-          style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
-          oninput="this.style.borderColor=/carousell\\./i.test(this.value)?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)'">
+          value="${esc(caroUrlDraft[cur.id] || '')}"
+          style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid ${/carousell\./i.test(caroUrlDraft[cur.id]||'') ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)'};background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
+          oninput="caroUrlDraft[${cur.id}]=this.value;this.style.borderColor=/carousell\\./i.test(this.value)?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)'">
       </div>`;
 
     // Actions
@@ -739,6 +741,7 @@ async function doDone(listingId, warningsOverridden) {
     // Remove from queue
     listings = listings.filter(l => l.id !== listingId);
     ackedWarns.delete(listingId);
+    delete caroUrlDraft[listingId];
     showToast('Done ✓  ' + result.count_today + ' / ' + profile.daily_target + ' today');
     render();
   } catch (e) {
@@ -751,6 +754,7 @@ async function doDone(listingId, warningsOverridden) {
 async function doSkip(listingId) {
   if (busy) return;
   skipSet.add(listingId);
+  delete caroUrlDraft[listingId];
   await postSkip(listingId);
   render();
 }

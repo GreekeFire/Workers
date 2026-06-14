@@ -21,8 +21,11 @@ module.exports = async function handler(req, res) {
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const { worker_id, listing_id, warnings_overridden = false, carousell_url = null } = req.body || {};
 
-  if (!worker_id)  return res.status(400).json({ error: 'worker_id required' });
-  if (!listing_id) return res.status(400).json({ error: 'listing_id required' });
+  if (!worker_id)   return res.status(400).json({ error: 'worker_id required' });
+  if (!listing_id)  return res.status(400).json({ error: 'listing_id required' });
+  if (carousell_url && !/carousell\./i.test(carousell_url)) {
+    return res.status(400).json({ error: 'invalid carousell_url' });
+  }
 
   // Validate worker
   const { data: worker, error: wErr } = await sb
