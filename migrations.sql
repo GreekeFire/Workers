@@ -42,6 +42,7 @@ ALTER TABLE scrape_inbox ADD COLUMN IF NOT EXISTS worker_id      UUID;    -- NUL
 ALTER TABLE scrape_inbox ADD COLUMN IF NOT EXISTS categories     TEXT[];  -- from v4 API
 ALTER TABLE scrape_inbox ADD COLUMN IF NOT EXISTS shop_location  TEXT;    -- from v4 API
 ALTER TABLE scrape_inbox ADD COLUMN IF NOT EXISTS rating_star    FLOAT;   -- from v4 API
+-- NOTE: scrape_inbox uses `consumed` (bool) not `processed` — existing column, not added here
 
 -- ────────────────────────────────────────────────────────────
 -- 5. Index: fast daily-count lookups for worker_done
