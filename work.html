@@ -3165,7 +3165,10 @@ document.addEventListener('visibilitychange', () => {
   retryPendingPush();   // re-send any sync that failed while we were away
   if (getToday() !== todayDate) {
     todayDate = getToday();
-    doneTodayCount = 0;
+    // Recount from doneData rather than resetting to 0 — the owner may have
+    // already marked items done today (e.g. worked past midnight) and the
+    // existing doneData entries already carry the new date.
+    doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(todayDate)).length;
     deletedTodayCount = 0;
     renderAll();
   }
