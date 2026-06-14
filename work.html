@@ -3216,6 +3216,7 @@ async function doLogin() {
 // ═══════════════════════════════════════════════════════════════════
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
+let _workerAssignExpanded = null; // worker id whose inline assign panel is open
 
 async function renderWorkersView() {
   const wrap = document.getElementById('workers-wrap');
@@ -3337,7 +3338,7 @@ function _renderWorkersView() {
                   <button class="copy-btn" onclick="copyVaLink('${w.id}')" title="${esc(vaUrl)}">
                     🔗 Copy VA link
                   </button>
-                  <button class="copy-btn" onclick="workerAssignListings('${w.id}', '${esc(w.name)}')">
+                  <button class="copy-btn" onclick="_workerAssignExpanded=(_workerAssignExpanded==='${w.id}'?null:'${w.id}');_renderWorkersView()">
                     + Assign listings
                   </button>
                   <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
@@ -3347,6 +3348,15 @@ function _renderWorkersView() {
                     ${w.active ? 'Deactivate' : 'Reactivate'}
                   </button>
                 </div>
+                ${_workerAssignExpanded === w.id ? `
+                <div style="margin-top:12px;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">Assign</span>
+                  <input id="assign-n-${w.id}" type="number" inputmode="numeric" min="1" max="500" value="20"
+                    style="width:72px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit">
+                  <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">unassigned listings</span>
+                  <button class="ai-gen-btn" style="padding:7px 14px" onclick="workerAssignListings('${w.id}','${esc(w.name)}')">Assign</button>
+                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">✕</button>
+                </div>` : ''}
               </div>
             </div>
           </div>`;
@@ -3420,9 +3430,11 @@ async function workerRotateLink(workerId, name) {
 }
 
 async function workerAssignListings(workerId, workerName) {
-  // Assign up to N unassigned active listings to this worker
-  const n = parseInt(prompt(`Assign how many unassigned listings to ${workerName}?`, '20'));
-  if (!n || n < 1) return;
+  // Assign up to N unassigned active listings to this worker.
+  // Read N from the inline input (avoids prompt() which is disabled in iOS PWA mode).
+  const inputEl = document.getElementById('assign-n-' + workerId);
+  const n = parseInt(inputEl?.value || '20');
+  if (!n || n < 1) { toast('Enter a number of listings to assign'); return; }
   // Fetch unassigned active listings
   const { data, error } = await sb.from('listings')
     .select('id')
@@ -3438,6 +3450,7 @@ async function workerAssignListings(workerId, workerName) {
     .in('id', ids);
   if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
   toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
+  _workerAssignExpanded = null;
   _workersData = null;
   await refreshWorkers();
 }
