@@ -191,6 +191,30 @@ module.exports = async function handler(req, res) {
     return res.json({ ok: false, error: 'duplicate', listing_id: existing[0].id });
   }
 
+  // 3b. Fuzzy near-match check — log silently, never block
+  try {
+    if (p.title && cost > 0) {
+      const { data: fuzzyMatches } = await sb.rpc('find_fuzzy_duplicate', {
+        p_title: p.title,
+        p_cost: cost,
+        p_threshold: 0.6,
+      });
+      if (fuzzyMatches && fuzzyMatches.length > 0) {
+        sb.from('duplicate_log').insert({
+          listing_id:     fuzzyMatches[0].listing_id,
+          incoming_title: p.title,
+          incoming_url:   shopeeUrl,
+          incoming_cost:  cost,
+          worker_id:      worker_id,
+        }).then(({ error }) => {
+          if (error) console.error('duplicate_log insert failed:', error.message);
+        });
+      }
+    }
+  } catch (fuzzyErr) {
+    console.error('fuzzy dupe check failed:', fuzzyErr.message);
+  }
+
   // 4. Soft guards
   const warnings = [];
   const catOk = categoryAllowed(categories);

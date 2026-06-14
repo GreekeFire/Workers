@@ -2161,7 +2161,8 @@ function logSale() {
   if (!name || isNaN(price) || price <= 0) { toast('Fill in listing and sell price'); return; }
   const category   = document.getElementById('sale-category').value;
   const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
-  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: new Date().toISOString() });
+  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: new Date().toISOString(), listing_id: _selectedListingId || null });
+  _selectedListingId = null;
   document.getElementById('sale-listing').value = '';
   document.getElementById('sale-price').value = '';
   document.getElementById('sale-cost').value = '';
@@ -2175,6 +2176,7 @@ function logSale() {
 }
 
 let _searchMatches = [];
+let _selectedListingId = null;   // Supabase listings.id of the sale being logged
 
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
@@ -2199,14 +2201,15 @@ function searchListings(query) {
       shopee: d.shopeeUrl ?? '',
       caro:   d.carousellUrl ?? '',
       cost: d.sourceCost,
-      listingIdx: li >= 0 ? li : null
+      listingIdx: li >= 0 ? li : null,
+      listingDbId: d.id || null
     });
   }
   // Fall back to unprocessed LISTINGS by original title
   for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
     if (doneSet.has(i) || deletedSet.has(i)) continue;
     if (!matchesQuery(LISTINGS[i].title)) continue;
-    _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingIdx: i });
+    _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingIdx: i, listingDbId: LISTINGS[i].id || null });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = _searchMatches.map((m, mi) => {
@@ -2228,7 +2231,7 @@ function searchListings(query) {
 function selectMatch(mi) {
   const m = _searchMatches[mi];
   if (!m) return;
-  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro, m.cost);
+  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro, m.cost, m.listingDbId);
 }
 
 function jumpToFix(idx) {
@@ -2238,13 +2241,14 @@ function jumpToFix(idx) {
   switchTab('fix');
 }
 
-function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride) {
+function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride, listingDbId) {
   const L = idx !== null ? LISTINGS[idx] : null;
   const name   = nameOverride  ?? L?.title ?? '';
   const price  = priceOverride ?? L?.sell ?? '';
   const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.shopee || '');
   const caro   = caroOverride  !== undefined ? caroOverride  : (L?.caro || '');
   if (!name) return;
+  _selectedListingId = listingDbId ?? (L?.id || null);
   document.getElementById('sale-listing').value = name;
   document.getElementById('search-dropdown').style.display = 'none';
   document.getElementById('sale-price').value = price;
@@ -3177,10 +3181,33 @@ async function refreshWorkers() {
     const pendingCountMap = {};
     (pRes.data || []).forEach(r => { pendingCountMap[r.assigned_worker_id] = (pendingCountMap[r.assigned_worker_id] || 0) + 1; });
 
+    // Sales attribution: join salesLog.listing_id → listings.assigned_worker_id
+    // salesLog is loaded globally during app init; entries may have listing_id (Phase2+)
+    const soldCountMap = {};
+    try {
+      const salesWithId = (salesLog || []).filter(s => s.listing_id);
+      if (salesWithId.length > 0) {
+        const listingIds = [...new Set(salesWithId.map(s => s.listing_id).filter(Boolean))];
+        const { data: listingRows } = await sb
+          .from('listings')
+          .select('id,assigned_worker_id')
+          .in('id', listingIds);
+        const listingToWorker = {};
+        (listingRows || []).forEach(l => { if (l.assigned_worker_id) listingToWorker[l.id] = l.assigned_worker_id; });
+        salesWithId.forEach(s => {
+          const wid = listingToWorker[s.listing_id];
+          if (wid) soldCountMap[wid] = (soldCountMap[wid] || 0) + 1;
+        });
+      }
+    } catch (salesErr) {
+      console.error('sold count join failed:', salesErr.message);
+    }
+
     _workersData = (wRes.data || []).map(w => ({
       ...w,
       count_today: doneCountMap[w.id] || 0,
-      pending: pendingCountMap[w.id] || 0
+      pending: pendingCountMap[w.id] || 0,
+      sold_count: soldCountMap[w.id] || 0
     }));
 
     _renderWorkersView();
@@ -3231,8 +3258,9 @@ function _renderWorkersView() {
               <div style="flex:1;min-width:0">
                 <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(w.name)}${w.active ? '' : ' <span style="font-size:11px;color:var(--text-tertiary)">(inactive)</span>'}</div>
                 <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:10px">
-                  ${w.count_today} / ${w.daily_target} today &nbsp;·&nbsp;
-                  ${w.pending} pending in queue
+                  ${w.count_today} / ${w.daily_target} done &nbsp;·&nbsp;
+                  <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;·&nbsp;
+                  ${w.pending} pending
                 </div>
                 <div style="background:rgba(255,255,255,0.06);border-radius:6px;height:6px;overflow:hidden;margin-bottom:12px">
                   <div style="background:var(--success);width:${pct}%;height:100%;border-radius:6px;transition:width 0.3s"></div>
