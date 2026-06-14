@@ -54,6 +54,19 @@ export default async function handler(req) {
     return json({ error: 'Shopee returned no item — cookies missing/expired, re-copy them', shopee_error: data.error ?? null }, 422);
   }
 
+  // Extract guard-relevant fields from the v4 response so worker-scrape.js
+  // can apply category / location / rating guards on items ingested via the
+  // iOS Shortcut (same fields the bookmarklet sets on sc.js fetch path).
+  let categories;
+  if (Array.isArray(it.categories) && it.categories.length) {
+    categories = it.categories.map(c => c.display_name || c.name || String(c.catid || ''));
+  } else if (Array.isArray(it.fe_categories) && it.fe_categories.length) {
+    categories = it.fe_categories.map(c => c.display_name || c.name || String(c.catid || ''));
+  }
+  const shop_location = it.shop_location || null;
+  const rating_star = (it.item_rating && it.item_rating.rating_star != null)
+    ? it.item_rating.rating_star : null;
+
   const payload = {
     title: it.name,
     description: it.description || '',
@@ -64,6 +77,9 @@ export default async function handler(req) {
     sold: it.historical_sold || it.sold || 0,
     stock: it.stock || 0,
     url: url.split('?')[0] || '',
+    ...(categories      ? { categories }                : {}),
+    ...(shop_location   ? { shop_location }             : {}),
+    ...(rating_star !== null && rating_star !== undefined ? { rating_star } : {}),
   };
 
   try {
