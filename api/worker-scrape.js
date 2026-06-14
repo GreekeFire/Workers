@@ -86,6 +86,21 @@ HARD RULES (all categories):
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+// Normalise both Shopee URL formats to shopee.sg/product/{shopid}/{itemid}
+// so duplicate checks work regardless of whether the VA used the slug or
+// product-ID URL for the same item.
+//   slug format:    shopee.sg/Some-Title-i.{shopid}.{itemid}
+//   product format: shopee.sg/product/{shopid}/{itemid}
+function normalizeShopeeUrl(url) {
+  if (!url) return url;
+  const clean = url.split('?')[0];
+  const prod = clean.match(/\/product\/(\d+)\/(\d+)/);
+  if (prod) return `https://shopee.sg/product/${prod[1]}/${prod[2]}`;
+  const slug = clean.match(/-i\.(\d+)\.(\d+)(?:\/|$)/);
+  if (slug) return `https://shopee.sg/product/${slug[1]}/${slug[2]}`;
+  return clean;
+}
+
 function calcSellPrice(cost) {
   const raw = Math.max(cost * 1.5, cost + 24);
   return Math.ceil(raw / 5) * 5;
@@ -168,7 +183,7 @@ module.exports = async function handler(req, res) {
     return res.json({ ok: false, error: 'unloaded', skipped: true });
   }
 
-  const shopeeUrl    = (p.url || '').split('?')[0];
+  const shopeeUrl    = normalizeShopeeUrl(p.url);
   const categories   = row.categories   || p.categories   || null;
   const shopLocation = row.shop_location || p.shop_location || null;
   const ratingStar   = row.rating_star   != null ? row.rating_star : (p.rating_star != null ? p.rating_star : null);
