@@ -2341,7 +2341,8 @@ function renderAll() {
   if (activeTab === 'fix') renderFixView();
   else if (activeTab === 'new') renderNewView();
   else if (activeTab === 'sales') renderSalesView();
-  else renderDoneView();
+  else if (activeTab === 'done') renderDoneView();
+  // 'workers' tab is data-driven (loaded on demand) — no re-render needed here
 }
 
 function renderSessionBar() {
