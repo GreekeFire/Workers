@@ -3055,7 +3055,10 @@ async function listingsMarkDone(id) {
 }
 
 async function listingsSendToFix(id) {
-  const { error } = await sb.from('listings').update({ status: 'active' }).eq('id', id);
+  // Clear assigned_worker_id too — otherwise the listing re-appears in the VA's queue
+  // (worker-listings filters by status=active AND assigned_worker_id=worker), defeating
+  // the purpose of returning it to the owner's FIX queue.
+  const { error } = await sb.from('listings').update({ status: 'active', assigned_worker_id: null }).eq('id', id);
   if (error) { toast('Failed'); return; }
   // Drop its done-history entries too — otherwise the id-based doneSet rebuild
   // sees them on the next sync, assumes the status write failed, and silently
@@ -3068,8 +3071,9 @@ async function listingsSendToFix(id) {
     pushToSupabase();
   }
   // If it was done in this session it's still in the active array — unskip it
+  // and clear the in-memory assigned_worker_id so FIX doesn't show the VA badge
   const li = LISTINGS.findIndex(l => l.id === id);
-  if (li !== -1) doneSet.delete(li);
+  if (li !== -1) { doneSet.delete(li); LISTINGS[li].assigned_worker_id = null; }
   _listingsCache = _listingsCache.filter(l => l.id !== id);
   _listingsEditingId = null;
   renderSessionBar();
