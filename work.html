@@ -3092,6 +3092,20 @@ async function listingsMarkDone(id) {
   const item = _listingsCache.find(l => l.id === id);
   if (item) item.status = 'done';
   _listingsEditingId = null;
+  // Remove from the active FIX queue so it doesn't appear as a ghost card
+  // in the same session. The listing is now status='done' in Supabase, so
+  // the next loadListingsFromSupabase() would drop it anyway — this just
+  // makes the in-memory state consistent immediately.
+  const li = LISTINGS.findIndex(l => l.id === id);
+  if (li !== -1) {
+    doneSet.add(li);
+    // Record a lightweight done entry so the session Done counter is accurate
+    const L = LISTINGS[li];
+    doneData.push({ id, title: L.title, doneAt: new Date().toISOString(), index: li });
+    doneTodayCount++;
+    renderSessionBar();
+    pushToSupabase();
+  }
   toast('Marked as listed ✓');
   _renderListingsResults(_listingsCache);
 }
@@ -3128,6 +3142,24 @@ async function listingsDelete(id) {
   if (error) { toast('Delete failed'); return; }
   _listingsCache = _listingsCache.filter(l => l.id !== id);
   _listingsEditingId = null;
+  // Remove from in-memory LISTINGS so the FIX queue doesn't show a ghost card
+  // for the deleted row during the current session (next loadListingsFromSupabase
+  // would drop it, but until then it would still appear as a valid active card).
+  const li = LISTINGS.findIndex(l => l.id === id);
+  if (li !== -1) {
+    deletedSet.add(li);
+    deletedTodayCount++;
+    // Also remove any stale doneData entries so a re-sync doesn't try to
+    // re-mark the now-deleted row as active again.
+    const removed = doneData.filter(d => d.id === id);
+    if (removed.length) {
+      doneData = doneData.filter(d => d.id !== id);
+      doneTodayCount = Math.max(0, doneTodayCount -
+        removed.filter(d => d.doneAt?.startsWith(getToday())).length);
+    }
+    renderSessionBar();
+    pushToSupabase();
+  }
   toast('Deleted ✓');
   _renderListingsResults(_listingsCache);
 }
