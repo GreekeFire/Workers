@@ -2180,7 +2180,7 @@ let _selectedListingId = null;   // Supabase listings.id of the sale being logge
 
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
-  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
+  if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; _selectedListingId = null; return; }
   // Word-based match (same approach as the LISTINGS search): every word must
   // appear, any order — immune to pasted non-breaking spaces, pipes, dashes
   const terms = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
@@ -3175,6 +3175,8 @@ async function refreshWorkers() {
       sb.from('listings').select('id,assigned_worker_id').eq('status', 'active').not('assigned_worker_id', 'is', null)
     ]);
     if (wRes.error) throw wRes.error;
+    if (dRes.error) throw dRes.error;
+    if (pRes.error) throw pRes.error;
 
     const doneCountMap = {};
     (dRes.data || []).forEach(r => { doneCountMap[r.worker_id] = (doneCountMap[r.worker_id] || 0) + 1; });
@@ -3328,11 +3330,11 @@ async function workerRotateLink(workerId, name) {
   if (!confirm(`Rotate VA link for ${name}?\n\nThe old link will stop working. Copy and send the new link to the worker.`)) return;
   const w = (_workersData || []).find(x => x.id === workerId);
   if (!w) { toast('Worker not found'); return; }
-  // Deactivate old
-  await sb.from('workers').update({ active: false }).eq('id', workerId);
-  // Create new
+  // Create new first — only deactivate old if insert succeeds
   const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
+  // Deactivate old
+  await sb.from('workers').update({ active: false }).eq('id', workerId);
   toast('New VA link created ✓');
   _workersData = null;
   await refreshWorkers();
@@ -3382,13 +3384,20 @@ async function workersAssignBatch() {
   // Round-robin assignment
   const updates = data.map((r, i) => ({ id: r.id, assigned_worker_id: workers[i % workers.length].id }));
   // Batch in groups of 100 (Supabase limit)
+  let assigned = 0;
   for (let i = 0; i < updates.length; i += 100) {
     const batch = updates.slice(i, i + 100);
-    // upsert approach: group by worker and do per-worker updates
     for (const w of workers) {
       const wIds = batch.filter(u => u.assigned_worker_id === w.id).map(u => u.id);
       if (!wIds.length) continue;
-      await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
+      const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
+      if (bErr) {
+        toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
+        _workersData = null;
+        await refreshWorkers();
+        return;
+      }
+      assigned += wIds.length;
     }
   }
   toast(`Distributed ${data.length} listings ✓`);
