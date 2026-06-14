@@ -234,10 +234,10 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 4. Click **Add anyway** on each chip → ✅ chips turn green with ✓.
 5. ✅ Done button becomes **bright green** and enabled.
 
-### Test 8.6 — AI title missing handling
-1. If a listing has no AI title (ai_title is null in DB), the raw Shopee title shows.
-2. ✅ Red notice: "AI title not generated — contact your manager before marking this done."
-3. ✅ Done button is disabled regardless of warnings.
+### Test 8.6 — AI title missing / failed handling
+1. If `ai_title` is **null** in DB (AI never ran): ✅ Red notice: "AI title not generated — contact your manager before marking this done."
+2. If `ai_title` is **empty string ""** (AI ran but returned nothing): ✅ Red notice: "AI title generation failed — contact your manager to regenerate before marking this done."
+3. ✅ Done button is disabled in both cases regardless of warnings.
 
 ### Test 8.7 — Copy buttons work
 1. On a listing card, tap **Copy** next to Title.
@@ -271,6 +271,38 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 1. In WORKERS tab, click **+ Assign listings** on a worker → enter a number (e.g. 5).
 2. ✅ Toast confirms assignment.
 3. Open that worker's VA link → ✅ assigned listings appear in their queue.
+
+### Test 8.13 — Rotate VA link
+1. In WORKERS tab, click **Rotate link** on an active worker → confirm the dialog.
+2. ✅ Toast: "New VA link copied ✓".
+3. ✅ Old VA link (`?w=<old-UUID>`) now shows "This link has been deactivated."
+4. ✅ New VA link (`?w=<new-UUID>`) loads the worker page normally.
+5. In Supabase `workers` table → ✅ old row has `active = false`, new row has `active = true`.
+
+### Test 8.14 — Batch distribute listings
+1. Have at least 2 active workers and some unassigned listings.
+2. In WORKERS tab, click **Distribute all unassigned** → confirm the dialog.
+3. ✅ Toast: "Distributed N listings ✓".
+4. ✅ Each worker's pending count increases in the WORKERS view.
+5. ✅ LISTINGS tab → **Assigned** filter → listings now show "👤 VA" badge.
+
+### Test 8.15 — LISTINGS tab filters
+1. Open LISTINGS tab → ✅ Three filter buttons: **All**, **Assigned**, **Unassigned**.
+2. Click **Assigned** → ✅ only listings with a worker assigned show ("👤 VA" badge on each).
+3. Click **Unassigned** → ✅ only listings with no assigned worker show.
+4. Click **All** → ✅ all listings show again.
+5. Search with a keyword while **Assigned** is active → ✅ results are still filtered.
+
+### Test 8.16 — Sold count in WORKERS tab
+1. Log a sale in the SALES tab where you selected a listing via the dropdown (so `listing_id` is set).
+2. In WORKERS tab → click refresh (↻).
+3. ✅ The worker assigned to that listing shows **Sold: 1** (or incremented if already had sales).
+4. In Supabase `sales_log` table → ✅ new row exists with correct `listing_id`, `price`, `ts`.
+
+### Test 8.17 — Fuzzy duplicate log
+1. Scrape a product whose title and cost are very similar (≥60% title match, cost within 10%) to an existing listing.
+2. ✅ The listing is NOT blocked — it still creates normally with no warning shown to VA.
+3. In Supabase `duplicate_log` table → ✅ new row logged with `incoming_title`, `incoming_url`, `worker_id`.
 
 ---
 
@@ -314,6 +346,11 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 | 8.10| Deactivate worker → VA link shows deactivated message               |       |
 | 8.11| WORKERS tab count updates after VA taps Done                        |       |
 | 8.12| Assign listings → appears in VA queue                               |       |
+| 8.13| Rotate link → old dead, new works                                   |       |
+| 8.14| Batch distribute → listings split across workers                    |       |
+| 8.15| LISTINGS filters: All / Assigned / Unassigned                       |       |
+| 8.16| Sold count in WORKERS tab after logging a linked sale               |       |
+| 8.17| Fuzzy dupe → listing created, duplicate_log row written             |       |
 
 ---
 
@@ -326,5 +363,5 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 - **URL-paste path can return cost $0** when Shopee blocks the server fetch — enter cost manually.
 - **VA bookmarklet blocked in Brave** — Brave blocks `javascript:` bookmarklets from the bookmarks bar. VAs must use Chrome.
 - **AI title null on old scrapes** — listings scraped before the VA system was built won't have ai_title. Owner must regenerate or the VA cannot mark them done.
-- **dataLayer scrapes miss guards** — category/SG seller/rating guards only fire when sc.js uses the v4 API path. dataLayer (puzzle-free) path may skip these guards until TEST LATER is resolved.
+- **dataLayer scrapes miss guards** — VERIFIED 2026-06-14: Shopee product page dataLayer has no product metadata (only generic impression events). Category/SG seller/rating guards only fire when sc.js uses the v4 API path. If the v4 API is blocked, guard fields are null and those guards are silently skipped — listing still creates, VA still sees it.
 - **Skip doesn't remove from queue permanently** — skipped listings stay active and will reappear on next page load. This is intentional (VA may want to come back to them).
