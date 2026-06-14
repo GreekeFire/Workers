@@ -42,8 +42,12 @@ module.exports = async function handler(req, res) {
       const base = process.env.VERCEL_URL
         ? 'https://' + process.env.VERCEL_URL
         : 'https://workers-v1.vercel.app';
+      // Fire scrape calls concurrently and don't await — each call invokes Claude
+      // (5-10 s) and awaiting them serially would stall the response for up to
+      // 30 s (3 rows × 10 s), well past Vercel's function timeout.  The scrapes
+      // run in the background; the VA's next 10 s poll picks up the resulting listings.
       for (const row of pending) {
-        await fetch(`${base}/api/worker-scrape`, {
+        fetch(`${base}/api/worker-scrape`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ worker_id: w, inbox_id: row.id }),
