@@ -39,9 +39,7 @@ module.exports = async function handler(req, res) {
       .limit(3);
 
     if (pending && pending.length > 0) {
-      const base = process.env.VERCEL_URL
-        ? 'https://' + process.env.VERCEL_URL
-        : 'https://workers-v1.vercel.app';
+      const base = 'https://workers-v1.vercel.app';
       for (const row of pending) {
         await fetch(`${base}/api/worker-scrape`, {
           method: 'POST',
