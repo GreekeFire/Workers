@@ -227,7 +227,6 @@ module.exports = async function handler(req, res) {
     .insert({
       title:              p.title || '',
       shopee_url:         shopeeUrl,
-      source_url:         shopeeUrl,
       source_cost:        cost || null,
       sell_price:         sellPrice,
       images:             p.images && p.images.length ? p.images : null,
