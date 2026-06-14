@@ -3228,6 +3228,7 @@ async function doLogin() {
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
 let _workerAssignExpanded = null; // worker id whose inline assign panel is open
+let _rotateConfirmPending = null; // worker id awaiting rotation confirm (inline two-step)
 
 async function renderWorkersView() {
   const wrap = document.getElementById('workers-wrap');
@@ -3369,6 +3370,14 @@ function _renderWorkersView() {
                     ${w.active ? 'Deactivate' : 'Reactivate'}
                   </button>
                 </div>
+                ${_rotateConfirmPending === w.id ? `
+                <div style="margin-top:12px;padding:12px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.35);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:600;color:#fca5a5">The old link will stop working. Confirm rotate?</span>
+                  <div style="display:flex;gap:8px">
+                    <button class="copy-btn" onclick="_rotateConfirmPending=null;_renderWorkersView()">Cancel</button>
+                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate ✓</button>
+                  </div>
+                </div>` : ''}
                 ${_workerAssignExpanded === w.id ? `
                 <div style="margin-top:12px;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                   <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">Assign</span>
@@ -3457,10 +3466,23 @@ async function copyVaLink(workerId) {
   }
 }
 
-async function workerRotateLink(workerId, name) {
-  // Rotating the link = create a new worker record with same name/target, deactivate the old one
-  // For MVP: just confirm and generate a new worker (old one deactivated)
-  if (!confirm(`Rotate VA link for ${name}?\n\nThe old link will stop working. Copy and send the new link to the worker.`)) return;
+// First press shows an inline confirm strip on the card; second press calls _doRotateLink.
+// confirm() is silently blocked in iOS PWA standalone mode so this two-step is the safe path.
+function workerRotateLink(workerId, name) {
+  if (_rotateConfirmPending === workerId) {
+    // Already showing — treat a second tap on the button as cancel
+    _rotateConfirmPending = null;
+    _renderWorkersView();
+    return;
+  }
+  _rotateConfirmPending = workerId;
+  _renderWorkersView();
+  // Auto-cancel after 8 s so the strip doesn't linger indefinitely
+  setTimeout(() => { if (_rotateConfirmPending === workerId) { _rotateConfirmPending = null; _renderWorkersView(); } }, 8000);
+}
+
+async function _doRotateLink(workerId, name) {
+  _rotateConfirmPending = null;
   const w = (_workersData || []).find(x => x.id === workerId);
   if (!w) { toast('Worker not found'); return; }
   // Create new first — only deactivate old if insert succeeds
@@ -3477,7 +3499,6 @@ async function workerRotateLink(workerId, name) {
   }
   // Deactivate old only after listings are safely transferred
   await sb.from('workers').update({ active: false }).eq('id', workerId);
-  toast('New VA link created ✓');
   _workersData = null;
   await refreshWorkers();
   // Show new link
