@@ -102,6 +102,41 @@ RULES:
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+// Mirrors work.html normalizeDesc — ensures delivery line is first and payment
+// line is last, exactly matching what the owner's FIX tab produces. Without this,
+// VA-generated descriptions could have the 🚚 line buried mid-text or missing.
+function normalizeDesc(text) {
+  if (!text) return text;
+  const DELIVERY = '🚚 Free Doorstep Delivery | 1-3 Working Days';
+  const PAYMENT  = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
+  let lines = text.split('\n');
+
+  // Delivery line must be first
+  if (!lines[0].trim().startsWith('🚚')) {
+    const idx = lines.findIndex(l => l.includes('🚚') || l.includes('FREE Local Delivery'));
+    if (idx > 0) {
+      const [found] = lines.splice(idx, 1);
+      while (lines.length && !lines[0].trim()) lines.shift();
+      lines = [found.trim(), '', ...lines];
+    } else if (idx === -1) {
+      lines = [DELIVERY, '', ...lines];
+    }
+  }
+
+  // Payment line must be last
+  const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
+  const hasPaymentAtEnd = lastNonEmptyIdx !== undefined && lines[lastNonEmptyIdx].trim() === PAYMENT;
+  if (!hasPaymentAtEnd) {
+    const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
+    if (idx !== -1) lines.splice(idx, 1);
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    lines.push('', PAYMENT);
+  }
+
+  return lines.join('\n');
+}
+
+
 // Normalise both Shopee URL formats to shopee.sg/product/{shopid}/{itemid}
 // so duplicate checks work regardless of whether the VA used the slug or
 // product-ID URL for the same item.
@@ -169,9 +204,13 @@ async function generateAI(productText) {
   }
   let description = '';
   try {
-    description = JSON.parse(rawDesc.trim()).description || '';
+    description = normalizeDesc(JSON.parse(rawDesc.trim()).description || '');
   } catch {
-    description = rawDesc.trim();
+    // Claude returned malformed JSON — strip wrapper and use raw text
+    const raw = rawDesc.trim()
+      .replace(/^\s*\{[^"]*"description"\s*:\s*"/, '')
+      .replace(/"\s*\}\s*$/, '');
+    description = normalizeDesc(raw || rawDesc.trim());
   }
   return { title, description };
 }
