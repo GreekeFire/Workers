@@ -2905,7 +2905,7 @@ function renderDoneView() {
     // Tag this request so a stale response never overwrites a search the user
     // started while the network round-trip was in flight.
     const reqSeq = ++_recentReqSeq;
-    let rq = sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids);
+    let rq = sb.from('listings').select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids);
     rq = _applyListingsFilter(rq);
     rq.then(({ data, error }) => {
         // Bail if a newer request superseded us, or if the user has since typed a query
@@ -2945,7 +2945,7 @@ async function scanBadLinks() {
   list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
   try {
     const { data, error } = await sb.from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
+      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .limit(5000);
     if (error) throw error;
     const bad = (data || []).filter(d =>
@@ -2969,7 +2969,7 @@ async function _searchAllListings(query) {
     const terms = query.split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1).slice(0, 8);
     let q = sb
       .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
+      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
     for (const t of terms.length ? terms : [query.trim()]) q = q.ilike('title', `%${t}%`);
     q = _applyListingsFilter(q);
     const { data, error } = await q.order('status').limit(30);
@@ -3012,7 +3012,7 @@ function _renderListingsResults(data, prefix) {
 
     if (_listingsEditingId === d.id) {
       return `<div class="done-entry editing" id="lentry-${d.id}">
-        <input class="done-edit-title" type="text" id="let-${d.id}" value="${esc(d.title)}" placeholder="Title">
+        <input class="done-edit-title" type="text" id="let-${d.id}" value="${esc(d.ai_title || d.title)}" placeholder="Title">
         <div class="done-edit-price">
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" id="lec-${d.id}" value="${cost}" oninput="document.getElementById('les-${d.id}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)">
@@ -3035,7 +3035,7 @@ function _renderListingsResults(data, prefix) {
 
     return `<div class="done-entry" onclick="_listingsEditingId=${d.id};renderDoneView()" style="cursor:pointer">
       <div class="done-info">
-        <div class="done-title-text">${esc(d.title)}</div>
+        <div class="done-title-text">${esc(d.ai_title || d.title)}</div>
         <div class="done-meta">
           Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
