@@ -147,10 +147,10 @@ module.exports = async function handler(req, res) {
   // 2. Fetch oldest pending inbox row for this worker
   let q = sb
     .from('scrape_inbox')
-    .select('id, payload, categories, shop_location, rating_star, processed')
+    .select('id, payload, categories, shop_location, rating_star, consumed')
     .eq('worker_id', worker_id)
     .eq('kind', 'shopee')
-    .eq('processed', false)
+    .eq('consumed', false)
     .order('id', { ascending: true })
     .limit(1);
   if (inbox_id) q = q.eq('id', inbox_id);
@@ -164,7 +164,7 @@ module.exports = async function handler(req, res) {
 
   // Unloaded sentinel — AUTO mode couldn't get data
   if (p.unloaded) {
-    await sb.from('scrape_inbox').update({ processed: true }).eq('id', row.id);
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'unloaded', skipped: true });
   }
 
@@ -179,7 +179,7 @@ module.exports = async function handler(req, res) {
   );
 
   if (!shopeeUrl) {
-    await sb.from('scrape_inbox').update({ processed: true }).eq('id', row.id);
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'no-url' });
   }
 
@@ -187,7 +187,7 @@ module.exports = async function handler(req, res) {
   const { data: existing } = await sb
     .from('listings').select('id').eq('shopee_url', shopeeUrl).limit(1);
   if (existing && existing.length > 0) {
-    await sb.from('scrape_inbox').update({ processed: true }).eq('id', row.id);
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'duplicate', listing_id: existing[0].id });
   }
 
@@ -246,8 +246,8 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'listing-insert: ' + lErr.message });
   }
 
-  // 8. Mark inbox row processed
-  await sb.from('scrape_inbox').update({ processed: true }).eq('id', row.id);
+  // 8. Mark inbox row consumed
+  await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
 
   return res.json({
     ok: true,

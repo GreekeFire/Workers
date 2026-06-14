@@ -35,7 +35,7 @@ module.exports = async function handler(req, res) {
       .select('id')
       .eq('worker_id', w)
       .eq('kind', 'shopee')
-      .eq('processed', false)
+      .eq('consumed', false)
       .limit(3);
 
     if (pending && pending.length > 0) {
