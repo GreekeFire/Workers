@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set' });
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-  const { worker_id, listing_id, warnings_overridden = false } = req.body || {};
+  const { worker_id, listing_id, warnings_overridden = false, carousell_url = null } = req.body || {};
 
   if (!worker_id)  return res.status(400).json({ error: 'worker_id required' });
   if (!listing_id) return res.status(400).json({ error: 'listing_id required' });
@@ -40,9 +40,11 @@ module.exports = async function handler(req, res) {
   if (listing.assigned_worker_id !== worker_id)  return res.status(403).json({ error: 'listing-not-assigned-to-worker' });
   if (listing.status !== 'active')               return res.status(409).json({ error: 'listing-not-active', status: listing.status });
 
-  // Mark listing done
+  // Mark listing done + save Carousell URL if provided
+  const update = { status: 'done' };
+  if (carousell_url) update.carousell_url = carousell_url;
   const { error: updateErr } = await sb
-    .from('listings').update({ status: 'done' }).eq('id', listing_id);
+    .from('listings').update(update).eq('id', listing_id);
   if (updateErr) {
     console.error('listing update error:', updateErr);
     return res.status(500).json({ error: 'update-failed' });

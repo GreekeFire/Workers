@@ -515,11 +515,11 @@ async function fetchListings() {
   return d.listings || [];
 }
 
-async function postDone(listing_id, warnings_overridden) {
+async function postDone(listing_id, warnings_overridden, carousell_url) {
   const r = await fetch('/api/worker-done', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ worker_id: WORKER_ID, listing_id, warnings_overridden }),
+    body: JSON.stringify({ worker_id: WORKER_ID, listing_id, warnings_overridden, carousell_url }),
   });
   const d = await r.json();
   if (!r.ok || !d.ok) throw new Error(d.error || r.status);
@@ -673,6 +673,17 @@ function render() {
       html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">⬇ Download all images (${images.length})</button>`;
     }
 
+    // Carousell URL input (required before Done)
+    html += `
+      <div style="margin-top:14px">
+        <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:6px">
+          Post this listing on Carousell first, then paste the link below. <span style="color:#f87171">Required to mark Done.</span>
+        </div>
+        <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
+          style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
+          oninput="this.style.borderColor=/carousell\\./i.test(this.value)?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)'">
+      </div>`;
+
     // Actions
     html += `
       <div class="action-row">
@@ -713,12 +724,17 @@ function toggleDesc() {
 
 async function doDone(listingId, warningsOverridden) {
   if (busy) return;
+  const caroUrl = (document.getElementById('caro-url-' + listingId)?.value || '').trim();
+  if (!/carousell\./i.test(caroUrl)) {
+    showToast('Paste your Carousell listing link first', true);
+    return;
+  }
   busy = true;
   const btn = document.getElementById('done-btn');
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
   try {
-    const result = await postDone(listingId, warningsOverridden);
+    const result = await postDone(listingId, warningsOverridden, caroUrl);
     profile.count_today = result.count_today;
     // Remove from queue
     listings = listings.filter(l => l.id !== listingId);
