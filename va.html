@@ -513,6 +513,8 @@ async function fetchListings() {
   const r = await fetch('/api/worker-listings?w=' + WORKER_ID);
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
   const d = await r.json();
+  // Refresh the progress count from the server on every poll so it never drifts
+  if (profile && d.count_today != null) profile.count_today = d.count_today;
   return d.listings || [];
 }
 

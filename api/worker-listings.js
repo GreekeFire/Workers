@@ -55,17 +55,23 @@ module.exports = async function handler(req, res) {
   }
 
   // Fetch assigned active listings — source_cost deliberately excluded
-  const { data: listings, error: lErr } = await sb
-    .from('listings')
-    .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, guard_warnings, status, created_at')
-    .eq('assigned_worker_id', w)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const [listingsResult, countResult] = await Promise.all([
+    sb.from('listings')
+      .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, guard_warnings, status, created_at')
+      .eq('assigned_worker_id', w)
+      .eq('status', 'active')
+      .order('created_at', { ascending: true }),
+    sb.from('worker_done')
+      .select('id', { count: 'exact', head: true })
+      .eq('worker_id', w)
+      .eq('date', today),
+  ]);
 
-  if (lErr) {
-    console.error('listings error:', lErr);
+  if (listingsResult.error) {
+    console.error('listings error:', listingsResult.error);
     return res.status(500).json({ error: 'listings-failed' });
   }
 
-  return res.json({ ok: true, listings: listings || [] });
+  return res.json({ ok: true, listings: listingsResult.data || [], count_today: countResult.count || 0 });
 };
