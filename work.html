@@ -2974,7 +2974,12 @@ async function _searchAllListings(query) {
     let q = sb
       .from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
-    for (const t of terms.length ? terms : [query.trim()]) q = q.ilike('title', `%${t}%`);
+    // Each term must appear in EITHER title OR ai_title — listings show ai_title
+    // in the LISTINGS tab so searching only title misses most AI-rewritten entries.
+    for (const t of terms.length ? terms : [query.trim()]) {
+      const escaped = t.replace(/[%_]/g, '\\$&');
+      q = q.or(`title.ilike.%${escaped}%,ai_title.ilike.%${escaped}%`);
+    }
     q = _applyListingsFilter(q);
     const { data, error } = await q.order('status').limit(30);
     if (error) throw error;
