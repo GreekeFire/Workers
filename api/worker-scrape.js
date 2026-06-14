@@ -133,7 +133,24 @@ async function generateAI(productText) {
     callClaudeInternal(TITLE_SYSTEM, productContent, 512, 0.3),
     callClaudeInternal(DESC_SYSTEM, productContent, 1536, 0.5),
   ]);
-  const title = rawTitle.trim().split('\n')[0].trim();
+  let title = rawTitle.trim().split('\n')[0].trim();
+  // Retry once if title is too short (mirrors work.html behaviour)
+  if (title.length < 180) {
+    try {
+      const retry = await callClaudeInternal(
+        TITLE_SYSTEM,
+        productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.',
+        512, 0.3
+      );
+      title = retry.trim().split('\n')[0].trim();
+    } catch { /* keep original if retry fails */ }
+  }
+  // Trim if over 225 chars
+  if (title.length > 225) {
+    const parts = title.split(' | ');
+    while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
+    title = parts.join(' | ');
+  }
   let description = '';
   try {
     description = JSON.parse(rawDesc.trim()).description || '';
