@@ -201,6 +201,79 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 
 ---
 
+## PART 8 — VA System 👷
+
+> Requires: one worker row in Supabase (`workers` table), and a fresh Shopee product not already in listings.
+
+### Test 8.1 — WORKERS tab loads
+1. Open `workers-v1.vercel.app/work.html` → click **WORKERS** tab.
+2. ✅ Worker list shows. Each worker shows name, done/target today, pending count.
+3. ✅ **Copy VA link**, **+ Assign listings**, **Rotate link**, **Deactivate** buttons visible.
+
+### Test 8.2 — Create a worker
+1. Click **+ Add worker** → enter a name, leave target at 100 → **Create worker**.
+2. ✅ Worker appears in the list immediately.
+3. Click **Copy VA link** → paste it somewhere → ✅ URL format is `workers-v1.vercel.app/va?w=UUID`.
+
+### Test 8.3 — VA page loads
+1. Open the VA link in a browser.
+2. ✅ Worker name shown at top, progress bar 0/100.
+3. ✅ If queue is empty: "Queue empty" card + bookmarklet shown below.
+4. ✅ If queue has listings: first listing card shown.
+
+### Test 8.4 — Bookmarklet sends to VA queue
+1. Copy the bookmarklet from the VA page.
+2. On a Shopee product page, paste and run it in the browser console (`javascript:` prefix optional in console).
+3. ✅ Green toast on Shopee page.
+4. Wait 10s on the VA page → ✅ listing card appears with sell price, title, images.
+
+### Test 8.5 — Guards show correctly
+1. Scrape a product that is: non-SG seller, wrong category, or price < $15.
+2. ✅ Warning chips appear above the card (Category / Non-SG seller / Price low).
+3. ✅ Done button is **disabled** (greyed out) until all warnings are acknowledged.
+4. Click **Add anyway** on each chip → ✅ chips turn green with ✓.
+5. ✅ Done button becomes **bright green** and enabled.
+
+### Test 8.6 — AI title missing handling
+1. If a listing has no AI title (ai_title is null in DB), the raw Shopee title shows.
+2. ✅ Red notice: "AI title not generated — contact your manager before marking this done."
+3. ✅ Done button is disabled regardless of warnings.
+
+### Test 8.7 — Copy buttons work
+1. On a listing card, tap **Copy** next to Title.
+2. ✅ Clipboard contains the title text (paste to verify).
+3. Tap **Copy** next to Description → ✅ clipboard has description.
+
+### Test 8.8 — Done flow
+1. Acknowledge any warnings → tap **Done ✓**.
+2. ✅ Count increments (e.g. 0/100 → 1/100), progress bar moves.
+3. ✅ Next listing in queue loads automatically.
+4. In Supabase → `listings` table → ✅ that listing's `status` = `done`.
+5. In Supabase → `worker_done` table → ✅ new row with correct `worker_id`, `listing_id`, `date`.
+
+### Test 8.9 — Skip flow
+1. On a listing, tap **Skip →**.
+2. ✅ Listing is hidden, next one loads.
+3. ✅ Count does NOT increment.
+4. ✅ Listing still shows as `active` in Supabase (skip doesn't delete it).
+
+### Test 8.10 — Deactivate worker
+1. In WORKERS tab, click **Deactivate** on a worker.
+2. ✅ Worker card dims in the list.
+3. Open that worker's VA link → ✅ shows "This link has been deactivated. Contact your manager."
+
+### Test 8.11 — WORKERS tab count updates
+1. Have a VA tap Done on a listing.
+2. In owner's WORKERS tab, click the refresh button (↻).
+3. ✅ Done count for that worker increments.
+
+### Test 8.12 — Assign listings
+1. In WORKERS tab, click **+ Assign listings** on a worker → enter a number (e.g. 5).
+2. ✅ Toast confirms assignment.
+3. Open that worker's VA link → ✅ assigned listings appear in their queue.
+
+---
+
 ## 📋 Scorecard
 
 | #   | Test                                                                | Pass? |
@@ -229,6 +302,18 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 | 6.1 | Sales: log, autofill, undo                                          |       |
 | 6.2 | Listings: editor, scan links, backup                                |       |
 | 7   | Cross-device handoff                                                |       |
+| 8.1 | WORKERS tab loads with worker list                                  |       |
+| 8.2 | Create worker → appears in list + VA link correct                   |       |
+| 8.3 | VA page loads with name + progress bar                              |       |
+| 8.4 | Bookmarklet sends product to VA queue                               |       |
+| 8.5 | Guards show + Done blocked until acknowledged                       |       |
+| 8.6 | AI title missing → red notice + Done blocked                        |       |
+| 8.7 | Copy title + description buttons work                               |       |
+| 8.8 | Done → count increments, listing marked done in DB                  |       |
+| 8.9 | Skip → listing hidden, count unchanged, still active in DB          |       |
+| 8.10| Deactivate worker → VA link shows deactivated message               |       |
+| 8.11| WORKERS tab count updates after VA taps Done                        |       |
+| 8.12| Assign listings → appears in VA queue                               |       |
 
 ---
 
@@ -239,3 +324,7 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 - **No dup-check when saving a Blank/pasted card** for a product already in Done — the
   pull path is guarded, the manual paths aren't.
 - **URL-paste path can return cost $0** when Shopee blocks the server fetch — enter cost manually.
+- **VA bookmarklet blocked in Brave** — Brave blocks `javascript:` bookmarklets from the bookmarks bar. VAs must use Chrome.
+- **AI title null on old scrapes** — listings scraped before the VA system was built won't have ai_title. Owner must regenerate or the VA cannot mark them done.
+- **dataLayer scrapes miss guards** — category/SG seller/rating guards only fire when sc.js uses the v4 API path. dataLayer (puzzle-free) path may skip these guards until TEST LATER is resolved.
+- **Skip doesn't remove from queue permanently** — skipped listings stay active and will reappear on next page load. This is intentional (VA may want to come back to them).
