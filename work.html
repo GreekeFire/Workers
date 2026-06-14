@@ -967,6 +967,11 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">⚠ Scan links</button>
       <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
     </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="lf-all"        class="copy-btn" onclick="setListingsFilter('all')"        style="flex:1">All</button>
+      <button id="lf-assigned"   class="copy-btn" onclick="setListingsFilter('assigned')"   style="flex:1">Assigned</button>
+      <button id="lf-unassigned" class="copy-btn" onclick="setListingsFilter('unassigned')" style="flex:1">Unassigned</button>
+    </div>
     <div class="done-list" id="done-list"></div>
   </div>
 
@@ -2161,8 +2166,20 @@ function logSale() {
   if (!name || isNaN(price) || price <= 0) { toast('Fill in listing and sell price'); return; }
   const category   = document.getElementById('sale-category').value;
   const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
-  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: new Date().toISOString(), listing_id: _selectedListingId || null });
+  const saleTs = new Date().toISOString();
+  const saleListingId = _selectedListingId || null;
+  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: saleTs, listing_id: saleListingId });
   _selectedListingId = null;
+  // Fire-and-forget: mirror into normalized sales_log table for worker attribution
+  sb.from('sales_log').insert({
+    listing_id:  saleListingId,
+    name,
+    price,
+    source_cost: sourceCost || null,
+    category:    category || null,
+    date:        getToday(),
+    ts:          saleTs,
+  }).then(({ error }) => { if (error) console.error('sales_log insert failed:', error.message); });
   document.getElementById('sale-listing').value = '';
   document.getElementById('sale-price').value = '';
   document.getElementById('sale-cost').value = '';
@@ -2813,6 +2830,7 @@ let _lastFixIndex = -1;   // card slide-in fires only when this changes
 let _doneSearchTimer = null;
 let _listingsEditingId = null;
 let _listingsCache = [];
+let _listingsFilter = 'all'; // 'all' | 'assigned' | 'unassigned'
 
 const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
 
@@ -2829,8 +2847,9 @@ function renderDoneView() {
       .map(d => d.id).filter(Boolean))].slice(0, 25);
     if (!ids.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
     list.innerHTML = '<p class="done-empty">Loading recent…</p>';
-    sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
-      .in('id', ids).then(({ data, error }) => {
+    let rq = sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
+    rq = _listingsFilter === 'all' ? rq.in('id', ids) : _applyListingsFilter(rq.eq('status', 'active'));
+    rq.then(({ data, error }) => {
         if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
         const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order
         data.sort((a, b) => (ord.get(a.id) ?? 99) - (ord.get(b.id) ?? 99));
@@ -2888,6 +2907,7 @@ async function _searchAllListings(query) {
       .from('listings')
       .select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
     for (const t of terms.length ? terms : [query.trim()]) q = q.ilike('title', `%${t}%`);
+    q = _applyListingsFilter(q);
     const { data, error } = await q.order('status').limit(30);
     if (error) throw error;
     if (!data.length) { list.innerHTML = '<p class="done-empty">No matches</p>'; return; }
@@ -2896,6 +2916,23 @@ async function _searchAllListings(query) {
   } catch (e) {
     list.innerHTML = `<p class="done-empty">Search failed</p>`;
   }
+}
+
+function setListingsFilter(f) {
+  _listingsFilter = f;
+  _listingsCache = [];
+  _listingsEditingId = null;
+  ['all', 'assigned', 'unassigned'].forEach(k => {
+    const el = document.getElementById('lf-' + k);
+    if (el) el.style.opacity = k === f ? '1' : '0.45';
+  });
+  renderDoneView();
+}
+
+function _applyListingsFilter(q) {
+  if (_listingsFilter === 'assigned')   return q.not('assigned_worker_id', 'is', null);
+  if (_listingsFilter === 'unassigned') return q.is('assigned_worker_id', null);
+  return q;
 }
 
 function _renderListingsResults(data, prefix) {
