@@ -2993,7 +2993,7 @@ function _renderListingsResults(data, prefix) {
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" id="lec-${d.id}" value="${cost}" oninput="document.getElementById('les-${d.id}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)">
           <span style="color:var(--text-tertiary)">→</span>
-          <span class="done-edit-sell" id="les-${d.id}">$${sell.toFixed(2)}</span>
+          <span class="done-edit-sell" id="les-${d.id}">$${calcSell(cost).toFixed(2)}</span>
         </div>
         <input class="link-edit-input" type="url" id="lesh-${d.id}" placeholder="Shopee URL" value="${esc(d.shopee_url||'')}" style="margin-top:8px">
         <input class="link-edit-input" type="url" id="leca-${d.id}" placeholder="Carousell URL" value="${esc(d.carousell_url||'')}" style="margin-top:6px">
