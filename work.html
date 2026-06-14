@@ -3305,6 +3305,15 @@ function _renderWorkersView() {
   const workers = _workersData || [];
 
   // Count unassigned active listings
+  const confirmStrip = _assignBatchPending ? `
+    <div style="background:rgba(107,227,164,0.1);border:1px solid rgba(107,227,164,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:600;color:var(--success)">Distribute ${_assignBatchPending.count} listings across ${_assignBatchPending.workerCount} workers?</span>
+      <div style="display:flex;gap:8px">
+        <button class="copy-btn" onclick="_assignBatchPending=null;_renderWorkersView()">Cancel</button>
+        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm ✓</button>
+      </div>
+    </div>` : '';
+
   const unassignedBlock = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap">
       <h2 style="font-size:18px;font-weight:700;margin:0">Workers</h2>
@@ -3316,6 +3325,7 @@ function _renderWorkersView() {
         <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">↺</button>
       </div>
     </div>
+    ${confirmStrip}
 
     <div id="add-worker-form" style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:20px">
       <div style="font-size:14px;font-weight:600;margin-bottom:12px">Add new worker</div>
@@ -3503,6 +3513,8 @@ async function workerAssignListings(workerId, workerName) {
 }
 
 let _assignBatchBusy = false;
+let _assignBatchPending = null; // { count, workerCount } — pending confirm step
+
 async function workersAssignBatch() {
   if (_assignBatchBusy) return;
   // Auto-distribute all unassigned active listings evenly across active workers
@@ -3515,7 +3527,18 @@ async function workersAssignBatch() {
     .order('id');
   if (error) { toast('Failed: ' + error.message); return; }
   if (!data || !data.length) { toast('No unassigned listings'); return; }
-  if (!confirm(`Distribute ${data.length} unassigned listings across ${workers.length} active workers?`)) return;
+
+  // confirm() is silently blocked in iOS PWA standalone mode — use an inline
+  // two-step instead: first press shows a confirm banner in the workers header,
+  // second press (within 6 s) runs the action; anything else cancels.
+  if (!_assignBatchPending) {
+    _assignBatchPending = { count: data.length, workerCount: workers.length };
+    _renderWorkersView(); // re-render header with confirm strip visible
+    setTimeout(() => { if (_assignBatchPending) { _assignBatchPending = null; _renderWorkersView(); } }, 6000);
+    return;
+  }
+  // Second press — run the distribution
+  _assignBatchPending = null;
 
   _assignBatchBusy = true;
   // Round-robin assignment
