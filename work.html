@@ -2948,13 +2948,17 @@ async function scanBadLinks() {
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .limit(5000);
     if (error) throw error;
+    // Active listings are in the VA queue and haven't been posted yet — missing
+    // Carousell link is expected. Only flag done listings for missing/bad Carousell.
+    // Bad Shopee links are flagged on all statuses.
     const bad = (data || []).filter(d =>
-      !validCaroLink(d.carousell_url) || !validShopeeLink(d.shopee_url));
+      !validShopeeLink(d.shopee_url) ||
+      (d.status === 'done' && !validCaroLink(d.carousell_url)));
     if (!bad.length) { list.innerHTML = '<p class="done-empty">✓ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
     _listingsCache = bad;
     _listingsEditingId = null;
     _listingsCacheIsRecent = false;
-    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad Shopee/Carousell link — fix or delete below.</p>');
+    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad link — fix or delete below.</p>');
   } catch (e) {
     list.innerHTML = '<p class="done-empty">Scan failed — ' + (e.message || 'are you logged in?') + '</p>';
   }
