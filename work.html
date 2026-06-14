@@ -2096,11 +2096,19 @@ async function saveBatchItem(i) {
   const sell = cost ? calcSell(cost) : 0;
   const { data, error } = await sb.from('listings').insert({
     title: r.title, status: 'done', shopee_url: r.url || '',
+    carousell_url: r.caroUrl || null,
     source_cost: cost, sell_price: sell,
     ai_title: r.title || null,
     ai_description: r.desc || null
   }).select('id').single();
-  const sbId = error ? null : data?.id;
+  if (error) {
+    // Insert failed — keep the card so the user can retry; don't consume the inbox row
+    r._saving = false;
+    toast('Save failed — tap Save to retry', true);
+    renderNewView();
+    return;
+  }
+  const sbId = data?.id;
   doneData.push({
     index: null, id: sbId, title: r.title, description: r.desc || '',
     shopeeUrl: r.url, carousellUrl: r.caroUrl || '', sourceCost: cost, sellPrice: sell,
