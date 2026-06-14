@@ -541,14 +541,18 @@ async function postSkip(listing_id) {
 async function poll() {
   try {
     const fresh = await fetchListings();
-    // Merge: keep existing order, append truly new IDs
-    const known = new Set(listings.map(l => l.id));
+    // Build a lookup map for O(1) access
+    const freshMap = new Map(fresh.map(l => [l.id, l]));
+    // Update existing listings with fresh server data (ai_title/ai_description
+    // may arrive after the initial load if AI generation was still running)
+    listings = listings
+      .map(l => freshMap.has(l.id) ? freshMap.get(l.id) : l)
+      .filter(l => freshMap.has(l.id)); // remove ones no longer active
+    // Append genuinely new listings (keep server order within new arrivals)
+    const knownIds = new Set(listings.map(l => l.id));
     for (const l of fresh) {
-      if (!known.has(l.id)) listings.push(l);
+      if (!knownIds.has(l.id)) listings.push(l);
     }
-    // Remove any that are no longer active (done/deleted elsewhere)
-    const freshIds = new Set(fresh.map(l => l.id));
-    listings = listings.filter(l => freshIds.has(l.id));
     render();
   } catch (e) {
     // Silent — keep showing whatever we had
