@@ -780,6 +780,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   }
   .toast-undo-btn:hover { background: rgba(224,118,88,0.22); }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .toast.err { background: rgba(220,38,38,0.92); border-color: rgba(220,38,38,0.4); }
 
   /* Sync status */
   .sync-status {
@@ -1811,6 +1812,7 @@ async function pullScraped(target, silent) {
   try {
     const { data, error } = await sb.from('scrape_inbox')
       .select('id,payload').eq('kind', 'shopee').eq('consumed', false)
+      .is('worker_id', null)
       .order('created_at', { ascending: true });
     if (error) throw error;
     rows = data || [];
@@ -1938,6 +1940,7 @@ async function preGenerateNext() {
   try {
     const { data, error } = await sb.from('scrape_inbox')
       .select('id,payload').eq('kind', 'shopee').eq('consumed', false)
+      .is('worker_id', null)
       .order('created_at', { ascending: true });
     if (error) return;
     rows = data || [];
@@ -3098,11 +3101,18 @@ async function listingsMarkDone(id) {
   // the next loadListingsFromSupabase() would drop it anyway — this just
   // makes the in-memory state consistent immediately.
   const li = LISTINGS.findIndex(l => l.id === id);
-  if (li !== -1) {
+  if (li !== -1 && !doneSet.has(li)) {
+    // Guard double-mark: owner might open the edit form and click Mark Listed
+    // twice. doneSet is a Set (add is idempotent) but doneTodayCount and doneData
+    // would be double-incremented without this check.
     doneSet.add(li);
-    // Record a lightweight done entry so the session Done counter is accurate
+    // Record a lightweight done entry so the session Done counter is accurate.
+    // Use ai_title from _listingsCache (the only title the owner sees in the LISTINGS
+    // tab) so the SALES tab listing search can find this entry — LISTINGS[] only holds
+    // the raw Shopee title, not the AI-rewritten one.
     const L = LISTINGS[li];
-    doneData.push({ id, title: L.title, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: L.caro || '', doneAt: new Date().toISOString(), index: li });
+    const displayTitle = (item && (item.ai_title || item.title)) || L.title;
+    doneData.push({ id, title: displayTitle, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: L.caro || '', doneAt: new Date().toISOString(), index: li });
     doneTodayCount++;
     renderSessionBar();
     pushToSupabase();
@@ -3223,12 +3233,13 @@ function esc(str) {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, isErr = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  el.classList.toggle('err', !!isErr);
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); el.classList.remove('err'); }, isErr ? 3500 : 2000);
 }
 
 let _undoFn = null;
