@@ -180,11 +180,14 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 1. SALES → search a listing by a title word → ✅ dropdown finds it, tap → price/cost auto-fill.
 2. Pick category, **Log Sale** → ✅ Revenue counter updates.
 3. Delete with ✕, press UNDO → ✅ it returns.
+4. In Supabase → `sales_log` → ✅ new row with correct `name`, `price`, `listing_id`, `ts`.
+5. In Supabase → `app_state` → row with `key = 'carobiz_sales'` → ✅ `data` array also updated (legacy sync still runs).
 
 ### Test 6.2 — LISTINGS
 1. Search → ✅ results. Tap one → ✅ inline editor (title/cost/links).
-2. **⚠ Scan links** → ✅ reports broken links (or none).
-3. **⬇ Backup** → ✅ downloads JSON. **Do this for real — it's your only backup.**
+2. Edit title → Save → In Supabase → `listings` → ✅ `title` column updated.
+3. **⚠ Scan links** → ✅ reports broken links (or none).
+4. **⬇ Backup** → ✅ downloads JSON. **Do this for real — it's your only backup.**
 
 ---
 
@@ -214,6 +217,7 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 1. Click **+ Add worker** → enter a name, leave target at 100 → **Create worker**.
 2. ✅ Worker appears in the list immediately.
 3. Click **Copy VA link** → paste it somewhere → ✅ URL format is `workers-v1.vercel.app/va?w=UUID`.
+4. In Supabase → `workers` → ✅ new row with correct `name`, `active = true`, `daily_target = 100`.
 
 ### Test 8.3 — VA page loads
 1. Open the VA link in a browser.
@@ -226,6 +230,8 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 2. On a Shopee product page, paste and run it in the browser console (`javascript:` prefix optional in console).
 3. ✅ Green toast on Shopee page.
 4. Wait 10s on the VA page → ✅ listing card appears with sell price, title, images.
+5. In Supabase → `scrape_inbox` → ✅ row with correct `worker_id`, `consumed = false` (before Done), then `consumed = true` after Done.
+6. In Supabase → `listings` → ✅ new row with `assigned_worker_id` matching this worker, `ai_title` populated.
 
 ### Test 8.5 — Guards show correctly
 1. Scrape a product that is: non-SG seller, wrong category, or price < $15.
@@ -233,6 +239,7 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 3. ✅ Done button is **disabled** (greyed out) until all warnings are acknowledged.
 4. Click **Add anyway** on each chip → ✅ chips turn green with ✓.
 5. ✅ Done button becomes **bright green** and enabled.
+6. In Supabase → `listings` → ✅ `guard_warnings` column is a JSON array with the warning keys (e.g. `["category","non-sg-seller"]`).
 
 ### Test 8.6 — AI title missing / failed handling
 1. If `ai_title` is **null** in DB (AI never ran): ✅ Red notice: "AI title not generated — contact your manager before marking this done."
@@ -271,6 +278,7 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 1. In WORKERS tab, click **+ Assign listings** on a worker → enter a number (e.g. 5).
 2. ✅ Toast confirms assignment.
 3. Open that worker's VA link → ✅ assigned listings appear in their queue.
+4. In Supabase → `listings` → filter `assigned_worker_id = <worker UUID>` → ✅ correct number of rows updated.
 
 ### Test 8.13 — Rotate VA link
 1. In WORKERS tab, click **Rotate link** on an active worker → confirm the dialog.
