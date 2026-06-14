@@ -487,17 +487,20 @@ function copyText(text, btnId) {
 }
 
 // ── Download images ───────────────────────────────────────────────────────────
+// Routes through /api/image so the download attribute works — the `download`
+// attribute on <a> is silently ignored for cross-origin URLs (Shopee CDN),
+// which would open a new tab instead of saving the file.
 function downloadImages(images) {
   if (!images || !images.length) { showToast('No images', true); return; }
   images.forEach((url, i) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'img-' + (i + 1) + '.jpg';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => a.remove(), 500);
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = '/api/image?url=' + encodeURIComponent(url) + '&n=' + (i + 1);
+      a.download = 'img-' + (i + 1) + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => a.remove(), 500);
+    }, i * 350);   // stagger to avoid browser popup-burst blocking
   });
   showToast('Downloading ' + images.length + ' images…');
 }
