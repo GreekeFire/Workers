@@ -2909,9 +2909,12 @@ function renderDoneView() {
     // Tag this request so a stale response never overwrites a search the user
     // started while the network round-trip was in flight.
     const reqSeq = ++_recentReqSeq;
-    let rq = sb.from('listings').select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids);
-    rq = _applyListingsFilter(rq);
-    rq.then(({ data, error }) => {
+    // Do NOT apply the assigned/unassigned filter to the recent-items view — it
+    // only makes sense for search. If the filter is 'unassigned' and all recent
+    // items are assigned to workers, the result would be empty and the owner
+    // would see "Type to search" thinking there are no recently-done items.
+    sb.from('listings').select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids)
+    .then(({ data, error }) => {
         // Bail if a newer request superseded us, or if the user has since typed a query
         if (reqSeq !== _recentReqSeq) return;
         const currentQuery = (document.getElementById('done-search')?.value || '').trim();
