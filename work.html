@@ -2096,7 +2096,9 @@ async function saveBatchItem(i) {
   const sell = cost ? calcSell(cost) : 0;
   const { data, error } = await sb.from('listings').insert({
     title: r.title, status: 'done', shopee_url: r.url || '',
-    source_cost: cost, sell_price: sell
+    source_cost: cost, sell_price: sell,
+    ai_title: r.title || null,
+    ai_description: r.desc || null
   }).select('id').single();
   const sbId = error ? null : data?.id;
   doneData.push({
@@ -2160,10 +2162,13 @@ function addBlankCard() {
 
 
 // Sales
+let _logSaleBusy = false;
 function logSale() {
+  if (_logSaleBusy) return;
   const name = document.getElementById('sale-listing').value.trim();
   const price = parseFloat(document.getElementById('sale-price').value);
   if (!name || isNaN(price) || price <= 0) { toast('Fill in listing and sell price'); return; }
+  _logSaleBusy = true;
   const category   = document.getElementById('sale-category').value;
   const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
   const saleTs = new Date().toISOString();
@@ -2189,6 +2194,7 @@ function logSale() {
   pushToSupabase();
   renderSalesView();
   renderSessionBar();
+  _logSaleBusy = false;
   toast('Logged ✓');
 }
 
