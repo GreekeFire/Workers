@@ -775,10 +775,12 @@ async function doDone(listingId, warningsOverridden) {
 
 async function doSkip(listingId) {
   if (busy) return;
+  busy = true;
   skipSet.add(listingId);
   delete caroUrlDraft[listingId];
-  await postSkip(listingId);
-  render();
+  render();  // render first so the next card shows immediately
+  busy = false;
+  postSkip(listingId).catch(() => {});  // fire-and-forget — skip is local-only; API is just a heartbeat
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
