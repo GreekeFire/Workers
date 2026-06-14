@@ -3478,8 +3478,12 @@ async function doAddWorker() {
   await refreshWorkers();
 }
 
+let _toggleActiveBusy = false;
 async function workerToggleActive(workerId, currentlyActive) {
+  if (_toggleActiveBusy) return;
+  _toggleActiveBusy = true;
   const { error } = await sb.from('workers').update({ active: !currentlyActive }).eq('id', workerId);
+  _toggleActiveBusy = false;
   if (error) { toast('Failed'); return; }
   toast(currentlyActive ? 'Worker deactivated' : 'Worker reactivated');
   _workersData = null;
