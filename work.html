@@ -2848,8 +2848,8 @@ function renderDoneView() {
       .map(d => d.id).filter(Boolean))].slice(0, 25);
     if (!ids.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
     list.innerHTML = '<p class="done-empty">Loading recent…</p>';
-    let rq = sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
-    rq = _listingsFilter === 'all' ? rq.in('id', ids) : _applyListingsFilter(rq.eq('status', 'active'));
+    let rq = sb.from('listings').select('id,title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id').in('id', ids);
+    rq = _applyListingsFilter(rq);
     rq.then(({ data, error }) => {
         if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">Type to search all listings</p>'; return; }
         const ord = new Map(ids.map((id, i) => [id, i]));   // preserve newest-first order

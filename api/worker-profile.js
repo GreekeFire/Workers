@@ -31,7 +31,10 @@ module.exports = async function handler(req, res) {
     .eq('worker_id', w)
     .eq('date', today);
 
-  const bookmarklet = `javascript:window.__swWorker='${worker.id}';fetch('https://workers-v1.vercel.app/sc.js').then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load '+e))`;
+  const base = process.env.VERCEL_URL
+    ? 'https://' + process.env.VERCEL_URL
+    : 'https://workers-v1.vercel.app';
+  const bookmarklet = `javascript:window.__swWorker='${worker.id}';fetch('${base}/sc.js').then(r=>r.text()).then(t=>(0,eval)(t)).catch(e=>alert('load '+e))`;
 
   return res.json({
     ok:           true,
