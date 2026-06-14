@@ -1927,7 +1927,6 @@ async function pullScraped(target, silent) {
 // when that card actually becomes current. Cheap-but-not-free, so it's gated:
 // needs an API key, a matching live scrape, and runs at most once per listing.
 async function preGenerateNext() {
-  if (!savedApiKey) return;                              // no key → would NO_KEY, skip
   const ni = findNext(currentIndex + 1);
   if (ni >= LISTINGS.length) return;
   const L = LISTINGS[ni];
