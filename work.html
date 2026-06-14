@@ -2113,7 +2113,8 @@ async function saveBatchItem(i) {
     carousell_url: r.caroUrl || null,
     source_cost: cost, sell_price: sell,
     ai_title: r.title || null,
-    ai_description: r.desc || null
+    ai_description: r.desc || null,
+    images: (r.images && r.images.length) ? r.images : null,
   }).select('id').single();
   if (error) {
     // Insert failed — keep the card so the user can retry; don't consume the inbox row
@@ -3101,7 +3102,7 @@ async function listingsMarkDone(id) {
     doneSet.add(li);
     // Record a lightweight done entry so the session Done counter is accurate
     const L = LISTINGS[li];
-    doneData.push({ id, title: L.title, doneAt: new Date().toISOString(), index: li });
+    doneData.push({ id, title: L.title, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: L.caro || '', doneAt: new Date().toISOString(), index: li });
     doneTodayCount++;
     renderSessionBar();
     pushToSupabase();
