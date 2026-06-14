@@ -3370,12 +3370,24 @@ function showAddWorkerForm() {
   if (f) { f.style.display = f.style.display === 'none' ? 'block' : 'none'; }
 }
 
+let _addWorkerBusy = false;
 async function doAddWorker() {
+  if (_addWorkerBusy) return;
   const name = (document.getElementById('wf-name')?.value || '').trim();
   const target = parseInt(document.getElementById('wf-target')?.value || '100') || 100;
   if (!name) { toast('Enter a name'); return; }
+  _addWorkerBusy = true;
+  const btn = document.querySelector('#add-worker-form .ai-gen-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   const { error } = await sb.from('workers').insert({ name, daily_target: target, active: true });
+  _addWorkerBusy = false;
+  if (btn) { btn.disabled = false; btn.textContent = 'Create worker'; }
   if (error) { toast('Failed: ' + error.message); return; }
+  // Clear inputs so re-opening the form is blank
+  const nameEl = document.getElementById('wf-name');
+  const targetEl = document.getElementById('wf-target');
+  if (nameEl) nameEl.value = '';
+  if (targetEl) targetEl.value = '';
   document.getElementById('add-worker-form').style.display = 'none';
   toast('Worker created ✓');
   _workersData = null;
@@ -3479,7 +3491,9 @@ async function workerAssignListings(workerId, workerName) {
   await refreshWorkers();
 }
 
+let _assignBatchBusy = false;
 async function workersAssignBatch() {
+  if (_assignBatchBusy) return;
   // Auto-distribute all unassigned active listings evenly across active workers
   const workers = (_workersData || []).filter(w => w.active);
   if (!workers.length) { toast('No active workers'); return; }
@@ -3492,6 +3506,7 @@ async function workersAssignBatch() {
   if (!data || !data.length) { toast('No unassigned listings'); return; }
   if (!confirm(`Distribute ${data.length} unassigned listings across ${workers.length} active workers?`)) return;
 
+  _assignBatchBusy = true;
   // Round-robin assignment
   const updates = data.map((r, i) => ({ id: r.id, assigned_worker_id: workers[i % workers.length].id }));
   // Batch in groups of 100 (Supabase limit)
@@ -3503,6 +3518,7 @@ async function workersAssignBatch() {
       if (!wIds.length) continue;
       const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
       if (bErr) {
+        _assignBatchBusy = false;
         toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
         _workersData = null;
         await refreshWorkers();
@@ -3511,6 +3527,7 @@ async function workersAssignBatch() {
       assigned += wIds.length;
     }
   }
+  _assignBatchBusy = false;
   toast(`Distributed ${data.length} listings ✓`);
   _workersData = null;
   await refreshWorkers();
