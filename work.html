@@ -2474,7 +2474,7 @@ function _renderFixView() {
         `<div class="shopee-img-thumb" onclick="window.open('${esc(src)}','_blank')">
           <img src="${esc(src)}" loading="lazy" alt="img ${i+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1">
           <a href="/api/image?url=${encodeURIComponent(src)}&n=${i+1}" download="shopee-${i+1}.jpg" class="shopee-img-dl" onclick="event.stopPropagation()">↓</a>
-        </div>`).join('')}</div>${fixShopeeImages.length > 1 ? `<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="copy-btn" onclick="downloadAllImages('fix')">↓ All ${fixShopeeImages.length}</button></div>` : ''}` : ''}
+        </div>`).join('')}</div>${fixShopeeImages.length > 1 ? `<div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="copy-btn" onclick="downloadAllImages()">↓ All ${fixShopeeImages.length}</button></div>` : ''}` : ''}
       ${shopeeInput
         ? shopeeCollapsed
           ? `<div class="shopee-collapsed" onclick="shopeeCollapsed=false;renderFixView()">▼ Shopee source</div>`
@@ -2820,6 +2820,13 @@ function switchTab(tab) {
     // device) would otherwise show stale until the query is retyped
     _listingsCache = [];
     _listingsEditingId = null;
+    // Sync filter button visual state (buttons start at full opacity in HTML;
+    // setListingsFilter is never called on init so the active indicator is wrong
+    // until the user clicks a filter button)
+    ['all', 'assigned', 'unassigned'].forEach(k => {
+      const el = document.getElementById('lf-' + k);
+      if (el) el.style.opacity = k === _listingsFilter ? '1' : '0.45';
+    });
     renderDoneView();
   }
   else if (tab === 'workers') {
