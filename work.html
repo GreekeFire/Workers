@@ -2104,6 +2104,7 @@ async function saveBatchItem(i) {
     shopeeUrl: r.url, carousellUrl: r.caroUrl || '', sourceCost: cost, sellPrice: sell,
     doneAt: new Date().toISOString()
   });
+  doneTodayCount++;
   // Resolved — take the source scrape off the belt and drop the card
   if (r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
   newBatchResults.splice(i, 1);
