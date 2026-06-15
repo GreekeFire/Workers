@@ -270,7 +270,7 @@ module.exports = async function handler(req, res) {
 
   // 3. Duplicate check — hard block
   const { data: existing } = await sb
-    .from('listings').select('id').eq('shopee_url', shopeeUrl).limit(1);
+    .from('listings').select('id').eq('shopee_url', shopeeUrl).neq('status', 'deleted').limit(1);
   if (existing && existing.length > 0) {
     await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'duplicate', listing_id: existing[0].id });
