@@ -202,10 +202,13 @@ async function generateAI(productText) {
   }
   let description = '';
   try {
-    description = normalizeDesc(JSON.parse(rawDesc.trim()).description || '');
+    // Strip markdown code fences if present before parsing
+    const cleaned = rawDesc.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    description = normalizeDesc(JSON.parse(cleaned).description || '');
   } catch {
     // Claude returned malformed JSON — strip wrapper and use raw text
     const raw = rawDesc.trim()
+      .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
       .replace(/^\s*\{[^"]*"description"\s*:\s*"/, '')
       .replace(/"\s*\}\s*$/, '');
     description = normalizeDesc(raw || rawDesc.trim());
