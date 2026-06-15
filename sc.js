@@ -88,8 +88,8 @@
     if (Array.isArray(cats) && cats.length) {
       extra.categories = cats.map(c => (typeof c === 'string' ? c : c.name || c.display_name || String(c)));
     }
-    const loc = priced.shop_location || (priced.shop && priced.shop.location);
-    if (loc) extra.shop_location = String(loc);
+    // shop_location from dataLayer is unreliable (returns undefined or wrong value
+    // for SG-shipping products) — only trust it from the v4 API fetch path.
     const rat = (priced.item_rating && priced.item_rating.rating_star) != null
       ? priced.item_rating.rating_star
       : priced.rating_star != null ? priced.rating_star : priced.shop_rating;
