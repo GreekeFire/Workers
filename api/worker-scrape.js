@@ -165,9 +165,7 @@ function categoryAllowed(categories) {
 }
 
 async function callClaudeInternal(system, userContent, maxTokens, temperature = 0.3) {
-  const base = process.env.VERCEL_URL
-    ? 'https://' + process.env.VERCEL_URL
-    : 'https://workers-v1.vercel.app';
+  const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
   const resp = await fetch(`${base}/api/claude`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
