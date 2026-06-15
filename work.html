@@ -1928,9 +1928,8 @@ async function pullScraped(target, silent) {
 // you work the current one, so advancing shows finished copy with no spinner.
 // Reads the matching scrape WITHOUT consuming it; the row is consumed normally
 // when that card actually becomes current. Cheap-but-not-free, so it's gated:
-// needs a server or BYOK key, a matching live scrape, and runs at most once per listing.
+// needs a matching live scrape, and runs at most once per listing.
 async function preGenerateNext() {
-  if (!savedApiKey) return;
   const ni = findNext(currentIndex + 1);
   if (ni >= LISTINGS.length) return;
   const L = LISTINGS[ni];
