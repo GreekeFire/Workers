@@ -326,8 +326,8 @@ module.exports = async function handler(req, res) {
     const productText = [p.title, p.description].filter(Boolean).join('\n\n');
     if (productText.trim()) {
       const ai = await generateAI(productText);
-      aiTitle       = ai.title       || null;
-      aiDescription = ai.description || null;
+      aiTitle       = ai.title       ?? null;
+      aiDescription = ai.description ?? null;
     }
   } catch (aiErr) {
     console.error('AI gen failed:', aiErr.message);

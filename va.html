@@ -710,7 +710,7 @@ function render() {
     html += `
       <div class="action-row">
         <button class="btn-skip" onclick="doSkip(${cur.id})">Skip →</button>
-        <button class="btn-done" id="done-btn" ${doneEnabled ? '' : 'disabled'} onclick="doDone(${cur.id}, ${acked})">Done ✓</button>
+        <button class="btn-done" id="done-btn" ${doneEnabled ? '' : 'disabled'} onclick="doDone(${cur.id}, ackedWarns.has(${cur.id}))">Done ✓</button>
       </div>`;
 
     html += `</div>`; // .listing-card

@@ -1301,7 +1301,7 @@ function openNextLinks(n) {
 
 function markDone() {
   const idx = currentIndex;
-  const costVal = parseFloat(editedCost !== null ? editedCost : LISTINGS[idx].cost);
+  const costVal = parseFloat(editedCost !== null && editedCost !== '' ? editedCost : LISTINGS[idx].cost);
   if (!(costVal > 0)) { toast('Enter a cost before marking Done'); return; }
   if (doneSet.has(idx) || deletedSet.has(idx)) {
     resetAI();
@@ -1865,7 +1865,7 @@ async function pullScraped(target, silent) {
     // the change — supplier price moves are exactly what kills margins
     const newCostVal = highestCost(p);
     const curCost = parseFloat(editedCost !== null ? editedCost : (L.cost || 0)) || 0;
-    if (newCostVal && Math.abs(newCostVal - curCost) > 0.005) {
+    if (Number.isFinite(newCostVal) && Math.abs(newCostVal - curCost) > 0.005) {
       editedCost = String(newCostVal);
       // Inline note, not a toast — a toast here would clobber the Done ✓ UNDO
       fixCostNote = `Cost $${curCost.toFixed(2)} → $${newCostVal.toFixed(2)} · sell $${calcSell(newCostVal).toFixed(2)}`;
@@ -1877,7 +1877,7 @@ async function pullScraped(target, silent) {
     // previous one, apply it instantly — no spinner. Guard on the exact source
     // text so a stale/re-scraped payload never shows the wrong product's copy.
     const cached = L.id ? preGenCache[L.id] : null;
-    if (cached && !cached.pending && cached.sourceText === shopeeInput && (cached.title || cached.desc)) {
+    if (cached && !cached.pending && cached.sourceText === shopeeInput && cached.title && cached.desc) {
       aiTitle = cached.title || '';
       aiDesc  = cached.desc  || '';
       delete preGenCache[L.id];
@@ -1994,16 +1994,16 @@ async function ingestScrapedBatch(items) {
         const imgs = p.images || [];
         try {
           const { title, desc } = await runAIGenerate(text);
-          newBatchResults[idx] = { url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
+          newBatchResults[idx] = { ...newBatchResults[idx], url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
         } catch (e) {
           // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
           newBatchResults[idx] = {
-            url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
+            ...newBatchResults[idx], url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
             title: '', desc: '', sourceText: text, sourceCollapsed: true,
           };
         }
       } catch (e) {
-        newBatchResults[idx] = { url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
+        newBatchResults[idx] = { ...newBatchResults[idx], url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
       }
       renderNewView();
     }
@@ -2096,8 +2096,8 @@ function copyBatch(i, field) {
 // spinner to finish (a few seconds per card) before clearing.
 function clearBatchItem(i) {
   const r = newBatchResults[i];
-  if (newBatchRunning && r && r.status === 'loading') {
-    toast('Wait for this card to finish loading, then clear it');
+  if (newBatchRunning) {
+    toast('Wait for the batch to finish loading, then clear it');
     return;
   }
   if (r && r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
@@ -2114,8 +2114,8 @@ async function saveBatchItem(i) {
   // completion (even on insert error), so the flag never needs resetting.
   if (r._saving) return;
   r._saving = true;
-  const cost = r.price || 0;
-  const sell = cost ? calcSell(cost) : 0;
+  const cost = r.price != null ? r.price : 0;
+  const sell = calcSell(cost);
   const { data, error } = await sb.from('listings').insert({
     title: r.title, status: 'done', shopee_url: r.url || '',
     carousell_url: r.caroUrl || null,
@@ -2175,9 +2175,9 @@ async function batchGenerateNew() {
 
         const cost = data.price_max || data.price || 0;
         const { title, desc } = await runAIGenerate(productText);
-        newBatchResults[idx] = { url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
+        newBatchResults[idx] = { ...newBatchResults[idx], url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
       } catch (e) {
-        newBatchResults[idx] = { url: urls[i], status: 'error', error: e.message || 'unknown' };
+        newBatchResults[idx] = { ...newBatchResults[idx], url: urls[i], status: 'error', error: e.message || 'unknown' };
       }
       renderNewView();
     }
@@ -2280,7 +2280,7 @@ function searchListings(query) {
     return `<div class="search-result" onmousedown="selectMatch(${mi})">
       <div class="search-result-name">${esc(m.name)}</div>
       <div class="search-result-meta">
-        <span class="search-result-price">Sell $${m.price}</span>
+        <span class="search-result-price">Sell $${m.price != null && isFinite(m.price) ? Number(m.price).toFixed(2) : '—'}</span>
         ${shopeeLink}${caroLink}${fixBtn}
       </div>
     </div>`;
@@ -2886,6 +2886,7 @@ function switchTab(tab) {
 let _lastFixIndex = -1;   // card slide-in fires only when this changes
 let _doneSearchTimer = null;
 let _recentReqSeq = 0;    // incremented on every recent-items fetch; stale callbacks compare against it
+let _searchReqSeq = 0;    // incremented on every _searchAllListings call; guards against stale results
 let _listingsEditingId = null;
 let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
@@ -2934,8 +2935,8 @@ function renderDoneView() {
     return;
   }
   clearTimeout(_doneSearchTimer);
-  if (_listingsCache.length && _listingsEditingId) {
-    // re-render from cache when toggling edit
+  if (_listingsCache.length && _listingsEditingId && !_listingsCacheIsRecent) {
+    // re-render from cache when toggling edit (only for search results, not recent-items cache)
     _renderListingsResults(_listingsCache);
     return;
   }
@@ -2977,6 +2978,7 @@ async function scanBadLinks() {
 }
 
 async function _searchAllListings(query) {
+  const mySeq = ++_searchReqSeq;
   const list = document.getElementById('done-list');
   try {
     // Word-based match: require every word, in any order. Splitting on
@@ -2989,17 +2991,22 @@ async function _searchAllListings(query) {
     // Each term must appear in EITHER title OR ai_title — listings show ai_title
     // in the LISTINGS tab so searching only title misses most AI-rewritten entries.
     for (const t of terms.length ? terms : [query.trim()]) {
-      const escaped = t.replace(/[%_]/g, '\\$&');
+      // Strip % _ \ — PostgREST's ilike has no ESCAPE clause so these can't be
+      // safely escaped; product titles never legitimately contain them anyway.
+      const escaped = t.replace(/[%_\\]/g, '');
+      if (!escaped) continue;
       q = q.or(`title.ilike.%${escaped}%,ai_title.ilike.%${escaped}%`);
     }
     q = _applyListingsFilter(q);
     const { data, error } = await q.order('status').limit(30);
+    if (mySeq !== _searchReqSeq) return; // a newer search fired while we were awaiting
     if (error) throw error;
     if (!data.length) { list.innerHTML = '<p class="done-empty">No matches</p>'; return; }
     _listingsCache = data;
     _listingsCacheIsRecent = false;
     _renderListingsResults(data);
   } catch (e) {
+    if (mySeq !== _searchReqSeq) return;
     list.innerHTML = `<p class="done-empty">Search failed</p>`;
   }
 }
@@ -3706,11 +3713,10 @@ async function workersAssignBatch() {
       if (!wIds.length) continue;
       const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
       if (bErr) {
-        _assignBatchBusy = false;
         toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
         _workersData = null;
         await refreshWorkers();
-        return;
+        return; // finally block resets _assignBatchBusy
       }
       assigned += wIds.length;
     }
