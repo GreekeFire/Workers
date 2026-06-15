@@ -4,6 +4,9 @@
 > dataLayer scrape fix, unified card-based NEW tab, refresh-safe batch,
 > dedup against Done, swipe gestures, demo polish, cross-device sync fixes.
 >
+> **Updated 2026-06-15** after overnight automated fix pass (52 commits). New tests
+> added: 8.19–8.40. Manual queue updated.
+>
 > Report failures by **test number** + what you saw instead.
 
 ---
@@ -316,6 +319,111 @@ Open a fresh product in Safari, run the userscript → ✅ green toast.
 6. In Supabase → `listings` → ✅ `carousell_url` column now contains the pasted URL.
 7. In owner's LISTINGS tab → tap the listing → ✅ "Carousell ↗" link is present and opens the correct URL.
 
+### Test 8.19 — iOS PWA: Assign listings inline input
+1. Open `work.html` as a home-screen PWA on iPhone → WORKERS tab.
+2. Tap **+ Assign listings** on a worker → ✅ inline number input expands (no native prompt dialog).
+3. Enter a number → tap **Assign** → ✅ toast confirms, worker's pending count updates.
+4. Double-tap Assign quickly → ✅ second tap ignored, no duplicate assignment.
+
+### Test 8.20 — iOS PWA: Copy VA link
+1. In WORKERS tab, tap **Copy VA link** → ✅ dismissable overlay appears with a selectable URL input.
+2. Long-press the URL → copy → paste elsewhere → ✅ correct VA URL.
+
+### Test 8.21 — iOS PWA: Rotate link
+1. Tap **Rotate link** on a worker → ✅ inline two-step confirm strip appears (no native confirm dialog).
+2. Tap **Confirm** → ✅ link rotated, overlay shows new URL.
+
+### Test 8.22 — iOS PWA: Deactivate/Reactivate
+1. Tap **Deactivate** → ✅ inline confirm strip, no native dialog.
+2. Double-tap Deactivate quickly → ✅ second tap ignored, worker deactivated once only.
+3. Tap **Reactivate** → ✅ worker active again. Double-tap → ✅ only fires once.
+
+### Test 8.23 — iOS PWA: Auto-assign
+1. Tap **Distribute all unassigned** → ✅ inline two-step confirm strip with listing count shown.
+2. Tap **Confirm** within 6s → ✅ distributes. Tap **Cancel** → ✅ aborts with no change.
+
+### Test 8.24 — VA image download actually saves files
+1. On a VA listing card, tap **Download all images**.
+2. ✅ Files download to device (not new tabs opening).
+
+### Test 8.25 — VA poll refreshes existing listing data
+1. Open a VA listing card where AI title is still generating (`ai_title = null`).
+2. Wait for the 10s poll to fire after the server writes the title.
+3. ✅ The "AI title not generated" banner disappears and the title appears — without reloading.
+
+### Test 8.26 — VA double-tap Skip
+1. Tap **Skip →** twice in rapid succession.
+2. ✅ Only one listing is skipped — the second tap is ignored.
+
+### Test 8.27 — VA all-skipped empty state
+1. Skip every listing in the VA queue.
+2. ✅ Shows "All skipped" message with guidance — NOT "go source more products".
+
+### Test 8.28 — VA description Copy hidden when collapsed
+1. On a VA listing card, leave the description panel collapsed.
+2. ✅ The Copy button next to description is not visible.
+3. Expand the description panel → ✅ Copy button appears.
+
+### Test 8.29 — LISTINGS search finds AI-rewritten titles
+1. In LISTINGS tab, search for a word that appears in a listing's AI title but NOT in its original Shopee title.
+2. ✅ The listing appears in results.
+
+### Test 8.30 — LISTINGS edit sell price matches what Save writes
+1. Open a listing in the LISTINGS tab edit form.
+2. Note the sell price displayed.
+3. ✅ Sell price shown = `calcSell(cost)` formula result — not a stored DB value that may differ.
+4. Click Save → check Supabase → ✅ `sell_price` in DB matches what was displayed.
+
+### Test 8.31 — LISTINGS edit title saves to ai_title (VAs see it)
+1. In LISTINGS tab, edit a listing's title → Save.
+2. Open the VA queue for a worker assigned that listing.
+3. ✅ VA sees the owner's edited title (not the old AI or Shopee title).
+4. In Supabase → `listings` → ✅ `ai_title` column updated.
+
+### Test 8.32 — LISTINGS recent view not hidden by filter
+1. Set LISTINGS filter to **Unassigned**.
+2. Clear the search box so recent items view shows.
+3. ✅ Recent done listings appear even if all 25 were VA-assigned.
+
+### Test 8.33 — scanBadLinks only flags done listings
+1. LISTINGS tab → **⚠ Scan links**.
+2. ✅ Active listings (not yet posted) are NOT flagged for missing Carousell URL.
+3. ✅ Only `status = done` listings with no Carousell URL are flagged.
+
+### Test 8.34 — Send to FIX removes from VA queue
+1. In LISTINGS tab, find a done listing assigned to a VA → click **Send to FIX**.
+2. Open that VA's queue.
+3. ✅ The listing does NOT appear in the VA's queue.
+4. In Supabase → `listings` → ✅ `assigned_worker_id = null`, `status = active`.
+
+### Test 8.35 — NEW tab batch lock resets on error
+1. In NEW tab, trigger a batch generate that errors mid-way (e.g. disconnect network briefly).
+2. ✅ After the error, the NEW tab is not permanently locked — you can still pull/generate.
+
+### Test 8.36 — NEW tab: clear during batch blocked
+1. Start a batch generate with multiple cards loading.
+2. While a card is still in shimmer/loading state, tap **Clear** on it.
+3. ✅ Toast explains why Clear is blocked on loading cards. Card stays.
+
+### Test 8.37 — LISTINGS recent items don't overwrite active search
+1. In LISTINGS tab, type a search query.
+2. ✅ Recent-items results from a previous empty state don't replace your search results mid-type.
+
+### Test 8.38 — Cloud refresh clears AI state
+1. In FIX tab, view a card with AI title/description shown.
+2. Click **↻ Refresh from cloud**.
+3. ✅ The first card after refresh shows the correct product's AI copy — not leftover copy from the previous card.
+
+### Test 8.39 — Worker sold count accurate across devices
+1. Log a sale on one device (with a listing selected from dropdown).
+2. On a second device, open WORKERS tab → refresh.
+3. ✅ Sold count for the assigned worker updates correctly on both devices.
+
+### Test 8.40 — iOS Shortcut submissions go through guards
+1. Submit a product via the iOS Shortcut that is: non-SG seller OR wrong category OR low rating.
+2. After the VA scrapes it, open the VA listing card.
+3. ✅ Relevant warning chips appear (category / non-SG seller / low rating).
+
 ### Test 8.17 — Fuzzy duplicate log
 1. Scrape a product whose title and cost are very similar (≥60% title match, cost within 10%) to an existing listing.
 2. ✅ The listing is NOT blocked — it still creates normally with no warning shown to VA.
@@ -349,13 +457,43 @@ Automated tests were run on 2026-06-15. The following could not be automated —
 ### Needs clean manual test
 - **6.1 UNDO** — log a sale, tap ✕ to delete, press UNDO within 6 seconds, confirm sale returns
 
-### Needs iPhone (Part 5)
+### Needs iPhone / iOS PWA (Part 5 + overnight fixes)
 - **5.1** Scraper green toast on Safari
 - **5.2** NEW tab cards + swipe on mobile (Save/Clear visible)
 - **5.3** FIX swipe on mobile, Done/Delete buttons hidden
+- **8.19** Assign listings inline input (no prompt dialog)
+- **8.20** Copy VA link overlay (no prompt dialog)
+- **8.21** Rotate link inline confirm (no confirm dialog)
+- **8.22** Deactivate/Reactivate inline confirm + double-tap guard
+- **8.23** Auto-assign inline confirm strip
 
 ### Needs two devices (Part 7)
 - **7** Cross-device handoff: scrape on laptop → resolve on iPhone → laptop confirms gone
+- **8.39** Sold count accurate across devices
+
+### Needs VA session (overnight fixes)
+- **8.24** VA image download saves files (not new tabs)
+- **8.25** VA poll refreshes existing listing AI title when it arrives late
+- **8.26** VA double-tap Skip only skips one card
+- **8.27** VA all-skipped empty state shows correct message
+- **8.28** VA description Copy hidden when panel collapsed
+- **8.34** Send to FIX removes listing from VA queue
+- **8.40** iOS Shortcut submissions go through guards
+
+### Needs LISTINGS tab
+- **8.29** Search finds AI-rewritten titles
+- **8.30** Edit sell price shown matches what Save will write
+- **8.31** Title edit saves to ai_title — VA sees updated title
+- **8.32** Recent view not hidden when filter = Unassigned
+- **8.33** Scan links only flags done listings
+- **8.37** Recent items don't overwrite active search
+
+### Needs NEW tab
+- **8.35** Batch lock resets after error
+- **8.36** Clear blocked on loading cards during batch
+
+### Needs FIX tab
+- **8.38** Cloud refresh clears AI state from previous card
 
 ---
 
@@ -405,6 +543,28 @@ Automated tests were run on 2026-06-15. The following could not be automated —
 | 8.16| Sold count in WORKERS tab after logging a linked sale               | ✅ |
 | 8.17| Fuzzy dupe → listing created, duplicate_log row written             | ⏳ manual |
 | 8.18| Carousell URL required: blocked without, green on valid, saved to DB | ⏳ manual |
+| 8.19| iOS PWA: Assign listings inline input, no prompt, double-tap guard  | ⏳ manual |
+| 8.20| iOS PWA: Copy VA link overlay, selectable URL                       | ⏳ manual |
+| 8.21| iOS PWA: Rotate link inline confirm strip                           | ⏳ manual |
+| 8.22| iOS PWA: Deactivate/Reactivate inline confirm + double-tap guard    | ⏳ manual |
+| 8.23| iOS PWA: Auto-assign inline confirm strip                           | ⏳ manual |
+| 8.24| VA image download saves files (not new tabs)                        | ⏳ manual |
+| 8.25| VA poll refreshes existing listing data when AI title arrives late  | ⏳ manual |
+| 8.26| VA double-tap Skip only skips one card                              | ⏳ manual |
+| 8.27| VA all-skipped empty state shows correct message                    | ⏳ manual |
+| 8.28| VA description Copy hidden when panel collapsed                     | ⏳ manual |
+| 8.29| LISTINGS search finds AI-rewritten titles                           | ⏳ manual |
+| 8.30| LISTINGS edit sell price matches what Save will write               | ⏳ manual |
+| 8.31| LISTINGS title edit saves to ai_title — VA sees updated title       | ⏳ manual |
+| 8.32| LISTINGS recent view not hidden when filter = Unassigned            | ⏳ manual |
+| 8.33| scanBadLinks only flags done listings for missing Carousell URL     | ⏳ manual |
+| 8.34| Send to FIX removes listing from VA queue, clears assigned_worker_id| ⏳ manual |
+| 8.35| NEW tab batch lock resets after error                               | ⏳ manual |
+| 8.36| NEW tab Clear blocked on loading cards during batch                 | ⏳ manual |
+| 8.37| LISTINGS recent items don't overwrite active search mid-type        | ⏳ manual |
+| 8.38| FIX cloud refresh clears AI state from previous card               | ⏳ manual |
+| 8.39| Sold count accurate across devices                                  | ⏳ manual |
+| 8.40| iOS Shortcut submissions go through category/location/rating guards | ⏳ manual |
 
 ---
 
