@@ -1,5 +1,14 @@
 # 🧪 WORKERS APP — FULL TEST DAY PLAN
 
+## 🛠 Useful Commands
+
+| Command | What it does |
+|---|---|
+| `/code-review ultra` | Deep multi-agent cloud bug hunt — run after any major merge |
+| `/loop` | Autonomous improvement loop (Claude Code desktop app only) |
+
+---
+
 > Created 2026-06-13. Covers everything shipped in the big fix/polish session:
 > dataLayer scrape fix, unified card-based NEW tab, refresh-safe batch,
 > dedup against Done, swipe gestures, demo polish, cross-device sync fixes.
