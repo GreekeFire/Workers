@@ -703,7 +703,7 @@ function render() {
         <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
           value="${esc(caroUrlDraft[cur.id] || '')}"
           style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid ${/carousell\./i.test(caroUrlDraft[cur.id]||'') ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)'};background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
-          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=/carousell\\./i.test(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';const _b=document.getElementById('done-btn');if(_b)_b.disabled=!(_v&&(${!hasWarnings || acked})&&${!aiMissing}&&${!aiEmpty})">
+          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=/carousell\\./i.test(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';_refreshDoneBtn(${cur.id})">
       </div>`;
 
     // Actions
@@ -726,6 +726,23 @@ function render() {
 
   // Auto-resize textareas
   document.querySelectorAll('textarea').forEach(autoResize);
+}
+
+// Re-evaluate Done button enabled state from live globals — called from the
+// Carousell URL oninput so the button responds correctly after a poll updates
+// ai_title (which changes aiMissing/aiEmpty after the baked literals were set).
+function _refreshDoneBtn(listingId) {
+  const cur = listings.find(l => l.id === listingId);
+  if (!cur) return;
+  const warnings   = cur.guard_warnings || [];
+  const hasWarnings = warnings.length > 0;
+  const acked      = ackedWarns.has(listingId);
+  const aiMissing  = cur.ai_title == null;
+  const aiEmpty    = !aiMissing && cur.ai_title === '';
+  const caroValid  = /carousell\./i.test(caroUrlDraft[listingId] || '');
+  const enabled    = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
+  const btn = document.getElementById('done-btn');
+  if (btn) btn.disabled = !enabled;
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────

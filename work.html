@@ -1928,8 +1928,9 @@ async function pullScraped(target, silent) {
 // you work the current one, so advancing shows finished copy with no spinner.
 // Reads the matching scrape WITHOUT consuming it; the row is consumed normally
 // when that card actually becomes current. Cheap-but-not-free, so it's gated:
-// needs an API key, a matching live scrape, and runs at most once per listing.
+// needs a server or BYOK key, a matching live scrape, and runs at most once per listing.
 async function preGenerateNext() {
+  if (!savedApiKey) return;
   const ni = findNext(currentIndex + 1);
   if (ni >= LISTINGS.length) return;
   const L = LISTINGS[ni];
@@ -2020,26 +2021,31 @@ function saveApiKeyBatch(i) {
   });
 }
 
-// Re-fetch a batch card's product from its URL via /api/shopee
+// Re-fetch a batch card's product from its URL via /api/shopee.
+// Uses object-reference tracking (indexOf) so a clearBatchItem() splice
+// during the await doesn't corrupt the index.
 async function fetchBatchShopee(i) {
   const r = newBatchResults[i];
   if (!r || !r.url || !r.url.trim()) { toast('Enter a Shopee URL first'); return; }
-  newBatchResults[i] = { ...r, batchFetching: true };
+  r.batchFetching = true;
   renderNewView();
   try {
     const res  = await fetch(`/api/shopee?url=${encodeURIComponent(r.url.trim())}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    const ci = newBatchResults.indexOf(r);
+    if (ci === -1) return; // card cleared while fetch was in flight
     const text = [data.title, data.description].filter(Boolean).join('\n\n');
-    newBatchResults[i] = {
-      ...newBatchResults[i], batchFetching: false,
-      sourceText: text || newBatchResults[i].sourceText, sourceCollapsed: true,
-      images: (data.images && data.images.length) ? data.images : newBatchResults[i].images,
-      price: data.price_max || data.price || newBatchResults[i].price || 0,
+    newBatchResults[ci] = {
+      ...r, batchFetching: false,
+      sourceText: text || r.sourceText, sourceCollapsed: true,
+      images: (data.images && data.images.length) ? data.images : r.images,
+      price: data.price_max || data.price || r.price || 0,
     };
     toast('Fetched ✓');
   } catch (e) {
-    newBatchResults[i] = { ...newBatchResults[i], batchFetching: false };
+    const ci = newBatchResults.indexOf(r);
+    if (ci !== -1) newBatchResults[ci] = { ...r, batchFetching: false };
     toast('Fetch failed — ' + (e.message || 'unknown'));
   }
   renderNewView();
@@ -3115,7 +3121,9 @@ async function listingsMarkDone(id) {
     // the raw Shopee title, not the AI-rewritten one.
     const L = LISTINGS[li];
     const displayTitle = (item && (item.ai_title || item.title)) || L.title;
-    doneData.push({ id, title: displayTitle, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: L.caro || '', doneAt: new Date().toISOString(), index: li });
+    const caroInput = document.getElementById('leca-' + id);
+    const caroUrl = (caroInput && caroInput.value) || (item && item.carousell_url) || L.caro || '';
+    doneData.push({ id, title: displayTitle, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: caroUrl, doneAt: new Date().toISOString(), index: li });
     doneTodayCount++;
     renderSessionBar();
     pushToSupabase();
@@ -3653,30 +3661,41 @@ let _assignBatchPending = null; // { count, workerCount } — pending confirm st
 
 async function workersAssignBatch() {
   if (_assignBatchBusy) return;
+  // Set busy immediately before any await so rapid double-taps can't bypass the guard
+  _assignBatchBusy = true;
+  try {
   // Auto-distribute all unassigned active listings evenly across active workers
   const workers = (_workersData || []).filter(w => w.active);
   if (!workers.length) { toast('No active workers'); return; }
-  const { data, error } = await sb.from('listings')
+  const { data: firstData, error } = await sb.from('listings')
     .select('id')
     .eq('status', 'active')
     .is('assigned_worker_id', null)
     .order('id');
   if (error) { toast('Failed: ' + error.message); return; }
-  if (!data || !data.length) { toast('No unassigned listings'); return; }
+  if (!firstData || !firstData.length) { toast('No unassigned listings'); return; }
 
   // confirm() is silently blocked in iOS PWA standalone mode — use an inline
   // two-step instead: first press shows a confirm banner in the workers header,
   // second press (within 6 s) runs the action; anything else cancels.
   if (!_assignBatchPending) {
-    _assignBatchPending = { count: data.length, workerCount: workers.length };
+    _assignBatchPending = { count: firstData.length, workerCount: workers.length };
+    _assignBatchBusy = false; // allow second press
     _renderWorkersView(); // re-render header with confirm strip visible
     setTimeout(() => { if (_assignBatchPending) { _assignBatchPending = null; _renderWorkersView(); } }, 6000);
     return;
   }
-  // Second press — run the distribution
+  // Second press — re-fetch fresh data so we don't double-assign listings that
+  // were assigned by another device during the 6-second confirm window
   _assignBatchPending = null;
+  const { data, error: err2 } = await sb.from('listings')
+    .select('id')
+    .eq('status', 'active')
+    .is('assigned_worker_id', null)
+    .order('id');
+  if (err2) { toast('Failed: ' + err2.message); return; }
+  if (!data || !data.length) { toast('No unassigned listings'); return; }
 
-  _assignBatchBusy = true;
   // Round-robin assignment
   const updates = data.map((r, i) => ({ id: r.id, assigned_worker_id: workers[i % workers.length].id }));
   // Batch in groups of 100 (Supabase limit)
@@ -3697,10 +3716,12 @@ async function workersAssignBatch() {
       assigned += wIds.length;
     }
   }
-  _assignBatchBusy = false;
   toast(`Distributed ${data.length} listings ✓`);
   _workersData = null;
   await refreshWorkers();
+  } finally {
+    _assignBatchBusy = false;
+  }
 }
 
 // Boot: if a session already exists (persisted in localStorage), start the app;

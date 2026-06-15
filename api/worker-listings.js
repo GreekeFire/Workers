@@ -77,5 +77,6 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'listings-failed' });
   }
 
-  return res.json({ ok: true, listings: listingsResult.data || [], count_today: countResult.count || 0 });
+  if (countResult.error) console.error('count_today error:', countResult.error);
+  return res.json({ ok: true, listings: listingsResult.data || [], count_today: countResult.error ? null : (countResult.count || 0) });
 };
