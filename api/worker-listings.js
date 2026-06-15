@@ -39,9 +39,7 @@ module.exports = async function handler(req, res) {
       .limit(3);
 
     if (pending && pending.length > 0) {
-      const base = process.env.VERCEL_URL
-        ? 'https://' + process.env.VERCEL_URL
-        : 'https://workers-v1.vercel.app';
+      const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
       // Fire scrape calls concurrently and don't await — each call invokes Claude
       // (5-10 s) and awaiting them serially would stall the response for up to
       // 30 s (3 rows × 10 s), well past Vercel's function timeout.  The scrapes
