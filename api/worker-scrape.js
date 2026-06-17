@@ -309,18 +309,20 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // 4. Soft guards
+  // 4. Soft guards — skip on refresh (owner already approved the listing)
   const warnings = [];
-  const catOk = categoryAllowed(categories);
-  if (catOk === false) warnings.push('category');
-  if (shopLocation !== null && shopLocation !== undefined) {
-    if (String(shopLocation).toLowerCase() !== 'singapore') warnings.push('non-sg-seller');
+  if (!isRefresh) {
+    const catOk = categoryAllowed(categories);
+    if (catOk === false) warnings.push('category');
+    if (shopLocation !== null && shopLocation !== undefined) {
+      if (String(shopLocation).toLowerCase() !== 'singapore') warnings.push('non-sg-seller');
+    }
+    if (ratingStar !== null && ratingStar !== undefined) {
+      if (Number(ratingStar) < 4.0) warnings.push('low-rating');
+    }
+    if (cost > 0 && cost < PRICE_BAND_MIN) warnings.push('price-too-low');
+    if (cost > 0 && cost > PRICE_BAND_MAX) warnings.push('price-too-high');
   }
-  if (ratingStar !== null && ratingStar !== undefined) {
-    if (Number(ratingStar) < 4.0) warnings.push('low-rating');
-  }
-  if (cost > 0 && cost < PRICE_BAND_MIN) warnings.push('price-too-low');
-  if (cost > 0 && cost > PRICE_BAND_MAX) warnings.push('price-too-high');
 
   // 5. Sell price
   const sellPrice = cost > 0 ? calcSellPrice(cost) : null;
