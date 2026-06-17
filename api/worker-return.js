@@ -26,9 +26,15 @@ module.exports = async function handler(req, res) {
   if (wErr || !worker) return res.status(404).json({ error: 'worker-not-found' });
   if (!worker.active)  return res.status(403).json({ error: 'worker-inactive' });
 
+  // Fetch current guard_warnings so we can append without overwriting
+  const { data: listing } = await sb
+    .from('listings').select('guard_warnings').eq('id', listing_id).single();
+  const existing = Array.isArray(listing?.guard_warnings) ? listing.guard_warnings : [];
+  const warnings = existing.includes('dead-link') ? existing : [...existing, 'dead-link'];
+
   const { error } = await sb
     .from('listings')
-    .update({ assigned_worker_id: null })
+    .update({ assigned_worker_id: null, guard_warnings: warnings })
     .eq('id', listing_id)
     .eq('assigned_worker_id', worker_id);
 

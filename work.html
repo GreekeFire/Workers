@@ -2958,7 +2958,7 @@ async function scanBadLinks() {
   list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
   try {
     const { data, error } = await sb.from('listings')
-      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
+      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings')
       .limit(5000);
     if (error) throw error;
     // Active listings are in the VA queue and haven't been posted yet — missing
@@ -2987,7 +2987,7 @@ async function _searchAllListings(query) {
     const terms = query.split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1).slice(0, 8);
     let q = sb
       .from('listings')
-      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id');
+      .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings');
     // Each term must appear in EITHER title OR ai_title — listings show ai_title
     // in the LISTINGS tab so searching only title misses most AI-rewritten entries.
     for (const t of terms.length ? terms : [query.trim()]) {
@@ -3068,6 +3068,7 @@ function _renderListingsResults(data, prefix) {
           Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
           ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> · 👤 VA</span>' : ''}
+          ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> · ⚠ Dead link</span>' : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${validShopeeLink(d.shopee_url)
