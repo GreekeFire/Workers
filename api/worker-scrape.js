@@ -341,7 +341,7 @@ module.exports = async function handler(req, res) {
     console.error('AI gen failed:', aiErr.message);
   }
 
-  // 7a. Refresh existing active listing — update AI, images, assignment; preserve cost/sell set by owner
+  // 7a. Refresh existing active listing — update AI, images, price, and assignment
   if (isRefresh) {
     const { error: updateErr } = await sb.from('listings').update({
       assigned_worker_id: worker_id,
@@ -349,6 +349,8 @@ module.exports = async function handler(req, res) {
       ai_description:     aiDescription,
       images:             p.images && p.images.length ? p.images : null,
       guard_warnings:     warnings.length ? warnings : null,
+      source_cost:        cost || null,
+      sell_price:         sellPrice || null,
     }).eq('id', existingListing.id);
 
     await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);

@@ -613,7 +613,6 @@ function render() {
           </div>
           <div class="progress-label">${profile.count_today} / ${profile.daily_target}</div>
         </div>
-        <button id="pull-btn" onclick="doPull()" style="flex-shrink:0;padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer">↻ Pull</button>
       </div>
     </div>`;
 
@@ -718,12 +717,13 @@ function render() {
       <textarea class="ai-desc-box" readonly id="desc-ta">${esc(desc)}</textarea>`;
     }
 
-    // Shopee + Carousell quick-open links side by side
+    // Shopee + Carousell quick-open links + Pull button side by side
     const existingCaroUrl = caroUrlDraft[cur.id] || '';
-    if (cur.shopee_url || existingCaroUrl) {
+    {
       html += `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">`;
       if (cur.shopee_url) html += `<a href="${esc(cur.shopee_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">Open on Shopee ↗</a>`;
       if (existingCaroUrl) html += `<a href="${esc(existingCaroUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">Open on Carousell ↗</a>`;
+      html += `<button id="pull-btn" onclick="doPull()" style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer">↻ Pull</button>`;
       html += `</div>`;
     }
 
