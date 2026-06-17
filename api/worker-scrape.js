@@ -271,36 +271,42 @@ module.exports = async function handler(req, res) {
     return res.json({ ok: false, error: 'no-url' });
   }
 
-  // 3. Duplicate check — hard block
+  // 3. Duplicate check
+  // done/deleted → hard block. active → refresh with new scrape data and assign to this worker.
   const { data: existing } = await sb
-    .from('listings').select('id').eq('shopee_url', shopeeUrl).neq('status', 'deleted').limit(1);
-  if (existing && existing.length > 0) {
+    .from('listings').select('id, status').eq('shopee_url', shopeeUrl).neq('status', 'deleted').limit(1);
+  const existingListing = existing && existing.length > 0 ? existing[0] : null;
+  const isRefresh = existingListing && existingListing.status === 'active';
+
+  if (existingListing && !isRefresh) {
     await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
-    return res.json({ ok: false, error: 'duplicate', listing_id: existing[0].id });
+    return res.json({ ok: false, error: 'duplicate', listing_id: existingListing.id });
   }
 
-  // 3b. Fuzzy near-match check — log silently, never block
-  try {
-    if (p.title && cost > 0) {
-      const { data: fuzzyMatches } = await sb.rpc('find_fuzzy_duplicate', {
-        p_title: p.title,
-        p_cost: cost,
-        p_threshold: 0.6,
-      });
-      if (fuzzyMatches && fuzzyMatches.length > 0) {
-        sb.from('duplicate_log').insert({
-          listing_id:     fuzzyMatches[0].listing_id,
-          incoming_title: p.title,
-          incoming_url:   shopeeUrl,
-          incoming_cost:  cost,
-          worker_id:      worker_id,
-        }).then(({ error }) => {
-          if (error) console.error('duplicate_log insert failed:', error.message);
+  // 3b. Fuzzy near-match check — log silently, never block. Skip on refresh (would match itself).
+  if (!isRefresh) {
+    try {
+      if (p.title && cost > 0) {
+        const { data: fuzzyMatches } = await sb.rpc('find_fuzzy_duplicate', {
+          p_title: p.title,
+          p_cost: cost,
+          p_threshold: 0.6,
         });
+        if (fuzzyMatches && fuzzyMatches.length > 0) {
+          sb.from('duplicate_log').insert({
+            listing_id:     fuzzyMatches[0].listing_id,
+            incoming_title: p.title,
+            incoming_url:   shopeeUrl,
+            incoming_cost:  cost,
+            worker_id:      worker_id,
+          }).then(({ error }) => {
+            if (error) console.error('duplicate_log insert failed:', error.message);
+          });
+        }
       }
+    } catch (fuzzyErr) {
+      console.error('fuzzy dupe check failed:', fuzzyErr.message);
     }
-  } catch (fuzzyErr) {
-    console.error('fuzzy dupe check failed:', fuzzyErr.message);
   }
 
   // 4. Soft guards
@@ -333,7 +339,33 @@ module.exports = async function handler(req, res) {
     console.error('AI gen failed:', aiErr.message);
   }
 
-  // 7. Create listing
+  // 7a. Refresh existing active listing — update AI, images, assignment; preserve cost/sell set by owner
+  if (isRefresh) {
+    const { error: updateErr } = await sb.from('listings').update({
+      assigned_worker_id: worker_id,
+      ai_title:           aiTitle,
+      ai_description:     aiDescription,
+      images:             p.images && p.images.length ? p.images : null,
+      guard_warnings:     warnings.length ? warnings : null,
+    }).eq('id', existingListing.id);
+
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+
+    if (updateErr) {
+      console.error('listing refresh error:', updateErr);
+      return res.status(500).json({ ok: false, error: 'listing-refresh: ' + updateErr.message });
+    }
+
+    return res.json({
+      ok: true,
+      listing_id: existingListing.id,
+      warnings,
+      ai_generated: !!(aiTitle || aiDescription),
+      refreshed: true,
+    });
+  }
+
+  // 7b. Create new listing
   const { data: listing, error: lErr } = await sb
     .from('listings')
     .insert({
