@@ -60,7 +60,7 @@ module.exports = async function handler(req, res) {
   const today = new Date().toISOString().slice(0, 10);
   const [listingsResult, countResult] = await Promise.all([
     sb.from('listings')
-      .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, guard_warnings, status, created_at')
+      .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, carousell_url, guard_warnings, status, created_at')
       .eq('assigned_worker_id', w)
       .eq('status', 'active')
       .order('created_at', { ascending: true }),

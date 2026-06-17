@@ -623,6 +623,7 @@ function render() {
     const acked        = ackedWarns.has(cur.id);
     const aiMissing    = cur.ai_title == null;
     const aiEmpty      = !aiMissing && cur.ai_title === '';
+    if (cur.carousell_url && !caroUrlDraft[cur.id]) caroUrlDraft[cur.id] = cur.carousell_url;
     const caroValid    = /carousell\./i.test(caroUrlDraft[cur.id] || '');
     const doneEnabled  = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
     const title        = cur.ai_title || cur.title || '';
@@ -702,10 +703,13 @@ function render() {
     }
 
     // Carousell URL input (required before Done)
+    const existingCaroUrl = caroUrlDraft[cur.id] || '';
+    const caroLinkLabel = existingCaroUrl ? 'Open on Carousell ↗' : null;
     html += `
       <div style="margin-top:14px">
+        ${caroLinkLabel ? `<a href="${esc(existingCaroUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">${caroLinkLabel}</a>` : ''}
         <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:6px">
-          Post this listing on Carousell first, then paste the link below. <span style="color:#f87171">Required to mark Done.</span>
+          ${existingCaroUrl ? 'Edit the listing on Carousell, then confirm the link below.' : 'Post this listing on Carousell first, then paste the link below.'} <span style="color:#f87171">Required to mark Done.</span>
         </div>
         <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
           value="${esc(caroUrlDraft[cur.id] || '')}"
