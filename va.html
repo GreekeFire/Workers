@@ -471,7 +471,9 @@ function warnLabel(w) {
   return map[w] || ('⚠ ' + w);
 }
 
-// ── Copy helper ───────────────────────────────────────────────────────────────
+// ── Copy helpers ──────────────────────────────────────────────────────────────
+function copyFromData(el, btnId) { copyText(el.dataset.copy || '', btnId); }
+
 function copyText(text, btnId) {
   const confirm = () => {
     if (btnId) {
@@ -699,18 +701,22 @@ function render() {
     html += `
       <div class="field-header">
         <span class="field-label">Title</span>
-        <button class="copy-btn" id="copy-title-btn" onclick="copyText(${JSON.stringify(title)}, 'copy-title-btn')">Copy</button>
+        <button class="copy-btn" id="copy-title-btn" data-copy="${esc(title)}" onclick="copyFromData(this,'copy-title-btn')">Copy</button>
       </div>
       <textarea class="ai-title-box" readonly rows="3" id="title-ta">${esc(title)}</textarea>`;
 
-    // Description (collapsed by default; Copy button only appears when expanded)
+    // Description
     html += `
       <div class="field-header">
         <span class="field-label">Description</span>
-        <button class="copy-btn" id="copy-desc-btn" style="${desc ? '' : 'display:none'}" onclick="copyText(${JSON.stringify(desc)}, 'copy-desc-btn')">Copy</button>
-      </div>
-      <button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">${desc ? '▼ Hide description' : '▶ Show description'}</button>
-      <textarea class="ai-desc-box" readonly id="desc-ta" style="${desc ? '' : 'display:none'}">${esc(desc)}</textarea>`;
+        <button class="copy-btn" id="copy-desc-btn" style="${desc ? '' : 'display:none'}" data-copy="${esc(desc)}" onclick="copyFromData(this,'copy-desc-btn')">Copy</button>
+      </div>`;
+    if (!desc) {
+      html += `<div style="font-size:13px;color:var(--text-tertiary);padding:10px 0">⏳ Generating… tap Pull in ~20 seconds</div>`;
+    } else {
+      html += `<button class="desc-toggle" id="desc-toggle" onclick="toggleDesc()">▼ Hide description</button>
+      <textarea class="ai-desc-box" readonly id="desc-ta">${esc(desc)}</textarea>`;
+    }
 
     // Shopee + Carousell quick-open links side by side
     const existingCaroUrl = caroUrlDraft[cur.id] || '';
