@@ -727,6 +727,15 @@ function render() {
     if (remaining > 1) {
       html += `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:4px">${remaining - 1} more in queue</div>`;
     }
+
+    // Bookmarklet — always shown so VA can scrape from the Shopee link above
+    if (profile && profile.bookmarklet) {
+      html += `<div class="bm-card" style="margin-top:20px">
+        <div class="bm-label">Your Shopee bookmarklet</div>
+        <textarea class="bm-code" rows="3" readonly onclick="this.select()">${esc(profile.bookmarklet)}</textarea>
+        <div class="bm-instructions">Run this on the Shopee page to send the listing here with images and description.</div>
+      </div>`;
+    }
   }
 
   app().innerHTML = html;
