@@ -44,7 +44,7 @@ module.exports = async function handler(req, res) {
   if (listing.status !== 'active')               return res.status(409).json({ error: 'listing-not-active', status: listing.status });
 
   // Mark listing done + save Carousell URL if provided
-  const update = { status: 'done', done_at: new Date().toISOString() };
+  const update = { status: 'done' };
   if (carousell_url) update.carousell_url = carousell_url;
   const { error: updateErr } = await sb
     .from('listings').update(update).eq('id', listing_id);

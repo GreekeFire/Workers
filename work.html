@@ -1358,7 +1358,6 @@ function markDone() {
   // "ghost" item next boot isn't a mystery.
   if (sbId) sb.from('listings').update({
     status: 'done',
-    done_at: new Date().toISOString(),
     title: entry.title,
     source_cost: costVal,
     sell_price: calcSell(costVal),
@@ -3120,7 +3119,7 @@ async function listingsSave(id) {
 }
 
 async function listingsMarkDone(id) {
-  const { error } = await sb.from('listings').update({ status: 'done', done_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await sb.from('listings').update({ status: 'done' }).eq('id', id);
   if (error) { toast('Failed'); return; }
   const item = _listingsCache.find(l => l.id === id);
   if (item) item.status = 'done';
