@@ -1097,9 +1097,10 @@ function loadLocal() {
 
 async function syncFromSupabase() {
   try {
-    const [dRes, sRes] = await Promise.all([
+    const [dRes, sRes, wdRes] = await Promise.all([
       sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
-      sb.from('app_state').select('data').eq('key', 'carobiz_sales').single()
+      sb.from('app_state').select('data').eq('key', 'carobiz_sales').single(),
+      sb.from('worker_done').select('listing_id, listing_title, done_at').order('done_at', { ascending: false }).limit(100)
     ]);
 
     if (dRes.data?.data) {
@@ -1122,6 +1123,19 @@ async function syncFromSupabase() {
           .filter(i => i >= 0)
       );
       doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
+    }
+
+    // Merge worker-done entries so VA-completed listings appear in the LISTINGS tab.
+    // worker_done rows are written by /api/worker-done (service key) and never touch
+    // app_state, so without this they'd be invisible to the owner's recently-done list.
+    if (wdRes.data?.length) {
+      const existingIds = new Set(doneData.map(d => d.id));
+      for (const wd of wdRes.data) {
+        if (wd.listing_id && !existingIds.has(wd.listing_id)) {
+          doneData.push({ id: wd.listing_id, title: wd.listing_title || '', doneAt: wd.done_at });
+        }
+      }
+      doneData.sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
     }
 
     if (sRes.data?.data) {
