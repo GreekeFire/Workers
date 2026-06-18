@@ -1136,6 +1136,7 @@ async function syncFromSupabase() {
         }
       }
       doneData.sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+      doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
     }
 
     if (sRes.data?.data) {
