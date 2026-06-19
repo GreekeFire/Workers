@@ -974,20 +974,6 @@ async function refreshFromCloud() {
 // Download every fetched product image, staggered so the browser
 // doesn't block the burst as a popup storm.
 // Download a list of product images, staggered so the browser doesn't block
-// the burst as a popup storm.
-function downloadImages(imgs) {
-  if (!imgs || !imgs.length) return;
-  imgs.forEach((src, i) => setTimeout(() => {
-    const a = document.createElement('a');
-    a.href = `/api/image?url=${encodeURIComponent(src)}&n=${i + 1}`;
-    a.download = `shopee-${i + 1}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }, i * 350));
-  toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
-}
-
 // Once-a-day reminder when the last â¬‡ Backup is over a week old.
 // Supabase is the only copy of this data â€” the habit matters.
 function maybeBackupNudge() {
@@ -1000,17 +986,6 @@ function maybeBackupNudge() {
     toast(last ? `Backup is ${days} days old â€” â¬‡ Backup in LISTINGS` : 'No backup yet â€” â¬‡ Backup in LISTINGS');
   }
 }
-
-// AI â€” shared constants & helpers
-
-// Product identity from any Shopee URL: "SHOPID.ITEMID". Survives
-// title-slug changes, tracking params, and the /product/ URL form.
-function shopeeKey(u) {
-  const m = String(u || '').match(/i\.(\d+)\.(\d+)/) || String(u || '').match(/\/product\/(\d+)\/(\d+)/);
-  return m ? m[1] + '.' + m[2] : '';
-}
-
-
 
 // Sales
 let _logSaleBusy = false;
@@ -1152,21 +1127,6 @@ function todayRevenue() {
   return salesLog.filter(s => s.date === today).reduce((sum, s) => sum + s.price, 0);
 }
 
-// Preserve focused element across innerHTML re-renders
-function withFocusPreserved(renderFn) {
-  const focused = document.activeElement;
-  const id = focused?.id;
-  const sel = (focused?.tagName === 'TEXTAREA' || focused?.tagName === 'INPUT') ? focused.selectionStart : null;
-  renderFn();
-  if (id) {
-    const el = document.getElementById(id);
-    if (el) {
-      el.focus();
-      if (sel != null) { try { el.setSelectionRange(sel, sel); } catch(e) {} }
-    }
-  }
-}
-
 // Render
 function renderAll() {
   renderSessionBar();
@@ -1177,11 +1137,6 @@ function renderAll() {
 
 function renderSessionBar() {
   document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
-}
-
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
 }
 
 function deleteSale(idx) {
