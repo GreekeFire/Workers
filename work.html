@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -73,7 +73,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     overflow-x: hidden;
   }
 
-  /* body::before / body::after / @keyframes bgDrift â€” from shared.css */
+  /* body::before / body::after / @keyframes bgDrift — from shared.css */
 
   .container {
     position: relative;
@@ -606,7 +606,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 </head>
 <body>
 
-<!-- Login gate â€” shown only when there is no Supabase auth session -->
+<!-- Login gate — shown only when there is no Supabase auth session -->
 <div id="login-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#050506; align-items:center; justify-content:center; padding:24px;">
   <div style="width:100%; max-width:320px; display:flex; flex-direction:column; gap:12px;">
     <h2 style="color:#fff; font:600 18px system-ui; margin:0 0 4px; text-align:center;">1st Affiliate</h2>
@@ -640,7 +640,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
       <button class="seg-btn" id="btn-workers" onclick="switchTab('workers')">WORKERS</button>
     </div>
-    <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">âŸ³</button>
+    <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">⟳</button>
   </div>
 
   <!-- SALES view -->
@@ -656,7 +656,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       </div>
       <div class="sale-listing-info" id="sale-listing-info" style="display:none"></div>
       <select class="form-input" id="sale-category">
-        <option value="">Categoryâ€¦</option>
+        <option value="">Category…</option>
         <option value="Electronics">Electronics</option>
         <option value="Home">Home & Living</option>
         <option value="Fashion">Fashion</option>
@@ -677,9 +677,9 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- DONE view -->
   <div id="view-done" style="display:none">
     <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
-      <input type="text" class="form-input" id="done-search" placeholder="Search all listingsâ€¦" autocomplete="off" oninput="renderDoneView()" style="flex:1">
-      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">âš  Scan links</button>
-      <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">â¬‡ Backup</button>
+      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
+      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">⚠ Scan links</button>
+      <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button id="lf-all"        class="copy-btn" onclick="setListingsFilter('all')"        style="flex:1">All</button>
@@ -806,12 +806,12 @@ function setSyncStatus(state) {
   clearTimeout(syncStatusTimer);
   el.className = 'sync-status visible ' + state;
   if (state === 'syncing') {
-    el.textContent = 'âŸ³ Syncingâ€¦';
+    el.textContent = '⟳ Syncing…';
   } else if (state === 'synced') {
-    el.textContent = 'âœ“ Synced';
+    el.textContent = '✓ Synced';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
   } else if (state === 'error') {
-    el.textContent = 'âœ— Sync failed';
+    el.textContent = '✗ Sync failed';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
   }
 }
@@ -823,14 +823,14 @@ async function refreshFromCloud() {
   await syncFromSupabase();
   setSyncStatus('synced');
   renderAll();
-  toast('Refreshed âœ“');
+  toast('Refreshed ✓');
 }
 
 // Download every fetched product image, staggered so the browser
 // doesn't block the burst as a popup storm.
 // Download a list of product images, staggered so the browser doesn't block
-// Once-a-day reminder when the last â¬‡ Backup is over a week old.
-// Supabase is the only copy of this data â€” the habit matters.
+// Once-a-day reminder when the last ⬇ Backup is over a week old.
+// Supabase is the only copy of this data — the habit matters.
 function maybeBackupNudge() {
   const today = getToday();
   if (localStorage.getItem('carobiz_backup_nudge_day') === today) return;
@@ -838,7 +838,7 @@ function maybeBackupNudge() {
   const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : Infinity;
   if (days >= 7) {
     localStorage.setItem('carobiz_backup_nudge_day', today);
-    toast(last ? `Backup is ${days} days old â€” â¬‡ Backup in LISTINGS` : 'No backup yet â€” â¬‡ Backup in LISTINGS');
+    toast(last ? `Backup is ${days} days old — ⬇ Backup in LISTINGS` : 'No backup yet — ⬇ Backup in LISTINGS');
   }
 }
 
@@ -876,7 +876,7 @@ function logSale() {
   renderSalesView();
   renderSessionBar();
   _logSaleBusy = false;
-  toast('Logged âœ“');
+  toast('Logged ✓');
 }
 
 let _searchMatches = [];
@@ -884,13 +884,13 @@ let _selectedListingId = null;   // Supabase listings.id of the sale being logge
 
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
-  // Any keystroke means the user is re-searching â€” clear the prior selection so
+  // Any keystroke means the user is re-searching — clear the prior selection so
   // a sale never gets attributed to the listing they had selected before they
   // changed the text. selectMatch() will re-set it when they pick from the dropdown.
   _selectedListingId = null;
   if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
   // Word-based match (same approach as the LISTINGS search): every word must
-  // appear, any order â€” immune to pasted non-breaking spaces, pipes, dashes
+  // appear, any order — immune to pasted non-breaking spaces, pipes, dashes
   const terms = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
   if (!terms.length) terms.push(query.toLowerCase().trim());
   const matchesQuery = title => { const t = title.toLowerCase(); return terms.every(w => t.includes(w)); };
@@ -902,12 +902,12 @@ function searchListings(query) {
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = _searchMatches.map((m, mi) => {
-    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee â†—</a>` : '';
-    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell â†—</a>` : '';
+    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
+    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
     return `<div class="search-result" onmousedown="selectMatch(${mi})">
       <div class="search-result-name">${esc(m.name)}</div>
       <div class="search-result-meta">
-        <span class="search-result-price">Sell $${m.price != null && isFinite(m.price) ? Number(m.price).toFixed(2) : 'â€”'}</span>
+        <span class="search-result-price">Sell $${m.price != null && isFinite(m.price) ? Number(m.price).toFixed(2) : '—'}</span>
         ${shopeeLink}${caroLink}
       </div>
     </div>`;
@@ -937,8 +937,8 @@ function selectListing(nameOverride, priceOverride, shopeeOverride, caroOverride
     costEl.value   = rawCost || '';
   }
   const infoEl = document.getElementById('sale-listing-info');
-  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee â†—</a>` : '';
-  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell â†—</a>` : '';
+  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
+  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell ↗</a>` : '';
   infoEl.innerHTML = `<span class="sale-info-price">$${price}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
   document.getElementById('sale-category').focus();
@@ -951,7 +951,7 @@ function hideDropdown() {
   }, 150);
 }
 
-// Keyboard control for the SALES search dropdown: â†‘/â†“ highlight, Enter picks,
+// Keyboard control for the SALES search dropdown: ↑/↓ highlight, Enter picks,
 // Esc closes. Mouse behavior unchanged.
 let _searchSel = -1;
 function salesSearchKey(e) {
@@ -987,7 +987,7 @@ function renderAll() {
   renderSessionBar();
   if (activeTab === 'sales') renderSalesView();
   else if (activeTab === 'done') renderDoneView();
-  // 'workers' tab is data-driven (loaded on demand) — no re-render needed here
+  // 'workers' tab is data-driven (loaded on demand) � no re-render needed here
 }
 
 function renderSessionBar() {
@@ -1001,7 +1001,7 @@ function deleteSale(idx) {
   renderSalesView();
   renderSessionBar();
   toastWithUndo('Sale removed', () => {
-    // Reinsert by timestamp, not the captured index â€” the list may have
+    // Reinsert by timestamp, not the captured index — the list may have
     // shifted (new sale logged, another delete) before the undo fires
     const pos = salesLog.findIndex(s => (s.ts || '') < (removed.ts || ''));
     salesLog.splice(pos === -1 ? salesLog.length : pos, 0, removed);
@@ -1029,7 +1029,7 @@ function renderSalesView() {
       header = `<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 4px 4px">${s.date === today ? 'Today' : esc(s.date)}</div>`;
     }
     const profit = s.sourceCost ? (s.price - s.sourceCost) : null;
-    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' Â· ');
+    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' · ');
     return header + `<div class="sale-entry">
       <div class="sale-info">
         <div class="sale-name">${esc(s.name)}</div>
@@ -1037,7 +1037,7 @@ function renderSalesView() {
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
-        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">âœ•</button>
+        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1078,7 +1078,7 @@ function switchTab(tab) {
   document.getElementById('btn-workers').classList.toggle('active', tab === 'workers');
   if (tab === 'sales') renderSalesView();
   else if (tab === 'done') {
-    // Drop the cached search results â€” edits made elsewhere (another device)
+    // Drop the cached search results — edits made elsewhere (another device)
     // would otherwise show stale until the query is retyped
     _listingsCache = [];
     _listingsEditingId = null;
@@ -1106,7 +1106,7 @@ let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
 let _listingsFilter = 'all'; // 'all' | 'assigned' | 'unassigned'
 
-const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done â€” newest first. Type above to search all.</p>';
+const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
 
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
@@ -1118,15 +1118,15 @@ function renderDoneView() {
     // Only reuse cache when the user is actively editing an entry from the
     // recent list. If _listingsEditingId is set but _listingsCacheIsRecent is
     // not, the cache came from a search and clearing the query should reload
-    // recent items â€” not show stale search results.
+    // recent items — not show stale search results.
     if (_listingsCache.length && _listingsEditingId && _listingsCacheIsRecent) { _renderListingsResults(_listingsCache, RECENT_HDR); return; }
-    list.innerHTML = '<p class="done-empty">Loading recentâ€¦</p>';
+    list.innerHTML = '<p class="done-empty">Loading recent…</p>';
     // Tag this request so a stale response never overwrites a search the user
     // started while the network round-trip was in flight.
     const reqSeq = ++_recentReqSeq;
     // Query listings directly by done_at so worker-completed listings appear
     // alongside owner-completed ones without cross-table permission issues.
-    // Do NOT apply the assigned/unassigned filter â€” see prior comment.
+    // Do NOT apply the assigned/unassigned filter — see prior comment.
     sb.from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .eq('status', 'done')
@@ -1150,13 +1150,13 @@ function renderDoneView() {
     _renderListingsResults(_listingsCache);
     return;
   }
-  list.innerHTML = '<p class="done-empty">Searchingâ€¦</p>';
+  list.innerHTML = '<p class="done-empty">Searching…</p>';
   _doneSearchTimer = setTimeout(() => _searchAllListings(query), 300);
 }
 
 // A valid Carousell listing link points at a specific listing (/p/, /sell/) or
-// is a Branch share link; a valid Shopee link is a product URL. Anything else â€”
-// a homepage/category/search URL, the wrong platform, or empty â€” is "bad".
+// is a Branch share link; a valid Shopee link is a product URL. Anything else —
+// a homepage/category/search URL, the wrong platform, or empty — is "bad".
 function validCaroLink(u) { return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u); }
 function validShopeeLink(u) { return !!u && /shopee\./i.test(u) && (/i\.\d+\.\d+/.test(u) || /\/product\/\d+\/\d+/.test(u)); }
 
@@ -1165,25 +1165,25 @@ function validShopeeLink(u) { return !!u && /shopee\./i.test(u) && (/i\.\d+\.\d+
 // fix or delete each. Runs in your authed session (listings are owner-only RLS).
 async function scanBadLinks() {
   const list = document.getElementById('done-list');
-  list.innerHTML = '<p class="done-empty">Scanning all listingsâ€¦</p>';
+  list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
   try {
     const { data, error } = await sb.from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings')
       .limit(5000);
     if (error) throw error;
-    // Active listings are in the VA queue and haven't been posted yet â€” missing
+    // Active listings are in the VA queue and haven't been posted yet — missing
     // Carousell link is expected. Only flag done listings for missing/bad Carousell.
     // Bad Shopee links are flagged on all statuses.
     const bad = (data || []).filter(d =>
       !validShopeeLink(d.shopee_url) ||
       (d.status === 'done' && !validCaroLink(d.carousell_url)));
-    if (!bad.length) { list.innerHTML = '<p class="done-empty">âœ“ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
+    if (!bad.length) { list.innerHTML = '<p class="done-empty">✓ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
     _listingsCache = bad;
     _listingsEditingId = null;
     _listingsCacheIsRecent = false;
-    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">âš  ' + bad.length + ' of ' + data.length + ' listings have a bad link â€” fix or delete below.</p>');
+    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad link — fix or delete below.</p>');
   } catch (e) {
-    list.innerHTML = '<p class="done-empty">Scan failed â€” ' + (e.message || 'are you logged in?') + '</p>';
+    list.innerHTML = '<p class="done-empty">Scan failed — ' + (e.message || 'are you logged in?') + '</p>';
   }
 }
 
@@ -1198,10 +1198,10 @@ async function _searchAllListings(query) {
     let q = sb
       .from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings');
-    // Each term must appear in EITHER title OR ai_title â€” listings show ai_title
+    // Each term must appear in EITHER title OR ai_title — listings show ai_title
     // in the LISTINGS tab so searching only title misses most AI-rewritten entries.
     for (const t of terms.length ? terms : [query.trim()]) {
-      // Strip % _ \ â€” PostgREST's ilike has no ESCAPE clause so these can't be
+      // Strip % _ \ — PostgREST's ilike has no ESCAPE clause so these can't be
       // safely escaped; product titles never legitimately contain them anyway.
       const escaped = t.replace(/[%_\\]/g, '');
       if (!escaped) continue;
@@ -1254,7 +1254,7 @@ function _renderListingsResults(data, prefix) {
         <div class="done-edit-price">
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" id="lec-${d.id}" value="${cost}" oninput="document.getElementById('les-${d.id}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)">
-          <span style="color:var(--text-tertiary)">â†’</span>
+          <span style="color:var(--text-tertiary)">→</span>
           <span class="done-edit-sell" id="les-${d.id}">$${calcSell(cost).toFixed(2)}</span>
         </div>
         <input class="link-edit-input" type="url" id="lesh-${d.id}" placeholder="Shopee URL" value="${esc(d.shopee_url||'')}" style="margin-top:8px">
@@ -1264,8 +1264,8 @@ function _renderListingsResults(data, prefix) {
           <button class="done-save-btn" onclick="listingsSave(${d.id})">Save</button>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed âœ“</button>
-          <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete âœ•</button>
+          <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed ✓</button>
+          <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete ✕</button>
         </div>
       </div>`;
     }
@@ -1274,25 +1274,25 @@ function _renderListingsResults(data, prefix) {
       <div class="done-info">
         <div class="done-title-text">${esc(d.ai_title || d.title)}</div>
         <div class="done-meta">
-          Cost $${cost.toFixed(2)} â†’ Sell $${sell.toFixed(2)}
-          <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> Â· ${statusLabel[d.status] || d.status}</span>
-          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> Â· ðŸ‘¤ VA</span>' : ''}
-          ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> Â· âš  Dead link</span>' : ''}
+          Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
+          <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
+          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> · 👤 VA</span>' : ''}
+          ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> · ⚠ Dead link</span>' : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${validShopeeLink(d.shopee_url)
-            ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee â†—</a>`
+            ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>`
             : (d.shopee_url
-              ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">âš  bad Shopee link</a>`
-              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">âš  no Shopee link</span>`)}
+              ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ bad Shopee link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Shopee link</span>`)}
           ${validCaroLink(d.carousell_url)
-            ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell â†—</a>`
+            ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>`
             : (d.carousell_url
-              ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">âš  not a listing link</a>`
-              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">âš  no Carousell link</span>`)}
+              ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ not a listing link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Carousell link</span>`)}
         </div>
       </div>
-      <div class="done-edit-icon">âœŽ</div>
+      <div class="done-edit-icon">✎</div>
     </div>`;
   }).join('');
 }
@@ -1311,7 +1311,7 @@ async function listingsSave(id) {
   const item = _listingsCache.find(l => l.id === id);
   if (item) { item.title = title; item.ai_title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
   _listingsEditingId = null;
-  toast('Saved âœ“');
+  toast('Saved ✓');
   _renderListingsResults(_listingsCache);
 }
 
@@ -1321,7 +1321,7 @@ async function listingsMarkDone(id) {
   const item = _listingsCache.find(l => l.id === id);
   if (item) item.status = 'done';
   _listingsEditingId = null;
-  toast('Marked as listed ✓');
+  toast('Marked as listed ?');
   _renderListingsResults(_listingsCache);
 }
 
@@ -1330,7 +1330,7 @@ async function listingsDelete(id) {
   if (error) { toast('Delete failed'); return; }
   _listingsCache = _listingsCache.filter(l => l.id !== id);
   _listingsEditingId = null;
-  toast('Deleted ✓');
+  toast('Deleted ?');
   _renderListingsResults(_listingsCache);
 }
 
@@ -1339,14 +1339,14 @@ async function listingsDelete(id) {
 // The only copy of this data lives in Supabase (no backups there), so this is
 // the recovery path if a row is ever deleted or overwritten by mistake.
 async function exportBackup() {
-  toast('Preparing backupâ€¦');
+  toast('Preparing backup…');
   let listings;
   try {
     const { data, error } = await sb.from('listings').select('*').order('id');
     if (error) throw error;
     listings = data;
   } catch (e) {
-    toast('Backup failed â€” could not read listings');
+    toast('Backup failed — could not read listings');
     return;
   }
   const payload = {
@@ -1364,7 +1364,7 @@ async function exportBackup() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   localStorage.setItem('carobiz_last_backup', new Date().toISOString());
-  toast('Backup downloaded âœ“');
+  toast('Backup downloaded ✓');
 }
 
 function copyField(fieldId, btnId) {
@@ -1419,14 +1419,14 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// â”€â”€ Auth gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Auth gate ────────────────────────────────────────────────────────────────
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-pass').value;
   const err   = document.getElementById('login-err');
   const btn   = document.getElementById('login-btn');
   err.textContent = '';
-  btn.disabled = true; btn.textContent = 'Signing inâ€¦';
+  btn.disabled = true; btn.textContent = 'Signing in…';
   const { error } = await sb.auth.signInWithPassword({ email, password: pass });
   btn.disabled = false; btn.textContent = 'Sign in';
   if (error) { err.textContent = error.message; return; }
@@ -1434,9 +1434,9 @@ async function doLogin() {
   init();
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// WORKERS TAB  (Step 7 â€” VA-PLAN)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════════
+// WORKERS TAB  (Step 7 — VA-PLAN)
+// ═══════════════════════════════════════════════════════════════════
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
 let _workerAssignExpanded = null; // worker id whose inline assign panel is open
@@ -1445,7 +1445,7 @@ let _rotateConfirmPending = null; // worker id awaiting rotation confirm (inline
 async function renderWorkersView() {
   const wrap = document.getElementById('workers-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<p style="color:var(--text-tertiary);padding:24px 0">Loadingâ€¦</p>';
+  wrap.innerHTML = '<p style="color:var(--text-tertiary);padding:24px 0">Loading…</p>';
   await refreshWorkers();
 }
 
@@ -1473,7 +1473,7 @@ async function refreshWorkers() {
     // Sales attribution: query sales_log table (authoritative, cross-device) and
     // join to listings.assigned_worker_id. This is more reliable than the in-memory
     // salesLog which only reflects the current session / device.
-    // Cap at 2 000 rows â€” enough to count all historical sales per worker without
+    // Cap at 2 000 rows — enough to count all historical sales per worker without
     // risking a Supabase URL-length overflow on the follow-up .in() query.
     const soldCountMap = {};
     try {
@@ -1531,7 +1531,7 @@ function _renderWorkersView() {
       <span style="font-size:13px;font-weight:600;color:var(--success)">Distribute ${_assignBatchPending.count} listings across ${_assignBatchPending.workerCount} workers?</span>
       <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="_assignBatchPending=null;_renderWorkersView()">Cancel</button>
-        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm âœ“</button>
+        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm ✓</button>
       </div>
     </div>` : '';
 
@@ -1540,10 +1540,10 @@ function _renderWorkersView() {
       <h2 style="font-size:18px;font-weight:700;margin:0">Workers</h2>
       <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="workersAssignBatch()" style="background:rgba(107,227,164,0.1);border-color:rgba(107,227,164,0.3);color:var(--success)">
-          âš¡ Auto-assign queue
+          ⚡ Auto-assign queue
         </button>
         <button class="copy-btn" onclick="showAddWorkerForm()">+ Add worker</button>
-        <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">â†º</button>
+        <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">↺</button>
       </div>
     </div>
     ${confirmStrip}
@@ -1569,8 +1569,8 @@ function _renderWorkersView() {
               <div style="flex:1;min-width:0">
                 <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(w.name)}${w.active ? '' : ' <span style="font-size:11px;color:var(--text-tertiary)">(inactive)</span>'}</div>
                 <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:10px">
-                  ${w.count_today} / ${w.daily_target} done &nbsp;Â·&nbsp;
-                  <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;Â·&nbsp;
+                  ${w.count_today} / ${w.daily_target} done &nbsp;·&nbsp;
+                  <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;·&nbsp;
                   ${w.pending} pending
                 </div>
                 <div style="background:rgba(255,255,255,0.06);border-radius:6px;height:6px;overflow:hidden;margin-bottom:12px">
@@ -1578,13 +1578,13 @@ function _renderWorkersView() {
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
                   <button class="copy-btn" onclick="copyVaLink('${w.id}')" title="${esc(vaUrl)}">
-                    ðŸ”— Copy VA link
+                    🔗 Copy VA link
                   </button>
                   <button class="copy-btn" onclick="_workerAssignExpanded=(_workerAssignExpanded==='${w.id}'?null:'${w.id}');_renderWorkersView()">
                     + Assign listings
                   </button>
                   <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
-                    ðŸ”„ Rotate link
+                    🔄 Rotate link
                   </button>
                   <button class="copy-btn" onclick="workerToggleActive('${w.id}', ${w.active})" style="opacity:0.5">
                     ${w.active ? 'Deactivate' : 'Reactivate'}
@@ -1595,7 +1595,7 @@ function _renderWorkersView() {
                   <span style="font-size:13px;font-weight:600;color:#fca5a5">The old link will stop working. Confirm rotate?</span>
                   <div style="display:flex;gap:8px">
                     <button class="copy-btn" onclick="_rotateConfirmPending=null;_renderWorkersView()">Cancel</button>
-                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate âœ“</button>
+                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate ✓</button>
                   </div>
                 </div>` : ''}
                 ${_workerAssignExpanded === w.id ? `
@@ -1605,7 +1605,7 @@ function _renderWorkersView() {
                     style="width:72px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit">
                   <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">unassigned listings</span>
                   <button class="ai-gen-btn" style="padding:7px 14px" onclick="workerAssignListings('${w.id}','${esc(w.name)}')">Assign</button>
-                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">âœ•</button>
+                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">✕</button>
                 </div>` : ''}
               </div>
             </div>
@@ -1628,7 +1628,7 @@ async function doAddWorker() {
   if (!name) { toast('Enter a name'); return; }
   _addWorkerBusy = true;
   const btn = document.querySelector('#add-worker-form .ai-gen-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Creatingâ€¦'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   const { error } = await sb.from('workers').insert({ name, daily_target: target, active: true });
   _addWorkerBusy = false;
   if (btn) { btn.disabled = false; btn.textContent = 'Create worker'; }
@@ -1639,7 +1639,7 @@ async function doAddWorker() {
   if (nameEl) nameEl.value = '';
   if (targetEl) targetEl.value = '';
   document.getElementById('add-worker-form').style.display = 'none';
-  toast('Worker created âœ“');
+  toast('Worker created ✓');
   _workersData = null;
   await refreshWorkers();
 }
@@ -1658,7 +1658,7 @@ async function workerToggleActive(workerId, currentlyActive) {
 
 // Show a selectable URL in a dismissable overlay when the clipboard API is
 // unavailable (iOS PWA standalone mode blocks prompt() silently; this is the
-// safe fallback the owner can long-press â†’ Copy on).
+// safe fallback the owner can long-press → Copy on).
 function showUrlFallback(label, url) {
   const existing = document.getElementById('url-fallback-overlay');
   if (existing) existing.remove();
@@ -1684,9 +1684,9 @@ async function copyVaLink(workerId) {
   const url = `${location.origin}/va?w=${workerId}`;
   try {
     await navigator.clipboard.writeText(url);
-    toast('VA link copied âœ“');
+    toast('VA link copied ✓');
   } catch (e) {
-    showUrlFallback('VA link â€” long-press to copy:', url);
+    showUrlFallback('VA link — long-press to copy:', url);
   }
 }
 
@@ -1694,7 +1694,7 @@ async function copyVaLink(workerId) {
 // confirm() is silently blocked in iOS PWA standalone mode so this two-step is the safe path.
 function workerRotateLink(workerId, name) {
   if (_rotateConfirmPending === workerId) {
-    // Already showing â€” treat a second tap on the button as cancel
+    // Already showing — treat a second tap on the button as cancel
     _rotateConfirmPending = null;
     _renderWorkersView();
     return;
@@ -1709,11 +1709,11 @@ async function _doRotateLink(workerId, name) {
   _rotateConfirmPending = null;
   const w = (_workersData || []).find(x => x.id === workerId);
   if (!w) { toast('Worker not found'); return; }
-  // Create new first â€” only deactivate old if insert succeeds
+  // Create new first — only deactivate old if insert succeeds
   const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
   const newId = data.id;
-  // Transfer assigned active listings to new worker â€” check for error before deactivating the old one
+  // Transfer assigned active listings to new worker — check for error before deactivating the old one
   const { error: tErr } = await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
   if (tErr) {
     // Roll back: delete the new worker record so we don't leave an orphan
@@ -1727,8 +1727,8 @@ async function _doRotateLink(workerId, name) {
   await refreshWorkers();
   // Show new link
   const url = `${location.origin}/va?w=${newId}`;
-  try { await navigator.clipboard.writeText(url); toast('New VA link copied âœ“'); }
-  catch (e) { showUrlFallback('New VA link â€” old one is now deactivated. Long-press to copy:', url); }
+  try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
+  catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
 }
 
 let _assignListingsBusy = false;
@@ -1742,7 +1742,7 @@ async function workerAssignListings(workerId, workerName) {
   _assignListingsBusy = true;
   // Disable the Assign button for feedback
   const btn = inputEl?.parentElement?.querySelector('.ai-gen-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Assigningâ€¦'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Assigning…'; }
   try {
     // Fetch unassigned active listings
     const { data, error } = await sb.from('listings')
@@ -1758,7 +1758,7 @@ async function workerAssignListings(workerId, workerName) {
       .update({ assigned_worker_id: workerId })
       .in('id', ids);
     if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
-    toast(`Assigned ${ids.length} listings to ${workerName} âœ“`);
+    toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
     _workerAssignExpanded = null;
     _workersData = null;
     await refreshWorkers();
@@ -1768,7 +1768,7 @@ async function workerAssignListings(workerId, workerName) {
 }
 
 let _assignBatchBusy = false;
-let _assignBatchPending = null; // { count, workerCount } â€” pending confirm step
+let _assignBatchPending = null; // { count, workerCount } — pending confirm step
 
 async function workersAssignBatch() {
   if (_assignBatchBusy) return;
@@ -1786,7 +1786,7 @@ async function workersAssignBatch() {
   if (error) { toast('Failed: ' + error.message); return; }
   if (!firstData || !firstData.length) { toast('No unassigned listings'); return; }
 
-  // confirm() is silently blocked in iOS PWA standalone mode â€” use an inline
+  // confirm() is silently blocked in iOS PWA standalone mode — use an inline
   // two-step instead: first press shows a confirm banner in the workers header,
   // second press (within 6 s) runs the action; anything else cancels.
   if (!_assignBatchPending) {
@@ -1796,7 +1796,7 @@ async function workersAssignBatch() {
     setTimeout(() => { if (_assignBatchPending) { _assignBatchPending = null; _renderWorkersView(); } }, 6000);
     return;
   }
-  // Second press â€” re-fetch fresh data so we don't double-assign listings that
+  // Second press — re-fetch fresh data so we don't double-assign listings that
   // were assigned by another device during the 6-second confirm window
   _assignBatchPending = null;
   const { data, error: err2 } = await sb.from('listings')
@@ -1818,7 +1818,7 @@ async function workersAssignBatch() {
       if (!wIds.length) continue;
       const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
       if (bErr) {
-        toast(`Distributed ${assigned} of ${data.length} â€” failed: ${bErr.message}`);
+        toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
         _workersData = null;
         await refreshWorkers();
         return; // finally block resets _assignBatchBusy
@@ -1826,7 +1826,7 @@ async function workersAssignBatch() {
       assigned += wIds.length;
     }
   }
-  toast(`Distributed ${data.length} listings âœ“`);
+  toast(`Distributed ${data.length} listings ✓`);
   _workersData = null;
   await refreshWorkers();
   } finally {
