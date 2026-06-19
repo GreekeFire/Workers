@@ -175,83 +175,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     min-width: 0;
   }
   .link-edit-input:focus { outline: none; border-color: rgba(255,255,255,0.25); }
-  /* AI section */
-  .ai-section {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--card-border);
-  }
-  .ai-loading { font-size: 13px; color: var(--text-tertiary); padding: 8px 0; }
-  .ai-field {
-    width: 100%;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 13px;
-    padding: 10px 12px;
-    resize: none;
-    overflow: hidden;
-    font-family: inherit;
-    margin-bottom: 8px;
-    display: block;
-  }
-  .ai-field:focus { outline: none; border-color: rgba(255,255,255,0.15); }
-  .ai-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .ai-key-inline { display: flex; gap: 8px; margin-bottom: 8px; }
-  .ai-key-input {
-    flex: 1;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 13px;
-    padding: 8px 10px;
-    font-family: var(--font-mono);
-  }
-  .ai-key-input:focus { outline: none; border-color: rgba(255,255,255,0.18); }
-  .shopee-collapsed {
-    font-size: 12px;
-    color: var(--text-tertiary);
-    padding: 6px 0;
-    cursor: pointer;
-    margin-bottom: 8px;
-  }
-  .shopee-collapsed:hover { color: var(--text-secondary); }
-  .shopee-fetch-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .shopee-fetch-btn {
-    white-space: nowrap; padding: 9px 14px; flex-shrink: 0;
-    border-radius: 8px; background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12); color: var(--text-primary);
-    font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
-    transition: background 0.15s;
-  }
-  .shopee-fetch-btn:hover    { background: rgba(255,255,255,0.11); }
-  .shopee-fetch-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .shopee-img-grid {
-    display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none;
-  }
-  .shopee-img-grid::-webkit-scrollbar { display: none; }
-  .shopee-img-thumb {
-    flex-shrink: 0; width: 76px; height: 76px; border-radius: 9px; overflow: hidden;
-    display: block; border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.04);
-  }
-  .shopee-img-thumb { position: relative; }
-  .shopee-img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .shopee-img-dl {
-    position: absolute; bottom: 3px; right: 3px;
-    background: rgba(0,0,0,0.65); color: #fff;
-    border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 700;
-    text-decoration: none; line-height: 1.4; pointer-events: auto;
-  }
-  .char-counter {
-    font-size: 11px; color: var(--text-tertiary);
-    text-align: right; margin-top: -8px; margin-bottom: 10px;
-  }
-  .char-counter.warn   { color: var(--warning); }
-  .char-counter.danger { color: var(--danger); }
   .copy-btn {
     background: none;
     border: 1px solid var(--card-border);
@@ -472,26 +395,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   .sale-info-link { font-size: 12px; color: var(--coral); text-decoration: none; }
   .sale-info-link:hover { text-decoration: underline; }
 
-  /* Price calculator in Fix */
-  .price-calc {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--card-border);
-  }
-  .pcol { flex: 1; }
-  .pcol-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    margin-bottom: 6px;
-  }
-  .pcol-input-wrap { display: flex; align-items: center; gap: 4px; }
-  .pcol-currency { font-size: 14px; color: var(--text-tertiary); }
   .cost-input {
     flex: 1;
     background: rgba(255,255,255,0.06);
@@ -508,14 +411,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   .cost-input::-webkit-inner-spin-button,
   .cost-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .cost-input { -moz-appearance: textfield; }
-  .parrow { font-size: 18px; color: var(--text-tertiary); padding-top: 18px; flex-shrink: 0; }
-  .sell-display {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--success);
-    margin-top: 2px;
-  }
-
   /* Done list */
   .done-search-wrap { margin-bottom: 12px; }
   .done-list { display: flex; flex-direction: column; gap: 8px; }
@@ -613,41 +508,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   }
   .done-empty { text-align: center; color: var(--text-tertiary); font-size: 13px; padding: 24px 0; }
 
-  /* API key bar */
-  .api-key-bar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .api-key-bar-btn {
-    background: none;
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    color: var(--text-tertiary);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 5px 10px;
-    cursor: pointer;
-    letter-spacing: 0.04em;
-    transition: all 0.15s;
-  }
-  .api-key-bar-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.12); }
-  .api-key-bar-btn.set { color: var(--success); border-color: rgba(107,227,164,0.25); }
-  .api-key-bar-row { display: flex; gap: 8px; flex: 1; max-width: 320px; }
-  .api-key-bar-field {
-    flex: 1;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    color: var(--text-primary);
-    font-size: 12px;
-    padding: 6px 10px;
-    font-family: var(--font-mono);
-  }
-  .api-key-bar-field:focus { outline: none; border-color: rgba(255,255,255,0.18); }
-
   /* Toast */
   .toast {
     position: fixed;
@@ -730,19 +590,14 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     background-size: 200% 100%;
     animation: shimmer 1.2s linear infinite;
   }
-  .btn-done:active, .btn-delete:active, .ai-gen-btn:active, .shopee-fetch-btn:active,
+  .btn-done:active, .btn-delete:active, .ai-gen-btn:active,
   .copy-btn:active, .btn-log:active, .link-btn:active { transform: scale(0.97); }
-  .shopee-img-thumb img { opacity: 0; transition: opacity 0.35s ease; }
-
-  /* tab bar from shared.css */
 
   @media (max-width: 600px) {
-    .ai-field { font-size: 16px; }
     .form-input { font-size: 16px; }
     .ai-gen-btn { padding: 10px 18px; font-size: 14px; }
     .copy-btn { padding: 8px 12px; font-size: 12px; }
     .link-btn { padding: 10px 16px; font-size: 13px; }
-    .shopee-collapsed { padding: 12px 0; font-size: 14px; }
     .seg-btn { padding: 12px; font-size: 14px; }
     .done-cancel-btn, .done-link-btn, .done-save-btn { padding: 14px; font-size: 14px; }
     .search-result { padding: 16px 14px; }
