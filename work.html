@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -73,7 +73,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     overflow-x: hidden;
   }
 
-  /* body::before / body::after / @keyframes bgDrift — from shared.css */
+  /* body::before / body::after / @keyframes bgDrift â€” from shared.css */
 
   .container {
     position: relative;
@@ -751,7 +751,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 </head>
 <body>
 
-<!-- Login gate — shown only when there is no Supabase auth session -->
+<!-- Login gate â€” shown only when there is no Supabase auth session -->
 <div id="login-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:#050506; align-items:center; justify-content:center; padding:24px;">
   <div style="width:100%; max-width:320px; display:flex; flex-direction:column; gap:12px;">
     <h2 style="color:#fff; font:600 18px system-ui; margin:0 0 4px; text-align:center;">1st Affiliate</h2>
@@ -772,14 +772,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- Session bar -->
   <div class="session-bar">
     <div class="sess-item">
-      <span class="sess-label">Done</span>
-      <span class="sess-val green" id="cnt-done">0</span>
-    </div>
-    <div class="sess-item">
-      <span class="sess-label">Deleted</span>
-      <span class="sess-val" id="cnt-deleted">0</span>
-    </div>
-    <div class="sess-item">
       <span class="sess-label">Revenue</span>
       <span class="sess-val coral" id="cnt-revenue">$0</span>
     </div>
@@ -789,17 +781,11 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- Segmented toggle + cloud refresh -->
   <div style="display:flex; gap:8px;">
     <div class="seg-toggle" style="flex:1">
-      <button class="seg-btn" id="btn-new" onclick="switchTab('new')">NEW</button>
       <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
       <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
       <button class="seg-btn" id="btn-workers" onclick="switchTab('workers')">WORKERS</button>
     </div>
-    <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">⟳</button>
-  </div>
-
-  <!-- NEW view -->
-  <div id="view-new" style="display:none">
-    <div id="new-wrap"></div>
+    <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">âŸ³</button>
   </div>
 
   <!-- SALES view -->
@@ -815,7 +801,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       </div>
       <div class="sale-listing-info" id="sale-listing-info" style="display:none"></div>
       <select class="form-input" id="sale-category">
-        <option value="">Category…</option>
+        <option value="">Categoryâ€¦</option>
         <option value="Electronics">Electronics</option>
         <option value="Home">Home & Living</option>
         <option value="Fashion">Fashion</option>
@@ -836,9 +822,9 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- DONE view -->
   <div id="view-done" style="display:none">
     <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
-      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
-      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">⚠ Scan links</button>
-      <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
+      <input type="text" class="form-input" id="done-search" placeholder="Search all listingsâ€¦" autocomplete="off" oninput="renderDoneView()" style="flex:1">
+      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">âš  Scan links</button>
+      <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">â¬‡ Backup</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button id="lf-all"        class="copy-btn" onclick="setListingsFilter('all')"        style="flex:1">All</button>
@@ -868,12 +854,6 @@ function calcSell(cost) {
   return raw;
 }
 
-// Highest variant price from a scraped Shopee payload — the margin-safe cost
-// default. Single source of truth so every pull/batch path costs identically.
-function highestCost(p) {
-  return Math.max(p.price_max || 0, p.price_min || 0, ...((p.models || []).map(m => m.price || 0)));
-}
-
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Returns today's date string YYYY-MM-DD (recomputed each call so midnight rollovers work)
@@ -883,25 +863,12 @@ function getToday() { return new Date().toISOString().slice(0, 10); }
 let LISTINGS = [];      // [{ id, title, shopee, caro, cost, sell }, ...]
 
 // State
-let doneSet = new Set();
-let deletedSet = new Set();
-let doneData = [];
-let doneTodayCount = 0;
-let deletedTodayCount = 0;
 let todayDate = getToday();
 let salesLog = [];
 let activeTab = 'listings';
 
 // Undo / copy state
 const copyTimers = {};
-
-// API key (lifted out of render to avoid repeated localStorage reads)
-let savedApiKey = localStorage.getItem('alfred_claude_key') || '';
-
-// NEW tab state
-let newApiKeyVisible = false;
-let newBatchRunning = false;
-let newBatchResults = []; // [{ url, inboxId, status, title, desc, price, images, sourceText, caroUrl }]
 
 
 // Init
@@ -919,7 +886,7 @@ async function loadListingsFromSupabase() {
     const { data, error } = await sb
       .from('listings')
       .select('id,title,shopee_url,carousell_url,source_cost,sell_price,assigned_worker_id')
-      .eq('status', 'active')
+      .eq('status', 'done')
       .order('id');
     if (error) throw error;
     LISTINGS = data.map(r => ({
@@ -941,60 +908,15 @@ function loadLocal() {
 
 async function syncFromSupabase() {
   try {
-    const [dRes, sRes, wdRes] = await Promise.all([
-      sb.from('app_state').select('data').eq('key', 'carobiz_done_data').single(),
-      sb.from('app_state').select('data').eq('key', 'carobiz_sales').single(),
-      sb.from('worker_done').select('listing_id, listing_title, done_at').order('done_at', { ascending: false }).limit(100)
-    ]);
-
-    if (dRes.data?.data) {
-      const cloud = dRes.data.data;
-      // Merge instead of replace: an item marked done on Device A while Device B
-      // was open would be lost if Device B pushed later. Keep any local entries
-      // not already in the cloud copy (matched by stable id + doneAt timestamp).
-      const cloudKeys = new Set(cloud.map(d => (d.id ?? '') + '|' + (d.doneAt || '')));
-      const localOnly = doneData.filter(d => !cloudKeys.has((d.id ?? '') + '|' + (d.doneAt || '')));
-      doneData = [...cloud, ...localOnly].sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
-      if (localOnly.length) pushToSupabase();   // persist recovered entries
-      // Rebuild doneSet by matching each done entry's stable Supabase id to its
-      // current position in the active list. Done rows are excluded from the
-      // active query, so this is empty in the normal case — it only re-marks an
-      // item if a prior status='done' write failed to persist. Never trust the
-      // stored positional index: the active list shifts as listings complete.
-      doneSet = new Set(
-        doneData
-          .map(d => (d.id != null ? LISTINGS.findIndex(l => l.id === d.id) : -1))
-          .filter(i => i >= 0)
-      );
-      doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
-    }
-
-    // Merge worker-done entries so VA-completed listings appear in the LISTINGS tab.
-    // worker_done rows are written by /api/worker-done (service key) and never touch
-    // app_state, so without this they'd be invisible to the owner's recently-done list.
-    if (wdRes.data?.length) {
-      const existingIds = new Set(doneData.map(d => d.id));
-      for (const wd of wdRes.data) {
-        if (wd.listing_id && !existingIds.has(wd.listing_id)) {
-          doneData.push({ id: wd.listing_id, title: wd.listing_title || '', doneAt: wd.done_at });
-        }
-      }
-      doneData.sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
-      doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(getToday())).length;
-    }
-
-    if (sRes.data?.data) {
-      // Merge instead of replace: a sale logged while a push failed (and the
-      // app then closed) lives only in localStorage — keep local entries newer
-      // than the newest cloud entry. Older local-only entries are treated as
-      // deleted on another device, not resurrected.
-      const cloud = sRes.data.data;
+    const { data } = await sb.from('app_state').select('data').eq('key', 'carobiz_sales').single();
+    if (data?.data) {
+      const cloud = data.data;
       const newestCloudTs = cloud.reduce((m, s) => ((s.ts || '') > m ? s.ts : m), '');
       const cloudTs = new Set(cloud.map(s => s.ts));
       const localOnly = salesLog.filter(s => s.ts && !cloudTs.has(s.ts) && s.ts > newestCloudTs);
       salesLog = [...localOnly, ...cloud].sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
       localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
-      if (localOnly.length) pushToSupabase();   // persist the recovered sales
+      if (localOnly.length) pushToSupabase();
     }
   } catch (e) {
     console.warn('Supabase sync error:', e);
@@ -1007,21 +929,16 @@ async function pushToSupabase() {
   const now = new Date().toISOString();
   setSyncStatus('syncing');
   try {
-    await Promise.all([
-      sb.from('app_state').upsert({ key: 'carobiz_done_data', data: doneData, updated_at: now }),
-      sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now })
-    ]);
+    await sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now });
     pendingPush = false;
     setSyncStatus('synced');
   } catch (e) {
     console.warn('Supabase push error:', e);
-    pendingPush = true;   // a sync is still owed — retry when network/app returns
+    pendingPush = true;
     setSyncStatus('error');
   }
 }
 
-// Re-send a failed push when the network or app comes back. doneData/salesLog are
-// always the latest in-memory state, so this just re-sends whatever is current.
 function retryPendingPush() {
   if (pendingPush && navigator.onLine) pushToSupabase();
 }
@@ -1034,31 +951,30 @@ function setSyncStatus(state) {
   clearTimeout(syncStatusTimer);
   el.className = 'sync-status visible ' + state;
   if (state === 'syncing') {
-    el.textContent = '⟳ Syncing…';
+    el.textContent = 'âŸ³ Syncingâ€¦';
   } else if (state === 'synced') {
-    el.textContent = '✓ Synced';
+    el.textContent = 'âœ“ Synced';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
   } else if (state === 'error') {
-    el.textContent = '✗ Sync failed';
+    el.textContent = 'âœ— Sync failed';
     syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
   }
 }
 
 // Re-pull everything from Supabase without restarting the PWA.
 async function refreshFromCloud() {
-  deletedSet = new Set();
   setSyncStatus('syncing');
   await loadListingsFromSupabase();
   await syncFromSupabase();
   setSyncStatus('synced');
   renderAll();
-  toast('Refreshed ✓');
+  toast('Refreshed âœ“');
 }
 
 // Download every fetched product image, staggered so the browser
 // doesn't block the burst as a popup storm.
 // Download a list of product images, staggered so the browser doesn't block
-// the burst as a popup storm. Shared by the FIX/NEW grids and batch cards.
+// the burst as a popup storm.
 function downloadImages(imgs) {
   if (!imgs || !imgs.length) return;
   imgs.forEach((src, i) => setTimeout(() => {
@@ -1072,12 +988,8 @@ function downloadImages(imgs) {
   toast(`Downloading ${imgs.length} image${imgs.length > 1 ? 's' : ''}`);
 }
 
-function downloadBatchImages(i) {
-  downloadImages((newBatchResults[i] && newBatchResults[i].images) || []);
-}
-
-// Once-a-day reminder when the last ⬇ Backup is over a week old.
-// Supabase is the only copy of this data — the habit matters.
+// Once-a-day reminder when the last â¬‡ Backup is over a week old.
+// Supabase is the only copy of this data â€” the habit matters.
 function maybeBackupNudge() {
   const today = getToday();
   if (localStorage.getItem('carobiz_backup_nudge_day') === today) return;
@@ -1085,218 +997,11 @@ function maybeBackupNudge() {
   const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : Infinity;
   if (days >= 7) {
     localStorage.setItem('carobiz_backup_nudge_day', today);
-    toast(last ? `Backup is ${days} days old — ⬇ Backup in LISTINGS` : 'No backup yet — ⬇ Backup in LISTINGS');
+    toast(last ? `Backup is ${days} days old â€” â¬‡ Backup in LISTINGS` : 'No backup yet â€” â¬‡ Backup in LISTINGS');
   }
 }
 
-// AI — shared constants & helpers
-const TITLE_SYSTEM = `You are a Carousell Singapore listing title writer. Buyers find the listing by typing words into search, so the title must be packed with the DISTINCT, RELEVANT terms a real buyer would type for THIS specific item.
-
-TASK: Write one Carousell title for the product below. Output the title text only — no JSON, no quotes, no explanation.
-
-STEP 1 — Silently identify the category from the product text:
-- FURNITURE / BULKY HOME (sofa, chair, table, shelf, bed, mattress, safe, cabinet, rack): buyers search by item type, size/dimensions, material, load/weight capacity, room, style.
-- ELECTRONICS / GADGET (keyboard, charger, speaker, lamp, fan, small appliance): item type, key spec, connectivity, compatibility, standout feature.
-- HOMEWARE / KITCHEN (plates, cookware, storage, organiser): item type, set/piece count, material, capacity/size, use.
-- If unclear, lead with item type + strongest concrete attributes.
-
-STEP 2 — Write the title:
-1. Length: 180–225 characters. Count every character. This is the strictest rule.
-2. Format: pipe-separated ( | ) Title Case segments, each 3–6 words, each a complete phrase a buyer could actually type into search.
-3. Front-load the single strongest search phrase in the first 40 characters — the feed truncates the visible title there.
-4. COVER DIFFERENT SEARCH ANGLES — never repeat the same phrase. Each segment adds a NEW angle: item-type synonyms, a real attribute (size, material, capacity, colour), a feature, a use case. You may reuse the core item word with a DIFFERENT modifier each time, but near-duplicate segments read as keyword stuffing and get listings hidden.
-5. Use ONLY attributes that appear in the product text. NEVER invent dimensions, weights, materials, capacities or compatibility.
-6. Correct spelling. Do not copy source typos.
-7. NEVER include: brand names, model numbers/SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Fast Delivery"), prices, the words "Brand New / Free Shipping / nice / cheap / best", emojis, or the symbols ! @ # $ % * &.
-
-GOOD (distinct angles, not repetition):
-Plastic Stool | Modern Stackable Stool | Bathroom Stool | Dining Stool | Dressing Table Stool | Compact Side Stool | Space Saving Stool | Minimalist Home Furniture
-
-BAD (same phrase repeated — gets hidden):
-Gaming Keyboard | RGB Gaming Keyboard | Best Gaming Keyboard | Gaming Keyboard SG | Gaming Keyboard Cheap
-
-Silently count characters. If under 180 or over 225, fix by adding or removing a DISTINCT angle — never by repeating a segment. Output only the final title.`;
-
-const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object: {"description":"..."}. Plain text inside — no markdown, no **bold**, no #headers.
-
-STEP 1 — Silently detect the category from the product text: FURNITURE/BULKY, ELECTRONICS/GADGET, or HOMEWARE/KITCHEN. This sets the depth and which details lead.
-
-STEP 2 — Choose depth:
-- HIGH-TICKET BULKY FURNITURE (sofa, table, bed, mattress, large cabinet, shelf): fuller — 6 to 8 bullets, lead with what reassures a considered buyer.
-- CHEAP / SIMPLE items (small homeware, gadgets, organisers): leaner — 3 to 5 bullets. Do not pad; an over-bulleted block on a cheap item reads as spam.
-
-STEP 3 — Write in exactly this structure:
-
-LINE 1 (must start with 🚚): a short, punchy delivery line. MUST always include the word "Free" and "Delivery". e.g. "🚚 Free Doorstep Delivery | 1-3 Working Days". You may vary the wording naturally (e.g. "Free Delivery", "Free Doorstep Delivery", "Free Shipping") but "Free" and "Delivery" must always appear. Keep it to one tight line — do NOT cram the value-sell here.
-
-(blank line)
-
-ONE hook sentence: what it is + 2–3 standout features + who/what it's for.
-
-(blank line)
-
-Bullets, each: ✅ [Feature] — [what it means for the buyer]. ORDER BY WHAT THIS BUYER DECIDES ON:
-- FURNITURE/BULKY: dimensions FIRST (will it fit), then material/build, weight or load capacity, assembly, colour/finish, room/use.
-- ELECTRONICS/GADGET: key specs first, then compatibility, connectivity, features, what's in the box.
-- HOMEWARE/KITCHEN: set/piece count first, then material, dimensions/capacity, microwave/dishwasher/oven safe, care.
-For BULKY items, include one value bullet worded to the item, e.g. "✅ Delivered To Your Door — no lorry to rent, no carrying it up yourself". For small/light items, skip this bullet (a delivery hard-sell looks overblown).
-Always include: "✅ Brand New — unused" (sealed/flat-packed as appropriate).
-
-If the source lists colour/size variants, add ONE line BEFORE the payment line: "📦 Sizes available: ..." or "📦 Finishes available: ...". Summarise many variants into a readable range (e.g. "45×30, 55×35, 65×42cm footprints · 1 to 5 layers") — do not dump every row. Omit this line entirely if there are no variants. Then add: "💬 Message us to order or check stock".
-
-LAST LINE (exact, verbatim, nothing after it):
-💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
-
-RULES:
-- State ONLY facts in the product text. NEVER invent dimensions, weight, material, capacity or compatibility. If a key spec is missing, write a genuine benefit bullet instead — do not guess. Wrong specs cause returns.
-- No brand names, no platform names (Shopee/Lazada/Amazon).
-- No vague filler on its own ("high quality", "amazing", "best", "premium") — pair a concrete feature with a concrete benefit.
-- Vary phrasing between listings so descriptions never read as mass-produced duplicates.
-- Keep it scannable.`;
-
-
-function normalizeDesc(text) {
-  if (!text) return text;
-  const DELIVERY = '🚚 Free Doorstep Delivery | 1-3 Working Days';
-  const PAYMENT  = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
-  let lines = text.split('\n');
-
-  // Delivery line must be first
-  if (!lines[0].trim().startsWith('🚚')) {
-    const idx = lines.findIndex(l => l.includes('🚚') || l.includes('FREE Local Delivery'));
-    if (idx > 0) {
-      const [found] = lines.splice(idx, 1);
-      while (lines.length && !lines[0].trim()) lines.shift();
-      lines = [found.trim(), '', ...lines];
-    } else if (idx === -1) {
-      lines = [DELIVERY, '', ...lines];
-    }
-  }
-
-  // Payment line must be last
-  const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
-  const hasPaymentAtEnd = lastNonEmptyIdx !== undefined && lines[lastNonEmptyIdx].trim() === PAYMENT;
-  if (!hasPaymentAtEnd) {
-    const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
-    if (idx !== -1) lines.splice(idx, 1);
-    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-    lines.push('', PAYMENT);
-  }
-
-  return lines.join('\n');
-}
-
-function updateCharCount(val, id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const len = val.length;
-  el.textContent = len + ' / 225';
-  el.className = 'char-counter' + (len > 225 ? ' danger' : len >= 200 ? ' warn' : '');
-}
-
-
-// Routes through /api/claude so the Anthropic key never touches the browser.
-// Falls back to a direct browser call with savedApiKey if the server key
-// isn't configured (backwards-compatible for local dev with a saved key).
-async function callClaude(system, userContent, maxTokens, temperature = 0.3, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    let resp, data;
-    try {
-      resp = await fetch('/api/claude', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ system, userContent, maxTokens, temperature })
-      });
-      data = await resp.json();
-    } catch (e) {
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
-      throw e;
-    }
-    if (data.error) {
-      // Server says key not configured — fall back to direct browser call
-      if (resp.status === 500 && data.error.includes('not configured')) {
-        const apiKey = savedApiKey;
-        if (!apiKey) throw new Error('NO_KEY');
-        const directResp = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-            'content-type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: maxTokens,
-            temperature,
-            system,
-            messages: [{ role: 'user', content: userContent }]
-          })
-        });
-        const directData = await directResp.json();
-        if (directData.error) throw new Error(directData.error.message);
-        return directData.content?.[0]?.text || '';
-      }
-      const isOverload = resp.status === 529;
-      if (isOverload && attempt < retries) {
-        await new Promise(r => setTimeout(r, 3000));
-        continue;
-      }
-      throw new Error(data.error);
-    }
-    return data.text || '';
-  }
-}
-
-async function runAIGenerate(productText, { titleOnly = false, descOnly = false } = {}) {
-  const productContent = `Product info:\n\n${productText}`;
-  const titlePromise = descOnly  ? null : callClaude(TITLE_SYSTEM, productContent, 512);
-  const descPromise  = titleOnly ? null : callClaude(DESC_SYSTEM, productContent, 1536, 0.5);
-  let rawTitle = '';
-  if (!descOnly) {
-    let titleText = await titlePromise;
-    rawTitle = titleText.trim().split('\n')[0].trim();
-    if (rawTitle.length < 180) {
-      const retry = await callClaude(TITLE_SYSTEM, productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.', 512);
-      rawTitle = retry.trim().split('\n')[0].trim();
-    }
-    if (rawTitle.length > 225) {
-      const parts = rawTitle.split(' | ');
-      while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
-      rawTitle = parts.join(' | ');
-    }
-  }
-  if (titleOnly) return { title: rawTitle, desc: '' };
-  const descText = await descPromise;
-  const descMatch = descText.match(/\{[\s\S]*\}/);
-  let desc = '';
-  if (descMatch) {
-    try {
-      desc = normalizeDesc(JSON.parse(descMatch[0]).description || '');
-    } catch {
-      // Claude returned malformed JSON — strip wrapper and use raw text
-      const raw = descText.replace(/^\s*\{[^"]*"description"\s*:\s*"/, '').replace(/"\s*\}\s*$/, '');
-      desc = normalizeDesc(raw);
-      if (!desc) throw new Error('AI returned malformed JSON — try again');
-    }
-  }
-  return { title: rawTitle, desc };
-}
-
-// Shared key-save body — reads an input, stores the key, runs a per-caller
-// cleanup (hide its key row + re-render), then confirms.
-function saveApiKeyFrom(inputId, onSaved) {
-  const val = document.getElementById(inputId)?.value.trim();
-  if (!val) return;
-  savedApiKey = val;
-  localStorage.setItem('alfred_claude_key', val);
-  if (onSaved) onSaved();
-  toast('Key saved');
-}
-
+// AI â€” shared constants & helpers
 
 // Product identity from any Shopee URL: "SHOPID.ITEMID". Survives
 // title-slug changes, tracking params, and the /product/ URL form.
@@ -1305,284 +1010,6 @@ function shopeeKey(u) {
   return m ? m[1] + '.' + m[2] : '';
 }
 
-
-// Pull unconsumed bookmarklet/phone scrapes from scrape_inbox for the NEW tab.
-// `silent` suppresses "nothing yet" toasts for the auto-pull paths.
-async function pullScraped(target, silent) {
-  if (newBatchRunning) return;
-  let rows;
-  try {
-    const { data, error } = await sb.from('scrape_inbox')
-      .select('id,payload').eq('kind', 'shopee').eq('consumed', false)
-      .is('worker_id', null)
-      .order('created_at', { ascending: true });
-    if (error) throw error;
-    rows = data || [];
-  } catch (e) {
-    if (!silent) toast('Inbox error — ' + (e.message || 'unknown'));
-    return;
-  }
-  if (!rows.length) {
-    if (!silent) toast('Nothing scraped yet — use the bookmarklet first');
-    return;
-  }
-
-  // NEW tab: drop couldn't-load markers (they belong to FIX, nothing to list)
-  rows = rows.filter(r => !(r.payload || {}).unloaded);
-  // Sort each scrape by what it already matches, by stable Shopee id:
-  //  - active listing → belongs to the FIX queue; leave it on the belt for FIX
-  //  - done listing   → already finished; a useless re-scrape, so consume it to
-  //                     stop already-done products piling back up in the inbox
-  //  - neither        → genuinely new; ingest into NEW
-  const keyOf = r => shopeeKey((r.payload || {}).url);
-  const activeKeys = new Set(LISTINGS.map(l => shopeeKey(l && l.shopee)).filter(Boolean));
-  const doneKeys   = new Set(doneData.map(d => shopeeKey(d.shopeeUrl)).filter(Boolean));
-  const matchedDone   = rows.filter(r => !activeKeys.has(keyOf(r)) && doneKeys.has(keyOf(r)));
-  const matchedActive = rows.filter(r => activeKeys.has(keyOf(r)));
-  rows = rows.filter(r => !activeKeys.has(keyOf(r)) && !doneKeys.has(keyOf(r)));
-  // Clear already-done re-scrapes off the belt so they don't keep returning
-  if (matchedDone.length) sb.from('scrape_inbox').update({ consumed: true }).in('id', matchedDone.map(r => r.id)).then(() => {});
-  if (!rows.length) {
-    if (!silent) {
-      if (matchedDone.length) toast(matchedDone.length === 1 ? 'You already did this one ✓' : `You already did these ${matchedDone.length} ✓`);
-      else if (matchedActive.length) toast('Already in your FIX queue — fix it there');
-      else toast('Nothing new to pull — scrape a product first');
-    }
-    return;
-  }
-  // Every scrape becomes a card (1 or many — one consistent flow). Don't consume
-  // yet — keep scrapes on the belt until each card is resolved (Save or Clear),
-  // so a refresh re-pulls instead of losing work. Skip scrapes already shown as
-  // a card so re-pulls don't duplicate or needlessly regenerate.
-  const showing = new Set(newBatchResults.map(c => shopeeKey(c.url)).filter(Boolean));
-  const fresh = rows.filter(r => !showing.has(keyOf(r)));
-  if (!fresh.length) { if (!silent) toast('Already loaded — resolve the cards below'); return; }
-  toast(`Pulled ${fresh.length} scrape${fresh.length > 1 ? 's' : ''}`);
-  ingestScrapedBatch(fresh.map(r => ({ payload: r.payload || {}, inboxId: r.id })));
-}
-
-
-// Batch ingest of pre-scraped payloads — no /api/shopee fetch needed,
-// the bookmarklet already delivered the full product text + price
-async function ingestScrapedBatch(items) {
-  if (newBatchRunning) return;
-  newBatchRunning = true;
-  // Append (don't replace) so a re-pull adds fresh cards without wiping unsaved
-  // ones already on screen. Each card remembers its source inbox row (inboxId)
-  // so saving or clearing it can take that exact scrape off the belt.
-  const startIdx = newBatchResults.length;
-  try {
-    items.forEach(it => newBatchResults.push({ url: (it.payload || {}).url || '', inboxId: it.inboxId, status: 'loading', loadingMsg: 'Generating…' }));
-    renderNewView();
-    for (let i = 0; i < items.length; i++) {
-      const idx = startIdx + i;
-      const p = items[i].payload || {};
-      const inboxId = items[i].inboxId;
-      try {
-        const text = [p.title, p.description].filter(Boolean).join('\n\n');
-        if (!text) throw new Error('Empty scrape');
-        const cost = highestCost(p);
-        const imgs = p.images || [];
-        try {
-          const { title, desc } = await runAIGenerate(text);
-          newBatchResults[idx] = { ...newBatchResults[idx], url: p.url || '', inboxId, status: 'done', title, desc, price: cost, images: imgs, sourceText: text, sourceCollapsed: true };
-        } catch (e) {
-          // AI unavailable — store scraped text as source, leave title/desc blank for manual generate
-          newBatchResults[idx] = {
-            ...newBatchResults[idx], url: p.url || '', inboxId, status: 'done', price: cost, images: imgs,
-            title: '', desc: '', sourceText: text, sourceCollapsed: true,
-          };
-        }
-      } catch (e) {
-        newBatchResults[idx] = { ...newBatchResults[idx], url: p.url || '', inboxId, status: 'error', error: e.message || 'unknown' };
-      }
-      renderNewView();
-    }
-  } finally {
-    newBatchRunning = false;
-    renderNewView();
-  }
-}
-
-function saveApiKeyBatch(i) {
-  saveApiKeyFrom(`bkey-${i}`, () => {
-    if (newBatchResults[i]) newBatchResults[i].keyVisible = false;
-    renderNewView();
-  });
-}
-
-// Re-fetch a batch card's product from its URL via /api/shopee.
-// Uses object-reference tracking (indexOf) so a clearBatchItem() splice
-// during the await doesn't corrupt the index.
-async function fetchBatchShopee(i) {
-  const r = newBatchResults[i];
-  if (!r || !r.url || !r.url.trim()) { toast('Enter a Shopee URL first'); return; }
-  r.batchFetching = true;
-  renderNewView();
-  try {
-    const res  = await fetch(`/api/shopee?url=${encodeURIComponent(r.url.trim())}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Fetch failed');
-    const ci = newBatchResults.indexOf(r);
-    if (ci === -1) return; // card cleared while fetch was in flight
-    const text = [data.title, data.description].filter(Boolean).join('\n\n');
-    newBatchResults[ci] = {
-      ...r, batchFetching: false,
-      sourceText: text || r.sourceText, sourceCollapsed: true,
-      images: (data.images && data.images.length) ? data.images : r.images,
-      price: data.price_max || data.price || r.price || 0,
-    };
-    toast('Fetched ✓');
-  } catch (e) {
-    const ci = newBatchResults.indexOf(r);
-    if (ci !== -1) newBatchResults[ci] = { ...r, batchFetching: false };
-    toast('Fetch failed — ' + (e.message || 'unknown'));
-  }
-  renderNewView();
-}
-
-async function generateBatchItem(i) {
-  const r = newBatchResults[i];
-  if (!r) return;
-  const text = r.sourceText || [r.title, r.desc].filter(Boolean).join('\n\n');
-  if (!text.trim()) { toast('No source text to generate from'); return; }
-  newBatchResults[i] = { ...r, batchLoading: true };
-  renderNewView();
-  try {
-    const { title, desc } = await runAIGenerate(text);
-    newBatchResults[i] = { ...newBatchResults[i], batchLoading: false, title, desc };
-  } catch (e) {
-    newBatchResults[i] = { ...newBatchResults[i], batchLoading: false };
-    if (e.message === 'NO_KEY') { newApiKeyVisible = true; }
-    else toast('Generate failed — ' + e.message);
-  }
-  renderNewView();
-}
-
-function saveApiKeyNew() {
-  saveApiKeyFrom('new-api-key-input', () => { newApiKeyVisible = false; renderNewView(); });
-}
-
-const _batchCopyTimers = {};
-function copyBatch(i, field) {
-  const taId  = field === 'title' ? `btt-${i}` : `bdt-${i}`;
-  const btnId = field === 'title' ? `bct-${i}` : `bcd-${i}`;
-  const ta  = document.getElementById(taId);
-  const btn = document.getElementById(btnId);
-  if (!ta || !ta.value) return;
-  navigator.clipboard.writeText(ta.value).then(() => {
-    btn.textContent = 'Copied ✓'; btn.classList.add('copied');
-    clearTimeout(_batchCopyTimers[btnId]);
-    _batchCopyTimers[btnId] = setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-  });
-}
-
-// Clear (your "delete") also resolves the scrape — take it off the belt so a
-// re-pull or refresh doesn't bring a card you've rejected back.
-//
-// Guard: refuse to splice while a batch is actively running. The batch loops
-// track cards by a fixed integer index (startIdx + i); splicing an earlier card
-// shifts those indices and causes the loop to write results into the wrong slot,
-// silently corrupting another card's title/description. Users should wait for the
-// spinner to finish (a few seconds per card) before clearing.
-function clearBatchItem(i) {
-  const r = newBatchResults[i];
-  if (newBatchRunning) {
-    toast('Wait for the batch to finish loading, then clear it');
-    return;
-  }
-  if (r && r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
-  newBatchResults.splice(i, 1);
-  renderNewView();
-}
-
-async function saveBatchItem(i) {
-  const r = newBatchResults[i];
-  if (!r || !r.title) { toast('No title to save'); return; }
-  // Guard a fast double-tap: the insert below is awaited and the card isn't
-  // spliced out until it resolves, so a second call would read the same `r`
-  // and insert a duplicate listings row. The card is always removed on
-  // completion (even on insert error), so the flag never needs resetting.
-  if (r._saving) return;
-  r._saving = true;
-  const cost = r.price != null ? r.price : 0;
-  const sell = calcSell(cost);
-  const { data, error } = await sb.from('listings').insert({
-    title: r.title, status: 'done', shopee_url: r.url || '',
-    carousell_url: r.caroUrl || null,
-    source_cost: cost, sell_price: sell,
-    ai_title: r.title || null,
-    ai_description: r.desc || null,
-    images: (r.images && r.images.length) ? r.images : null,
-  }).select('id').single();
-  if (error) {
-    // Insert failed — keep the card so the user can retry; don't consume the inbox row
-    r._saving = false;
-    toast('Save failed — tap Save to retry', true);
-    renderNewView();
-    return;
-  }
-  const sbId = data?.id;
-  doneData.push({
-    index: null, id: sbId, title: r.title, description: r.desc || '',
-    shopeeUrl: r.url, carousellUrl: r.caroUrl || '', sourceCost: cost, sellPrice: sell,
-    doneAt: new Date().toISOString()
-  });
-  doneTodayCount++;
-  // Resolved — take the source scrape off the belt and drop the card
-  if (r.inboxId) sb.from('scrape_inbox').update({ consumed: true }).eq('id', r.inboxId).then(() => {});
-  newBatchResults.splice(i, 1);
-  pushToSupabase();
-  renderSessionBar();
-  renderNewView();
-  toast('Saved ✓');
-}
-
-async function batchGenerateNew() {
-  if (newBatchRunning) return;
-  const urlsEl = document.getElementById('new-batch-urls');
-  const urls = (urlsEl?.value || '').split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
-  if (!urls.length) { toast('Paste at least one Shopee URL'); return; }
-
-  if (urlsEl) urlsEl.value = '';          // clear the input once queued
-  newBatchRunning = true;
-  // Append (don't replace) so manual URLs add to any pulled cards already showing
-  const startIdx = newBatchResults.length;
-  try {
-    urls.forEach(url => newBatchResults.push({ url, status: 'loading', loadingMsg: 'Fetching…' }));
-    renderNewView();
-
-    for (let i = 0; i < urls.length; i++) {
-      const idx = startIdx + i;
-      try {
-        const res  = await fetch(`/api/shopee?url=${encodeURIComponent(urls[i])}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Fetch failed');
-        const productText = [data.title, data.description].filter(Boolean).join('\n\n');
-        if (!productText) throw new Error('No product text returned');
-
-        newBatchResults[idx].loadingMsg = 'Generating…';
-        renderNewView();
-
-        const cost = data.price_max || data.price || 0;
-        const { title, desc } = await runAIGenerate(productText);
-        newBatchResults[idx] = { ...newBatchResults[idx], url: urls[i], status: 'done', title, desc, price: cost, images: data.images || [], sourceText: productText, sourceCollapsed: true };
-      } catch (e) {
-        newBatchResults[idx] = { ...newBatchResults[idx], url: urls[i], status: 'error', error: e.message || 'unknown' };
-      }
-      renderNewView();
-    }
-  } finally {
-    newBatchRunning = false;
-    renderNewView();
-  }
-}
-
-// Add an empty card to fill in by hand (replaces the old single NEW form)
-function addBlankCard() {
-  newBatchResults.push({ url: '', status: 'done', title: '', desc: '', price: 0, images: [], sourceText: '', sourceCollapsed: true });
-  renderNewView();
-}
 
 
 // Sales
@@ -1619,7 +1046,7 @@ function logSale() {
   renderSalesView();
   renderSessionBar();
   _logSaleBusy = false;
-  toast('Logged ✓');
+  toast('Logged âœ“');
 }
 
 let _searchMatches = [];
@@ -1627,49 +1054,30 @@ let _selectedListingId = null;   // Supabase listings.id of the sale being logge
 
 function searchListings(query) {
   const dropdown = document.getElementById('search-dropdown');
-  // Any keystroke means the user is re-searching — clear the prior selection so
+  // Any keystroke means the user is re-searching â€” clear the prior selection so
   // a sale never gets attributed to the listing they had selected before they
   // changed the text. selectMatch() will re-set it when they pick from the dropdown.
   _selectedListingId = null;
   if (!query.trim()) { dropdown.style.display = 'none'; _searchMatches = []; return; }
   // Word-based match (same approach as the LISTINGS search): every word must
-  // appear, any order — immune to pasted non-breaking spaces, pipes, dashes
+  // appear, any order â€” immune to pasted non-breaking spaces, pipes, dashes
   const terms = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
   if (!terms.length) terms.push(query.toLowerCase().trim());
   const matchesQuery = title => { const t = title.toLowerCase(); return terms.every(w => t.includes(w)); };
   _searchMatches = [];
   _searchSel = -1;
-  // Search done listings first — uses AI-rewritten titles
-  for (const d of doneData) {
-    if (_searchMatches.length >= 8) break;
-    if (!matchesQuery(d.title)) continue;
-    // Resolve the entry's current queue position by stable id — null when the
-    // listing is no longer active. The stored d.index goes stale as the list shifts.
-    const li = d.id != null ? LISTINGS.findIndex(l => l.id === d.id) : -1;
-    _searchMatches.push({
-      name: d.title,
-      price: d.sellPrice,
-      shopee: d.shopeeUrl ?? '',
-      caro:   d.carousellUrl ?? '',
-      cost: d.sourceCost,
-      listingIdx: li >= 0 ? li : null,
-      listingDbId: d.id || null
-    });
-  }
-  // Fall back to unprocessed LISTINGS by original title
   for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
-    if (doneSet.has(i) || deletedSet.has(i)) continue;
     if (!matchesQuery(LISTINGS[i].title)) continue;
-    _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingIdx: i, listingDbId: LISTINGS[i].id || null });
+    _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, listingDbId: LISTINGS[i].id || null });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
   dropdown.innerHTML = _searchMatches.map((m, mi) => {
-    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee ↗</a>` : '';
-    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell ↗</a>` : '';
+    const shopeeLink = m.shopee ? `<a class="search-result-link" href="${esc(m.shopee)}" target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Shopee â†—</a>` : '';
+    const caroLink  = m.caro   ? `<a class="search-result-link" href="${esc(m.caro)}"   target="_blank" rel="noopener" onmousedown="event.stopPropagation()">Carousell â†—</a>` : '';
     return `<div class="search-result" onmousedown="selectMatch(${mi})">
       <div class="search-result-name">${esc(m.name)}</div>
       <div class="search-result-meta">
-        <span class="search-result-price">Sell $${m.price != null && isFinite(m.price) ? Number(m.price).toFixed(2) : '—'}</span>
+        <span class="search-result-price">Sell $${m.price != null && isFinite(m.price) ? Number(m.price).toFixed(2) : 'â€”'}</span>
         ${shopeeLink}${caroLink}
       </div>
     </div>`;
@@ -1680,17 +1088,16 @@ function searchListings(query) {
 function selectMatch(mi) {
   const m = _searchMatches[mi];
   if (!m) return;
-  selectListing(m.listingIdx, m.name, m.price, m.shopee, m.caro, m.cost, m.listingDbId);
+  selectListing(m.name, m.price, m.shopee, m.caro, m.cost, m.listingDbId);
 }
 
-function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride, listingDbId) {
-  const L = idx !== null ? LISTINGS[idx] : null;
-  const name   = nameOverride  ?? L?.title ?? '';
-  const price  = priceOverride ?? L?.sell ?? '';
-  const shopee = shopeeOverride !== undefined ? shopeeOverride : (L?.shopee || '');
-  const caro   = caroOverride  !== undefined ? caroOverride  : (L?.caro || '');
+function selectListing(nameOverride, priceOverride, shopeeOverride, caroOverride, costOverride, listingDbId) {
+  const name   = nameOverride  ?? '';
+  const price  = priceOverride ?? '';
+  const shopee = shopeeOverride ?? '';
+  const caro   = caroOverride  ?? '';
   if (!name) return;
-  _selectedListingId = listingDbId ?? (L?.id || null);
+  _selectedListingId = listingDbId ?? null;
   document.getElementById('sale-listing').value = name;
   document.getElementById('search-dropdown').style.display = 'none';
   document.getElementById('sale-price').value = price;
@@ -1700,8 +1107,8 @@ function selectListing(idx, nameOverride, priceOverride, shopeeOverride, caroOve
     costEl.value   = rawCost || '';
   }
   const infoEl = document.getElementById('sale-listing-info');
-  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee ↗</a>` : '';
-  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell ↗</a>` : '';
+  const shopeeLink = shopee ? `<a class="sale-info-link" href="${esc(shopee)}" target="_blank" rel="noopener">Shopee â†—</a>` : '';
+  const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell â†—</a>` : '';
   infoEl.innerHTML = `<span class="sale-info-price">$${price}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
   document.getElementById('sale-category').focus();
@@ -1714,7 +1121,7 @@ function hideDropdown() {
   }, 150);
 }
 
-// Keyboard control for the SALES search dropdown: ↑/↓ highlight, Enter picks,
+// Keyboard control for the SALES search dropdown: â†‘/â†“ highlight, Enter picks,
 // Esc closes. Mouse behavior unchanged.
 let _searchSel = -1;
 function salesSearchKey(e) {
@@ -1763,234 +1170,18 @@ function withFocusPreserved(renderFn) {
 // Render
 function renderAll() {
   renderSessionBar();
-  if (activeTab === 'new') renderNewView();
-  else if (activeTab === 'sales') renderSalesView();
+  if (activeTab === 'sales') renderSalesView();
   else if (activeTab === 'done') renderDoneView();
   // 'workers' tab is data-driven (loaded on demand) — no re-render needed here
 }
 
 function renderSessionBar() {
-  document.getElementById('cnt-done').textContent = doneTodayCount;
-  document.getElementById('cnt-deleted').textContent = deletedTodayCount;
   document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
 }
 
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
-}
-
-// Generic swipe handler shared by NEW batch cards. onLeft fires on a
-// left swipe (green "Done ✓"), onRight on a right swipe (red "Delete ✕").
-function attachCardSwipe(card, onLeft, onRight) {
-  let startX = 0, startY = 0, swiping = false, cancelled = false, buzzed = false;
-
-  // Swipe reveal overlay
-  let reveal = card.querySelector('.swipe-reveal');
-  if (!reveal) {
-    reveal = document.createElement('div');
-    reveal.className = 'swipe-reveal';
-    reveal.style.cssText = 'position:absolute;top:0;bottom:0;left:0;right:0;border-radius:inherit;display:flex;align-items:center;padding:0 28px;pointer-events:none;opacity:0;transition:opacity 0.1s;z-index:0;';
-    card.style.position = 'relative';
-    card.style.overflow = 'hidden';
-    card.insertBefore(reveal, card.firstChild);
-  }
-
-  const THRESHOLD = 110;
-
-  card.addEventListener('touchstart', e => {
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    swiping = true;
-    cancelled = false;
-    buzzed = false;
-    card.style.transition = 'none';
-  }, { passive: true });
-
-  card.addEventListener('touchmove', e => {
-    if (!swiping || cancelled) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    if (Math.abs(dy) > Math.abs(dx)) { cancelled = true; card.style.transform = ''; reveal.style.opacity = 0; return; }
-    if (Math.abs(dx) < 8) return;
-    const progress = Math.min(Math.abs(dx) / THRESHOLD, 1);
-    card.style.transform = `translateX(${dx > 0 ? Math.min(dx, THRESHOLD * 1.1) : Math.max(dx, -THRESHOLD * 1.1)}px)`;
-    reveal.style.opacity = progress;
-    // Haptic tick the moment the swipe crosses the commit threshold (Android;
-    // iOS Safari has no vibration API)
-    if (progress >= 1 && !buzzed) { buzzed = true; navigator.vibrate?.(15); }
-    if (dx > 0) {
-      reveal.style.justifyContent = 'flex-start';
-      reveal.style.background = `rgba(224,88,88,${0.15 * progress})`;
-      reveal.textContent = progress >= 1 ? 'Delete ✕' : 'Swipe →';
-      reveal.style.color = 'var(--danger)';
-      reveal.style.fontWeight = '700';
-      reveal.style.fontSize = '14px';
-    } else {
-      reveal.style.justifyContent = 'flex-end';
-      reveal.style.background = `rgba(107,227,164,${0.15 * progress})`;
-      reveal.textContent = progress >= 1 ? 'Done ✓' : '← Swipe';
-      reveal.style.color = 'var(--success)';
-      reveal.style.fontWeight = '700';
-      reveal.style.fontSize = '14px';
-    }
-  }, { passive: true });
-
-  card.addEventListener('touchend', e => {
-    if (!swiping || cancelled) { swiping = false; return; }
-    swiping = false;
-    const dx = e.changedTouches[0].clientX - startX;
-    card.style.transition = 'transform 0.2s ease';
-    card.style.transform = '';
-    reveal.style.opacity = 0;
-    if (Math.abs(dx) >= THRESHOLD) {
-      if (dx > 0) onRight(); else onLeft();
-    }
-  }, { passive: true });
-}
-
-function renderNewView() { withFocusPreserved(_renderNewView); }
-function _renderNewView() {
-  const wrap = document.getElementById('new-wrap');
-  const apiKey = savedApiKey;
-
-  // Add bar — the single way to add listings. Everything below is a card; there
-  // is no separate single-listing form. Pull 1 or many, paste URLs, or + Blank.
-  let html = `<div class="listing-card">`;
-
-  // API key section
-  if (!apiKey || newApiKeyVisible) {
-    html += `<div class="field-header" style="margin-bottom:8px">
-      <span class="field-label">Claude API Key</span>
-      ${newApiKeyVisible ? `<button class="copy-btn" onclick="newApiKeyVisible=false;renderNewView()">✕</button>` : ''}
-    </div>
-    <div class="ai-key-inline">
-      <input class="ai-key-input" id="new-api-key-input" type="password" placeholder="sk-ant-api03-…">
-      <button class="copy-btn" onclick="saveApiKeyNew()">Save</button>
-    </div>`;
-  }
-
-  html += `<div class="field-header" style="margin-bottom:8px">
-    <span class="field-label">Add listings</span>
-    ${apiKey && !newApiKeyVisible ? `<button class="copy-btn" style="opacity:0.5;font-size:10px" onclick="newApiKeyVisible=true;renderNewView()">🔑 Key</button>` : ''}
-  </div>
-  <textarea class="ai-field" id="new-batch-urls" rows="2"
-    placeholder="Paste Shopee URL(s), one per line…"
-    oninput="autoResize(this)" style="margin-bottom:8px"></textarea>
-  <div class="ai-row" style="flex-wrap:wrap">
-    <button class="ai-gen-btn" ${newBatchRunning?'disabled':''} onclick="batchGenerateNew()">
-      ${newBatchRunning ? 'Working…' : '✨ Generate from URLs'}
-    </button>
-    <button class="shopee-fetch-btn" ${newBatchRunning?'disabled':''} onclick="pullScraped('new')" title="Pull products scraped from your phone/bookmarklet">⬇ Pull scraped</button>
-    <button class="copy-btn" onclick="addBlankCard()" title="Add an empty card to fill in by hand">+ Blank</button>
-  </div>`;
-
-  html += `</div>`; // close add-bar card
-
-  // Batch results
-  if (newBatchResults.length) {
-    html += newBatchResults.map((r, i) => {
-      const shortUrl = r.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 55);
-      if (r.status === 'loading') {
-        return `<div class="listing-card" style="margin-top:12px">
-          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
-          <div class="ai-loading">${r.loadingMsg || 'Working…'}</div>
-          <div class="skel-line" style="width:92%"></div><div class="skel-line" style="width:70%"></div>
-        </div>`;
-      }
-      if (r.status === 'error') {
-        return `<div class="listing-card" style="margin-top:12px">
-          <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
-          <div style="color:var(--danger);font-size:12px;margin-bottom:12px">Error: ${esc(r.error)}</div>
-          <div class="action-row">
-            <button class="btn-delete" onclick="clearBatchItem(${i})">Clear</button>
-            <button class="shopee-fetch-btn" onclick="fetchBatchShopee(${i})">Retry ↓</button>
-          </div>
-        </div>`;
-      }
-      const tlen = (r.title||'').length;
-      const srcText = r.sourceText || '';
-      const srcCollapsed = r.sourceCollapsed !== false;
-      return `<div class="listing-card" style="margin-top:12px" data-batch="${i}">
-        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(shortUrl)}</div>
-        ${(!savedApiKey || r.keyVisible) ? `<div class="field-header" style="margin-bottom:8px">
-          <span class="field-label">Claude API Key</span>
-          ${r.keyVisible ? `<button class="copy-btn" onclick="newBatchResults[${i}].keyVisible=false;renderNewView()">✕</button>` : ''}
-        </div>
-        <div class="ai-key-inline">
-          <input class="ai-key-input" id="bkey-${i}" type="password" placeholder="sk-ant-api03-…">
-          <button class="copy-btn" onclick="saveApiKeyBatch(${i})">Save</button>
-        </div>` : ''}
-        <div class="shopee-fetch-row">
-          <input class="link-edit-input" type="url" placeholder="shopee.sg/…" value="${esc(r.url||'')}"
-            oninput="newBatchResults[${i}].url=this.value" style="flex:1;font-size:13px;padding:9px 12px">
-          <button class="shopee-fetch-btn" ${r.batchFetching ? 'disabled' : ''} onclick="fetchBatchShopee(${i})">
-            ${r.batchFetching ? 'Fetching…' : 'Fetch ↓'}
-          </button>
-        </div>
-        ${(r.images||[]).length ? `<div class="shopee-img-grid">${r.images.map((src, n) =>
-          `<a href="${esc(src)}" target="_blank" rel="noopener" class="shopee-img-thumb"><img src="${esc(src)}" loading="lazy" alt="img ${n+1}" onload="this.style.opacity=1" onerror="this.style.opacity=1"></a>`
-        ).join('')}</div>
-        <div style="display:flex;justify-content:flex-end;margin:6px 0 8px"><button class="copy-btn" onclick="downloadBatchImages(${i})">↓ All ${r.images.length}</button></div>` : ''}
-        <div class="price-calc" style="margin-bottom:10px">
-          <div class="pcol">
-            <div class="pcol-label">Cost</div>
-            <div class="pcol-input-wrap">
-              <span class="pcol-currency">$</span>
-              <input class="cost-input" type="number" inputmode="decimal" step="0.01" min="0" value="${r.price ? esc(String(r.price)) : ''}" oninput="newBatchResults[${i}].price=parseFloat(this.value)||0;document.getElementById('bsell-${i}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)" id="bcost-${i}">
-            </div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pcol">
-            <div class="pcol-label">Sell</div>
-            <div class="sell-display" id="bsell-${i}">$${calcSell(r.price || 0).toFixed(2)}</div>
-          </div>
-        </div>
-        ${srcText ? (srcCollapsed
-          ? `<div class="shopee-collapsed" onclick="newBatchResults[${i}].sourceCollapsed=false;renderNewView()">▼ Shopee source</div>`
-          : `<textarea class="ai-field" style="margin-bottom:4px" oninput="newBatchResults[${i}].sourceText=this.value;autoResize(this)" id="bst-${i}">${esc(srcText)}</textarea>
-             <div class="shopee-collapsed" style="margin-bottom:8px" onclick="newBatchResults[${i}].sourceCollapsed=true;renderNewView()">▲ Collapse</div>`) : ''}
-        ${r.batchLoading ? `<div class="ai-loading">✨ Generating…</div><div class="skel-line" style="width:88%"></div><div class="skel-line" style="width:64%"></div>` : ''}
-        <div class="field-header">
-          <span class="field-label">Title</span>
-          <button class="copy-btn" id="bct-${i}" onclick="copyBatch(${i},'title')">Copy</button>
-        </div>
-        <textarea class="title-input" rows="1" id="btt-${i}"
-          oninput="newBatchResults[${i}].title=this.value;autoResize(this);updateCharCount(this.value,'bcc-${i}')"
-          style="margin-bottom:0" placeholder="Type or generate a title…">${esc(r.title||'')}</textarea>
-        <div class="char-counter ${tlen>225?'danger':tlen>=200?'warn':''}" id="bcc-${i}">${tlen} / 225</div>
-        <div class="field-header" style="margin-top:4px">
-          <span class="field-label">Description</span>
-          <button class="copy-btn" id="bcd-${i}" onclick="copyBatch(${i},'desc')">Copy</button>
-        </div>
-        <textarea class="ai-field" id="bdt-${i}" placeholder="Generate or type a description…"
-          oninput="newBatchResults[${i}].desc=this.value;autoResize(this)">${esc(r.desc||'')}</textarea>
-        ${!r.batchLoading ? `<button class="ai-gen-btn" style="margin-top:8px;width:100%" onclick="generateBatchItem(${i})">✨ Generate</button>` : ''}
-        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--card-border);display:flex;flex-direction:column;gap:8px">
-          <div class="field-header" style="margin-bottom:0"><span class="field-label">Carousell Link (optional)</span></div>
-          <input class="link-edit-input" type="url" placeholder="Carousell URL" value="${esc(r.caroUrl||'')}" oninput="newBatchResults[${i}].caroUrl=this.value" style="width:100%;padding:9px 12px;font-size:13px">
-        </div>
-        <div class="action-row" style="margin-top:10px">
-          <button class="btn-delete" onclick="clearBatchItem(${i})">Clear</button>
-          <button class="btn-done" onclick="saveBatchItem(${i})">Save to Done →</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
-  wrap.innerHTML = html;
-
-  requestAnimationFrame(() => {
-    newBatchResults.forEach((_, i) => {
-      const t = document.getElementById(`btt-${i}`); if (t) autoResize(t);
-      const d = document.getElementById(`bdt-${i}`); if (d) autoResize(d);
-    });
-    // Swipe each batch card like a FIX card: left = Save to Done, right = Clear
-    document.querySelectorAll('#new-wrap [data-batch]').forEach(el => {
-      const i = parseInt(el.getAttribute('data-batch'), 10);
-      attachCardSwipe(el, () => saveBatchItem(i), () => clearBatchItem(i));
-    });
-  });
 }
 
 function deleteSale(idx) {
@@ -2000,7 +1191,7 @@ function deleteSale(idx) {
   renderSalesView();
   renderSessionBar();
   toastWithUndo('Sale removed', () => {
-    // Reinsert by timestamp, not the captured index — the list may have
+    // Reinsert by timestamp, not the captured index â€” the list may have
     // shifted (new sale logged, another delete) before the undo fires
     const pos = salesLog.findIndex(s => (s.ts || '') < (removed.ts || ''));
     salesLog.splice(pos === -1 ? salesLog.length : pos, 0, removed);
@@ -2028,7 +1219,7 @@ function renderSalesView() {
       header = `<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 4px 4px">${s.date === today ? 'Today' : esc(s.date)}</div>`;
     }
     const profit = s.sourceCost ? (s.price - s.sourceCost) : null;
-    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' · ');
+    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' Â· ');
     return header + `<div class="sale-entry">
       <div class="sale-info">
         <div class="sale-name">${esc(s.name)}</div>
@@ -2036,7 +1227,7 @@ function renderSalesView() {
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <div class="sale-price">$${parseFloat(s.price).toFixed(2)}</div>
-        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">✕</button>
+        <button class="copy-btn" style="color:var(--danger);border-color:rgba(224,88,88,0.3)" onclick="deleteSale(${idx})">âœ•</button>
       </div>
     </div>`;
   }).join('');
@@ -2069,18 +1260,15 @@ function renderBreakdown() {
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('view-new').style.display   = tab === 'new'   ? 'block' : 'none';
-  document.getElementById('view-sales').style.display = tab === 'sales' ? 'block' : 'none';
+  document.getElementById('view-sales').style.display   = tab === 'sales'   ? 'block' : 'none';
   document.getElementById('view-done').style.display    = tab === 'done'    ? 'block' : 'none';
   document.getElementById('view-workers').style.display = tab === 'workers' ? 'block' : 'none';
-  document.getElementById('btn-new').classList.toggle('active',     tab === 'new');
   document.getElementById('btn-sales').classList.toggle('active',   tab === 'sales');
   document.getElementById('btn-done').classList.toggle('active',    tab === 'done');
   document.getElementById('btn-workers').classList.toggle('active', tab === 'workers');
-  if (tab === 'new') { renderNewView(); pullScraped('new', true); }
-  else if (tab === 'sales') renderSalesView();
+  if (tab === 'sales') renderSalesView();
   else if (tab === 'done') {
-    // Drop the cached search results — edits made elsewhere (another device)
+    // Drop the cached search results â€” edits made elsewhere (another device)
     // would otherwise show stale until the query is retyped
     _listingsCache = [];
     _listingsEditingId = null;
@@ -2108,28 +1296,27 @@ let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
 let _listingsFilter = 'all'; // 'all' | 'assigned' | 'unassigned'
 
-const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
+const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done â€” newest first. Type above to search all.</p>';
 
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
   const list = document.getElementById('done-list');
   if (!query) {
-    // Recently-done list (newest first) loaded into the same editor as search —
-    // so you can edit title/cost/links, open Shopee, Delete, or Send back to
-    // FIX. Bad Carousell links (not /p/, /sell/, app.link) get flagged below.
+    // Recently-done list (newest first) loaded into the same editor as search.
+    // Bad Carousell links (not /p/, /sell/, app.link) get flagged below.
     //
     // Only reuse cache when the user is actively editing an entry from the
     // recent list. If _listingsEditingId is set but _listingsCacheIsRecent is
     // not, the cache came from a search and clearing the query should reload
-    // recent items — not show stale search results.
+    // recent items â€” not show stale search results.
     if (_listingsCache.length && _listingsEditingId && _listingsCacheIsRecent) { _renderListingsResults(_listingsCache, RECENT_HDR); return; }
-    list.innerHTML = '<p class="done-empty">Loading recent…</p>';
+    list.innerHTML = '<p class="done-empty">Loading recentâ€¦</p>';
     // Tag this request so a stale response never overwrites a search the user
     // started while the network round-trip was in flight.
     const reqSeq = ++_recentReqSeq;
     // Query listings directly by done_at so worker-completed listings appear
     // alongside owner-completed ones without cross-table permission issues.
-    // Do NOT apply the assigned/unassigned filter — see prior comment.
+    // Do NOT apply the assigned/unassigned filter â€” see prior comment.
     sb.from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
       .eq('status', 'done')
@@ -2153,13 +1340,13 @@ function renderDoneView() {
     _renderListingsResults(_listingsCache);
     return;
   }
-  list.innerHTML = '<p class="done-empty">Searching…</p>';
+  list.innerHTML = '<p class="done-empty">Searchingâ€¦</p>';
   _doneSearchTimer = setTimeout(() => _searchAllListings(query), 300);
 }
 
 // A valid Carousell listing link points at a specific listing (/p/, /sell/) or
-// is a Branch share link; a valid Shopee link is a product URL. Anything else —
-// a homepage/category/search URL, the wrong platform, or empty — is "bad".
+// is a Branch share link; a valid Shopee link is a product URL. Anything else â€”
+// a homepage/category/search URL, the wrong platform, or empty â€” is "bad".
 function validCaroLink(u) { return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u); }
 function validShopeeLink(u) { return !!u && /shopee\./i.test(u) && (/i\.\d+\.\d+/.test(u) || /\/product\/\d+\/\d+/.test(u)); }
 
@@ -2168,25 +1355,25 @@ function validShopeeLink(u) { return !!u && /shopee\./i.test(u) && (/i\.\d+\.\d+
 // fix or delete each. Runs in your authed session (listings are owner-only RLS).
 async function scanBadLinks() {
   const list = document.getElementById('done-list');
-  list.innerHTML = '<p class="done-empty">Scanning all listings…</p>';
+  list.innerHTML = '<p class="done-empty">Scanning all listingsâ€¦</p>';
   try {
     const { data, error } = await sb.from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings')
       .limit(5000);
     if (error) throw error;
-    // Active listings are in the VA queue and haven't been posted yet — missing
+    // Active listings are in the VA queue and haven't been posted yet â€” missing
     // Carousell link is expected. Only flag done listings for missing/bad Carousell.
     // Bad Shopee links are flagged on all statuses.
     const bad = (data || []).filter(d =>
       !validShopeeLink(d.shopee_url) ||
       (d.status === 'done' && !validCaroLink(d.carousell_url)));
-    if (!bad.length) { list.innerHTML = '<p class="done-empty">✓ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
+    if (!bad.length) { list.innerHTML = '<p class="done-empty">âœ“ No bad links found across ' + (data || []).length + ' listings</p>'; return; }
     _listingsCache = bad;
     _listingsEditingId = null;
     _listingsCacheIsRecent = false;
-    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">⚠ ' + bad.length + ' of ' + data.length + ' listings have a bad link — fix or delete below.</p>');
+    _renderListingsResults(bad, '<p class="done-empty" style="margin-bottom:8px">âš  ' + bad.length + ' of ' + data.length + ' listings have a bad link â€” fix or delete below.</p>');
   } catch (e) {
-    list.innerHTML = '<p class="done-empty">Scan failed — ' + (e.message || 'are you logged in?') + '</p>';
+    list.innerHTML = '<p class="done-empty">Scan failed â€” ' + (e.message || 'are you logged in?') + '</p>';
   }
 }
 
@@ -2201,10 +1388,10 @@ async function _searchAllListings(query) {
     let q = sb
       .from('listings')
       .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id,guard_warnings');
-    // Each term must appear in EITHER title OR ai_title — listings show ai_title
+    // Each term must appear in EITHER title OR ai_title â€” listings show ai_title
     // in the LISTINGS tab so searching only title misses most AI-rewritten entries.
     for (const t of terms.length ? terms : [query.trim()]) {
-      // Strip % _ \ — PostgREST's ilike has no ESCAPE clause so these can't be
+      // Strip % _ \ â€” PostgREST's ilike has no ESCAPE clause so these can't be
       // safely escaped; product titles never legitimately contain them anyway.
       const escaped = t.replace(/[%_\\]/g, '');
       if (!escaped) continue;
@@ -2257,7 +1444,7 @@ function _renderListingsResults(data, prefix) {
         <div class="done-edit-price">
           <span style="font-size:13px;color:var(--text-tertiary)">Cost $</span>
           <input class="done-edit-cost" type="number" step="0.01" id="lec-${d.id}" value="${cost}" oninput="document.getElementById('les-${d.id}').textContent='$'+calcSell(parseFloat(this.value)||0).toFixed(2)">
-          <span style="color:var(--text-tertiary)">→</span>
+          <span style="color:var(--text-tertiary)">â†’</span>
           <span class="done-edit-sell" id="les-${d.id}">$${calcSell(cost).toFixed(2)}</span>
         </div>
         <input class="link-edit-input" type="url" id="lesh-${d.id}" placeholder="Shopee URL" value="${esc(d.shopee_url||'')}" style="margin-top:8px">
@@ -2267,8 +1454,8 @@ function _renderListingsResults(data, prefix) {
           <button class="done-save-btn" onclick="listingsSave(${d.id})">Save</button>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px">
-          <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed ✓</button>
-          <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete ✕</button>
+          <button onclick="listingsMarkDone(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(107,227,164,0.3);background:rgba(107,227,164,0.08);color:var(--success);font-size:13px;font-weight:700;cursor:pointer">Mark Listed âœ“</button>
+          <button onclick="listingsDelete(${d.id})" style="flex:1;padding:11px;border-radius:10px;border:1px solid rgba(224,88,88,0.3);background:rgba(224,88,88,0.1);color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">Delete âœ•</button>
         </div>
       </div>`;
     }
@@ -2277,25 +1464,25 @@ function _renderListingsResults(data, prefix) {
       <div class="done-info">
         <div class="done-title-text">${esc(d.ai_title || d.title)}</div>
         <div class="done-meta">
-          Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
-          <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
-          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> · 👤 VA</span>' : ''}
-          ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> · ⚠ Dead link</span>' : ''}
+          Cost $${cost.toFixed(2)} â†’ Sell $${sell.toFixed(2)}
+          <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> Â· ${statusLabel[d.status] || d.status}</span>
+          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> Â· ðŸ‘¤ VA</span>' : ''}
+          ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> Â· âš  Dead link</span>' : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${validShopeeLink(d.shopee_url)
-            ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee ↗</a>`
+            ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Shopee â†—</a>`
             : (d.shopee_url
-              ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ bad Shopee link</a>`
-              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Shopee link</span>`)}
+              ? `<a class="link-btn" href="${esc(d.shopee_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">âš  bad Shopee link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">âš  no Shopee link</span>`)}
           ${validCaroLink(d.carousell_url)
-            ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell ↗</a>`
+            ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Carousell â†—</a>`
             : (d.carousell_url
-              ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">⚠ not a listing link</a>`
-              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">⚠ no Carousell link</span>`)}
+              ? `<a class="link-btn" href="${esc(d.carousell_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fbbf24;border-color:#d97706">âš  not a listing link</a>`
+              : `<span class="link-btn" style="color:#fbbf24;border-color:#d97706">âš  no Carousell link</span>`)}
         </div>
       </div>
-      <div class="done-edit-icon">✎</div>
+      <div class="done-edit-icon">âœŽ</div>
     </div>`;
   }).join('');
 }
@@ -2314,7 +1501,7 @@ async function listingsSave(id) {
   const item = _listingsCache.find(l => l.id === id);
   if (item) { item.title = title; item.ai_title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
   _listingsEditingId = null;
-  toast('Saved ✓');
+  toast('Saved âœ“');
   _renderListingsResults(_listingsCache);
 }
 
@@ -2324,29 +1511,6 @@ async function listingsMarkDone(id) {
   const item = _listingsCache.find(l => l.id === id);
   if (item) item.status = 'done';
   _listingsEditingId = null;
-  // Remove from the active FIX queue so it doesn't appear as a ghost card
-  // in the same session. The listing is now status='done' in Supabase, so
-  // the next loadListingsFromSupabase() would drop it anyway — this just
-  // makes the in-memory state consistent immediately.
-  const li = LISTINGS.findIndex(l => l.id === id);
-  if (li !== -1 && !doneSet.has(li)) {
-    // Guard double-mark: owner might open the edit form and click Mark Listed
-    // twice. doneSet is a Set (add is idempotent) but doneTodayCount and doneData
-    // would be double-incremented without this check.
-    doneSet.add(li);
-    // Record a lightweight done entry so the session Done counter is accurate.
-    // Use ai_title from _listingsCache (the only title the owner sees in the LISTINGS
-    // tab) so the SALES tab listing search can find this entry — LISTINGS[] only holds
-    // the raw Shopee title, not the AI-rewritten one.
-    const L = LISTINGS[li];
-    const displayTitle = (item && (item.ai_title || item.title)) || L.title;
-    const caroInput = document.getElementById('leca-' + id);
-    const caroUrl = (caroInput && caroInput.value) || (item && item.carousell_url) || L.caro || '';
-    doneData.push({ id, title: displayTitle, sellPrice: parseFloat(L.sell) || null, sourceCost: parseFloat(L.cost) || null, shopeeUrl: L.shopee || '', carousellUrl: caroUrl, doneAt: new Date().toISOString(), index: li });
-    doneTodayCount++;
-    renderSessionBar();
-    pushToSupabase();
-  }
   toast('Marked as listed ✓');
   _renderListingsResults(_listingsCache);
 }
@@ -2356,22 +1520,6 @@ async function listingsDelete(id) {
   if (error) { toast('Delete failed'); return; }
   _listingsCache = _listingsCache.filter(l => l.id !== id);
   _listingsEditingId = null;
-  // Remove from in-memory LISTINGS so it doesn't reappear during the current session.
-  const li = LISTINGS.findIndex(l => l.id === id);
-  if (li !== -1) {
-    deletedSet.add(li);
-    deletedTodayCount++;
-    // Also remove any stale doneData entries so a re-sync doesn't try to
-    // re-mark the now-deleted row as active again.
-    const removed = doneData.filter(d => d.id === id);
-    if (removed.length) {
-      doneData = doneData.filter(d => d.id !== id);
-      doneTodayCount = Math.max(0, doneTodayCount -
-        removed.filter(d => d.doneAt?.startsWith(getToday())).length);
-    }
-    renderSessionBar();
-    pushToSupabase();
-  }
   toast('Deleted ✓');
   _renderListingsResults(_listingsCache);
 }
@@ -2381,20 +1529,19 @@ async function listingsDelete(id) {
 // The only copy of this data lives in Supabase (no backups there), so this is
 // the recovery path if a row is ever deleted or overwritten by mistake.
 async function exportBackup() {
-  toast('Preparing backup…');
+  toast('Preparing backupâ€¦');
   let listings;
   try {
     const { data, error } = await sb.from('listings').select('*').order('id');
     if (error) throw error;
     listings = data;
   } catch (e) {
-    toast('Backup failed — could not read listings');
+    toast('Backup failed â€” could not read listings');
     return;
   }
   const payload = {
     exportedAt: new Date().toISOString(),
     listings,
-    doneData,
     salesLog
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2407,7 +1554,7 @@ async function exportBackup() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   localStorage.setItem('carobiz_last_backup', new Date().toISOString());
-  toast('Backup downloaded ✓');
+  toast('Backup downloaded âœ“');
 }
 
 function copyField(fieldId, btnId) {
@@ -2453,30 +1600,23 @@ function toastWithUndo(msg, undoFn) {
   toastTimer = setTimeout(() => { el.classList.remove('show'); _undoFn = null; }, 6000);
 }
 
-// Open the current FIX listing's Shopee/Carousell link in a new tab.
-// Anchor click (not window.open) for iPhone PWA compatibility.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  retryPendingPush();   // re-send any sync that failed while we were away
+  retryPendingPush();
   if (getToday() !== todayDate) {
     todayDate = getToday();
-    // Recount from doneData rather than resetting to 0 — the owner may have
-    // already marked items done today (e.g. worked past midnight) and the
-    // existing doneData entries already carry the new date.
-    doneTodayCount = doneData.filter(d => d.doneAt?.startsWith(todayDate)).length;
-    deletedTodayCount = 0;
     renderAll();
   }
 });
 
-// ── Auth gate ────────────────────────────────────────────────────────────────
+// â”€â”€ Auth gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-pass').value;
   const err   = document.getElementById('login-err');
   const btn   = document.getElementById('login-btn');
   err.textContent = '';
-  btn.disabled = true; btn.textContent = 'Signing in…';
+  btn.disabled = true; btn.textContent = 'Signing inâ€¦';
   const { error } = await sb.auth.signInWithPassword({ email, password: pass });
   btn.disabled = false; btn.textContent = 'Sign in';
   if (error) { err.textContent = error.message; return; }
@@ -2484,9 +1624,9 @@ async function doLogin() {
   init();
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// WORKERS TAB  (Step 7 — VA-PLAN)
-// ═══════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// WORKERS TAB  (Step 7 â€” VA-PLAN)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
 let _workerAssignExpanded = null; // worker id whose inline assign panel is open
@@ -2495,7 +1635,7 @@ let _rotateConfirmPending = null; // worker id awaiting rotation confirm (inline
 async function renderWorkersView() {
   const wrap = document.getElementById('workers-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<p style="color:var(--text-tertiary);padding:24px 0">Loading…</p>';
+  wrap.innerHTML = '<p style="color:var(--text-tertiary);padding:24px 0">Loadingâ€¦</p>';
   await refreshWorkers();
 }
 
@@ -2523,7 +1663,7 @@ async function refreshWorkers() {
     // Sales attribution: query sales_log table (authoritative, cross-device) and
     // join to listings.assigned_worker_id. This is more reliable than the in-memory
     // salesLog which only reflects the current session / device.
-    // Cap at 2 000 rows — enough to count all historical sales per worker without
+    // Cap at 2 000 rows â€” enough to count all historical sales per worker without
     // risking a Supabase URL-length overflow on the follow-up .in() query.
     const soldCountMap = {};
     try {
@@ -2581,7 +1721,7 @@ function _renderWorkersView() {
       <span style="font-size:13px;font-weight:600;color:var(--success)">Distribute ${_assignBatchPending.count} listings across ${_assignBatchPending.workerCount} workers?</span>
       <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="_assignBatchPending=null;_renderWorkersView()">Cancel</button>
-        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm ✓</button>
+        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm âœ“</button>
       </div>
     </div>` : '';
 
@@ -2590,10 +1730,10 @@ function _renderWorkersView() {
       <h2 style="font-size:18px;font-weight:700;margin:0">Workers</h2>
       <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="workersAssignBatch()" style="background:rgba(107,227,164,0.1);border-color:rgba(107,227,164,0.3);color:var(--success)">
-          ⚡ Auto-assign queue
+          âš¡ Auto-assign queue
         </button>
         <button class="copy-btn" onclick="showAddWorkerForm()">+ Add worker</button>
-        <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">↺</button>
+        <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">â†º</button>
       </div>
     </div>
     ${confirmStrip}
@@ -2619,8 +1759,8 @@ function _renderWorkersView() {
               <div style="flex:1;min-width:0">
                 <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(w.name)}${w.active ? '' : ' <span style="font-size:11px;color:var(--text-tertiary)">(inactive)</span>'}</div>
                 <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:10px">
-                  ${w.count_today} / ${w.daily_target} done &nbsp;·&nbsp;
-                  <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;·&nbsp;
+                  ${w.count_today} / ${w.daily_target} done &nbsp;Â·&nbsp;
+                  <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;Â·&nbsp;
                   ${w.pending} pending
                 </div>
                 <div style="background:rgba(255,255,255,0.06);border-radius:6px;height:6px;overflow:hidden;margin-bottom:12px">
@@ -2628,13 +1768,13 @@ function _renderWorkersView() {
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
                   <button class="copy-btn" onclick="copyVaLink('${w.id}')" title="${esc(vaUrl)}">
-                    🔗 Copy VA link
+                    ðŸ”— Copy VA link
                   </button>
                   <button class="copy-btn" onclick="_workerAssignExpanded=(_workerAssignExpanded==='${w.id}'?null:'${w.id}');_renderWorkersView()">
                     + Assign listings
                   </button>
                   <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
-                    🔄 Rotate link
+                    ðŸ”„ Rotate link
                   </button>
                   <button class="copy-btn" onclick="workerToggleActive('${w.id}', ${w.active})" style="opacity:0.5">
                     ${w.active ? 'Deactivate' : 'Reactivate'}
@@ -2645,7 +1785,7 @@ function _renderWorkersView() {
                   <span style="font-size:13px;font-weight:600;color:#fca5a5">The old link will stop working. Confirm rotate?</span>
                   <div style="display:flex;gap:8px">
                     <button class="copy-btn" onclick="_rotateConfirmPending=null;_renderWorkersView()">Cancel</button>
-                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate ✓</button>
+                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate âœ“</button>
                   </div>
                 </div>` : ''}
                 ${_workerAssignExpanded === w.id ? `
@@ -2655,7 +1795,7 @@ function _renderWorkersView() {
                     style="width:72px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit">
                   <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">unassigned listings</span>
                   <button class="ai-gen-btn" style="padding:7px 14px" onclick="workerAssignListings('${w.id}','${esc(w.name)}')">Assign</button>
-                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">✕</button>
+                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">âœ•</button>
                 </div>` : ''}
               </div>
             </div>
@@ -2678,7 +1818,7 @@ async function doAddWorker() {
   if (!name) { toast('Enter a name'); return; }
   _addWorkerBusy = true;
   const btn = document.querySelector('#add-worker-form .ai-gen-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Creatingâ€¦'; }
   const { error } = await sb.from('workers').insert({ name, daily_target: target, active: true });
   _addWorkerBusy = false;
   if (btn) { btn.disabled = false; btn.textContent = 'Create worker'; }
@@ -2689,7 +1829,7 @@ async function doAddWorker() {
   if (nameEl) nameEl.value = '';
   if (targetEl) targetEl.value = '';
   document.getElementById('add-worker-form').style.display = 'none';
-  toast('Worker created ✓');
+  toast('Worker created âœ“');
   _workersData = null;
   await refreshWorkers();
 }
@@ -2708,7 +1848,7 @@ async function workerToggleActive(workerId, currentlyActive) {
 
 // Show a selectable URL in a dismissable overlay when the clipboard API is
 // unavailable (iOS PWA standalone mode blocks prompt() silently; this is the
-// safe fallback the owner can long-press → Copy on).
+// safe fallback the owner can long-press â†’ Copy on).
 function showUrlFallback(label, url) {
   const existing = document.getElementById('url-fallback-overlay');
   if (existing) existing.remove();
@@ -2734,9 +1874,9 @@ async function copyVaLink(workerId) {
   const url = `${location.origin}/va?w=${workerId}`;
   try {
     await navigator.clipboard.writeText(url);
-    toast('VA link copied ✓');
+    toast('VA link copied âœ“');
   } catch (e) {
-    showUrlFallback('VA link — long-press to copy:', url);
+    showUrlFallback('VA link â€” long-press to copy:', url);
   }
 }
 
@@ -2744,7 +1884,7 @@ async function copyVaLink(workerId) {
 // confirm() is silently blocked in iOS PWA standalone mode so this two-step is the safe path.
 function workerRotateLink(workerId, name) {
   if (_rotateConfirmPending === workerId) {
-    // Already showing — treat a second tap on the button as cancel
+    // Already showing â€” treat a second tap on the button as cancel
     _rotateConfirmPending = null;
     _renderWorkersView();
     return;
@@ -2759,11 +1899,11 @@ async function _doRotateLink(workerId, name) {
   _rotateConfirmPending = null;
   const w = (_workersData || []).find(x => x.id === workerId);
   if (!w) { toast('Worker not found'); return; }
-  // Create new first — only deactivate old if insert succeeds
+  // Create new first â€” only deactivate old if insert succeeds
   const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
   const newId = data.id;
-  // Transfer assigned active listings to new worker — check for error before deactivating the old one
+  // Transfer assigned active listings to new worker â€” check for error before deactivating the old one
   const { error: tErr } = await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
   if (tErr) {
     // Roll back: delete the new worker record so we don't leave an orphan
@@ -2777,8 +1917,8 @@ async function _doRotateLink(workerId, name) {
   await refreshWorkers();
   // Show new link
   const url = `${location.origin}/va?w=${newId}`;
-  try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
-  catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
+  try { await navigator.clipboard.writeText(url); toast('New VA link copied âœ“'); }
+  catch (e) { showUrlFallback('New VA link â€” old one is now deactivated. Long-press to copy:', url); }
 }
 
 let _assignListingsBusy = false;
@@ -2792,7 +1932,7 @@ async function workerAssignListings(workerId, workerName) {
   _assignListingsBusy = true;
   // Disable the Assign button for feedback
   const btn = inputEl?.parentElement?.querySelector('.ai-gen-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Assigning…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Assigningâ€¦'; }
   try {
     // Fetch unassigned active listings
     const { data, error } = await sb.from('listings')
@@ -2808,7 +1948,7 @@ async function workerAssignListings(workerId, workerName) {
       .update({ assigned_worker_id: workerId })
       .in('id', ids);
     if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
-    toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
+    toast(`Assigned ${ids.length} listings to ${workerName} âœ“`);
     _workerAssignExpanded = null;
     _workersData = null;
     await refreshWorkers();
@@ -2818,7 +1958,7 @@ async function workerAssignListings(workerId, workerName) {
 }
 
 let _assignBatchBusy = false;
-let _assignBatchPending = null; // { count, workerCount } — pending confirm step
+let _assignBatchPending = null; // { count, workerCount } â€” pending confirm step
 
 async function workersAssignBatch() {
   if (_assignBatchBusy) return;
@@ -2836,7 +1976,7 @@ async function workersAssignBatch() {
   if (error) { toast('Failed: ' + error.message); return; }
   if (!firstData || !firstData.length) { toast('No unassigned listings'); return; }
 
-  // confirm() is silently blocked in iOS PWA standalone mode — use an inline
+  // confirm() is silently blocked in iOS PWA standalone mode â€” use an inline
   // two-step instead: first press shows a confirm banner in the workers header,
   // second press (within 6 s) runs the action; anything else cancels.
   if (!_assignBatchPending) {
@@ -2846,7 +1986,7 @@ async function workersAssignBatch() {
     setTimeout(() => { if (_assignBatchPending) { _assignBatchPending = null; _renderWorkersView(); } }, 6000);
     return;
   }
-  // Second press — re-fetch fresh data so we don't double-assign listings that
+  // Second press â€” re-fetch fresh data so we don't double-assign listings that
   // were assigned by another device during the 6-second confirm window
   _assignBatchPending = null;
   const { data, error: err2 } = await sb.from('listings')
@@ -2868,7 +2008,7 @@ async function workersAssignBatch() {
       if (!wIds.length) continue;
       const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
       if (bErr) {
-        toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
+        toast(`Distributed ${assigned} of ${data.length} â€” failed: ${bErr.message}`);
         _workersData = null;
         await refreshWorkers();
         return; // finally block resets _assignBatchBusy
@@ -2876,7 +2016,7 @@ async function workersAssignBatch() {
       assigned += wIds.length;
     }
   }
-  toast(`Distributed ${data.length} listings ✓`);
+  toast(`Distributed ${data.length} listings âœ“`);
   _workersData = null;
   await refreshWorkers();
   } finally {
