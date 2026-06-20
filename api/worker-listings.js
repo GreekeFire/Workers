@@ -56,6 +56,14 @@ module.exports = async function handler(req, res) {
     console.error('inbox drain error:', e.message);
   }
 
+  // Prune consumed inbox rows older than 30 days (fire-and-forget)
+  try {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    sb.from('scrape_inbox').delete().eq('consumed', true).lt('created_at', cutoff).then(() => {});
+  } catch (e) {
+    console.error('inbox prune error:', e.message);
+  }
+
   // Fetch assigned active listings — source_cost deliberately excluded
   const today = new Date().toISOString().slice(0, 10);
   const [listingsResult, countResult] = await Promise.all([
