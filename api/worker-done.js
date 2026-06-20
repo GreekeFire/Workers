@@ -23,8 +23,8 @@ module.exports = async function handler(req, res) {
 
   if (!worker_id)   return res.status(400).json({ error: 'worker_id required' });
   if (!listing_id)  return res.status(400).json({ error: 'listing_id required' });
-  if (carousell_url && !/carousell\./i.test(carousell_url)) {
-    return res.status(400).json({ error: 'invalid carousell_url' });
+  if (carousell_url && !(/carousell\./i.test(carousell_url) && /\/p\/|\/sell\/|app\.link/i.test(carousell_url))) {
+    return res.status(400).json({ error: 'invalid carousell_url — must be a listing link' });
   }
 
   // Validate worker
