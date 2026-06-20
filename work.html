@@ -1595,9 +1595,23 @@ async function workerToggleActive(workerId, currentlyActive) {
   if (_toggleActiveBusy) return;
   _toggleActiveBusy = true;
   const { error } = await sb.from('workers').update({ active: !currentlyActive }).eq('id', workerId);
+  if (error) { _toggleActiveBusy = false; toast('Failed'); return; }
+
+  // When deactivating, release all their active listings back to unassigned pool
+  if (currentlyActive) {
+    const { error: releaseErr, count } = await sb
+      .from('listings')
+      .update({ assigned_worker_id: null })
+      .eq('assigned_worker_id', workerId)
+      .eq('status', 'active')
+      .select('id', { count: 'exact', head: true });
+    if (releaseErr) console.error('release listings error:', releaseErr.message);
+    toast(count ? `Deactivated — ${count} listing${count > 1 ? 's' : ''} released` : 'Worker deactivated');
+  } else {
+    toast('Worker reactivated');
+  }
+
   _toggleActiveBusy = false;
-  if (error) { toast('Failed'); return; }
-  toast(currentlyActive ? 'Worker deactivated' : 'Worker reactivated');
   _workersData = null;
   await refreshWorkers();
 }
