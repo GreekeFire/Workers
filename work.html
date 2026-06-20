@@ -1398,7 +1398,7 @@ async function refreshWorkers() {
     // Load workers + today's done counts + pending assigned listings
     const today = getToday();
     const [wRes, dRes, pRes] = await Promise.all([
-      sb.from('workers').select('id,name,daily_target,active').order('name'),
+      sb.from('workers').select('id,name,daily_target,active,account_name').order('name'),
       sb.from('worker_done').select('worker_id').eq('date', today),
       sb.from('listings').select('id,assigned_worker_id').eq('status', 'active').not('assigned_worker_id', 'is', null)
     ]);
@@ -1492,6 +1492,7 @@ function _renderWorkersView() {
     <div id="add-worker-form" style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:20px">
       <div style="font-size:14px;font-weight:600;margin-bottom:12px">Add new worker</div>
       <input id="wf-name" class="link-edit-input" placeholder="Name" style="margin-bottom:8px">
+      <input id="wf-account" class="link-edit-input" placeholder="Carousell account name" style="margin-bottom:8px">
       <input id="wf-target" class="link-edit-input" type="number" placeholder="Daily target (default 100)" style="margin-bottom:12px">
       <div style="display:flex;gap:8px">
         <button class="copy-btn" onclick="document.getElementById('add-worker-form').style.display='none'">Cancel</button>
@@ -1509,6 +1510,7 @@ function _renderWorkersView() {
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
               <div style="flex:1;min-width:0">
                 <div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(w.name)}${w.active ? '' : ' <span style="font-size:11px;color:var(--text-tertiary)">(inactive)</span>'}</div>
+                ${w.account_name ? `<div style="font-size:11px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--coral);margin-bottom:4px">${esc(w.account_name)}</div>` : ''}
                 <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:10px">
                   ${w.count_today} / ${w.daily_target} done &nbsp;·&nbsp;
                   <span style="color:var(--success)">${w.sold_count} sold</span> &nbsp;·&nbsp;
@@ -1564,20 +1566,23 @@ function showAddWorkerForm() {
 let _addWorkerBusy = false;
 async function doAddWorker() {
   if (_addWorkerBusy) return;
-  const name = (document.getElementById('wf-name')?.value || '').trim();
-  const target = parseInt(document.getElementById('wf-target')?.value || '100') || 100;
+  const name    = (document.getElementById('wf-name')?.value || '').trim();
+  const account = (document.getElementById('wf-account')?.value || '').trim();
+  const target  = parseInt(document.getElementById('wf-target')?.value || '100') || 100;
   if (!name) { toast('Enter a name'); return; }
   _addWorkerBusy = true;
   const btn = document.querySelector('#add-worker-form .ai-gen-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
-  const { error } = await sb.from('workers').insert({ name, daily_target: target, active: true });
+  const { error } = await sb.from('workers').insert({ name, account_name: account || null, daily_target: target, active: true });
   _addWorkerBusy = false;
   if (btn) { btn.disabled = false; btn.textContent = 'Create worker'; }
   if (error) { toast('Failed: ' + error.message); return; }
   // Clear inputs so re-opening the form is blank
   const nameEl = document.getElementById('wf-name');
+  const accountEl = document.getElementById('wf-account');
   const targetEl = document.getElementById('wf-target');
   if (nameEl) nameEl.value = '';
+  if (accountEl) accountEl.value = '';
   if (targetEl) targetEl.value = '';
   document.getElementById('add-worker-form').style.display = 'none';
   toast('Worker created ✓');

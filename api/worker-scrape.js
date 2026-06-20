@@ -228,7 +228,7 @@ module.exports = async function handler(req, res) {
 
   // 1. Validate worker
   const { data: worker, error: wErr } = await sb
-    .from('workers').select('id, name, active').eq('id', worker_id).single();
+    .from('workers').select('id, name, active, account_name').eq('id', worker_id).single();
   if (wErr || !worker) return res.status(404).json({ ok: false, error: 'worker-not-found' });
   if (!worker.active)  return res.status(403).json({ ok: false, error: 'worker-inactive' });
 
@@ -372,6 +372,7 @@ module.exports = async function handler(req, res) {
       images:             p.images && p.images.length ? p.images : null,
       status:             'active',
       assigned_worker_id: worker_id,
+      account_name:       worker.account_name || null,
       guard_warnings:     warnings.length ? warnings : null,
       ai_title:           aiTitle,
       ai_description:     aiDescription,
