@@ -54,7 +54,7 @@ module.exports = async function handler(req, res) {
   }
 
   // Insert worker_done row
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // SGT (UTC+8)
   const { error: doneErr } = await sb.from('worker_done').insert({
     worker_id,
     listing_id,

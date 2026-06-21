@@ -643,7 +643,9 @@ function calcSell(cost) {
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Returns today's date string YYYY-MM-DD (recomputed each call so midnight rollovers work)
-function getToday() { return new Date().toISOString().slice(0, 10); }
+// Singapore date (UTC+8, no DST) so "today" rolls over at local midnight,
+// not 8am. Used for revenue-today grouping and the sale's stored date.
+function getToday() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
 
 // Listings (loaded from Supabase)
 let LISTINGS = [];      // [{ id, title, shopee, caro, cost, sell }, ...]

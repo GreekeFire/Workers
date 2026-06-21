@@ -24,7 +24,7 @@ module.exports = async function handler(req, res) {
   if (wErr || !worker) return res.status(404).json({ error: 'worker-not-found' });
   if (!worker.active)  return res.status(403).json({ error: 'worker-inactive' });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // SGT (UTC+8)
   const { count } = await sb
     .from('worker_done')
     .select('id', { count: 'exact', head: true })

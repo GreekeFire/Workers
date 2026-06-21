@@ -65,7 +65,7 @@ module.exports = async function handler(req, res) {
   }
 
   // Fetch assigned active listings — source_cost deliberately excluded
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // SGT (UTC+8)
   const [listingsResult, countResult] = await Promise.all([
     sb.from('listings')
       .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, carousell_url, guard_warnings, status, created_at')
