@@ -383,6 +383,11 @@ module.exports = async function handler(req, res) {
 
   if (lErr) {
     console.error('listing insert error:', lErr);
+    // Give up on this row so it isn't re-drained every poll (which would re-run
+    // AI generation each time). Duplicates were already handled above; this is a
+    // hard failure (incl. a lost unique-index race, where the listing now exists
+    // anyway). The VA can re-scrape if a genuine listing was lost.
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.status(500).json({ ok: false, error: 'listing-insert: ' + lErr.message });
   }
 

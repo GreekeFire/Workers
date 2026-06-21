@@ -1222,11 +1222,11 @@ async function listingsSave(id) {
   if (!title) { toast('Title cannot be empty'); return; }
   const sell = calcSell(cost);
   const { error } = await sb.from('listings').update({
-    title, ai_title: title, shopee_url: shopeeUrl, carousell_url: carousellUrl, source_cost: cost, sell_price: sell
+    title, ai_title: title, shopee_url: shopeeUrl, carousell_url: carousellUrl, source_cost: cost, sell_price: sell, guard_warnings: null
   }).eq('id', id);
   if (error) { toast('Save failed'); return; }
   const item = _listingsCache.find(l => l.id === id);
-  if (item) { item.title = title; item.ai_title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; }
+  if (item) { item.title = title; item.ai_title = title; item.shopee_url = shopeeUrl; item.carousell_url = carousellUrl; item.source_cost = cost; item.sell_price = sell; item.guard_warnings = null; }
   _listingsEditingId = null;
   toast('Saved ✓');
   _renderListingsResults(_listingsCache);
