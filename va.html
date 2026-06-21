@@ -451,6 +451,13 @@ function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Must match the server check in api/worker-done.js: a real Carousell listing
+// link (/p/, /sell/, or a Branch app.link), not just any carousell.* URL — so a
+// profile/homepage link can't enable Done and then get rejected server-side.
+function validCaroLink(u) {
+  return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u);
+}
+
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
@@ -652,7 +659,7 @@ function render() {
     const aiMissing    = cur.ai_title == null;
     const aiEmpty      = !aiMissing && cur.ai_title === '';
     if (cur.carousell_url && !caroUrlDraft[cur.id]) caroUrlDraft[cur.id] = cur.carousell_url;
-    const caroValid    = /carousell\./i.test(caroUrlDraft[cur.id] || '');
+    const caroValid    = validCaroLink(caroUrlDraft[cur.id] || '');
     const doneEnabled  = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
     const title        = cur.ai_title || cur.title || '';
     const desc         = cur.ai_description || '';
@@ -745,8 +752,8 @@ function render() {
         </div>
         <input id="caro-url-${cur.id}" type="url" placeholder="https://www.carousell.sg/p/…"
           value="${esc(caroUrlDraft[cur.id] || '')}"
-          style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid ${/carousell\./i.test(caroUrlDraft[cur.id]||'') ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)'};background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
-          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=/carousell\\./i.test(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';_refreshDoneBtn(${cur.id})">
+          style="width:100%;box-sizing:border-box;padding:11px 14px;border-radius:10px;border:1px solid ${validCaroLink(caroUrlDraft[cur.id]||'') ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)'};background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;outline:none"
+          oninput="caroUrlDraft[${cur.id}]=this.value;const _v=validCaroLink(this.value);this.style.borderColor=_v?'rgba(107,227,164,0.5)':'rgba(255,255,255,0.12)';_refreshDoneBtn(${cur.id})">
       </div>`;
 
     // Actions
@@ -794,7 +801,7 @@ function _refreshDoneBtn(listingId) {
   const acked      = ackedWarns.has(listingId);
   const aiMissing  = cur.ai_title == null;
   const aiEmpty    = !aiMissing && cur.ai_title === '';
-  const caroValid  = /carousell\./i.test(caroUrlDraft[listingId] || '');
+  const caroValid  = validCaroLink(caroUrlDraft[listingId] || '');
   const enabled    = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
   const btn = document.getElementById('done-btn');
   if (btn) btn.disabled = !enabled;
@@ -821,8 +828,8 @@ function toggleDesc() {
 async function doDone(listingId, warningsOverridden) {
   if (busy) return;
   const caroUrl = (document.getElementById('caro-url-' + listingId)?.value || '').trim();
-  if (!/carousell\./i.test(caroUrl)) {
-    showToast('Paste your Carousell listing link first', true);
+  if (!validCaroLink(caroUrl)) {
+    showToast('Paste a valid Carousell listing link (/p/ or /sell/)', true);
     return;
   }
   busy = true;

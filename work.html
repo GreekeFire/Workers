@@ -663,7 +663,7 @@ async function init() {
   renderAll();
   await loadListingsFromSupabase();
   await loadSalesFromSupabase();
-  renderAll();
+  switchTab('done');   // default to the LISTINGS view (keyed 'done' internally)
   maybeBackupNudge();
 }
 
@@ -986,6 +986,7 @@ function renderBreakdown() {
 
 function switchTab(tab) {
   activeTab = tab;
+  renderSessionBar();
   document.getElementById('view-sales').style.display   = tab === 'sales'   ? 'block' : 'none';
   document.getElementById('view-done').style.display    = tab === 'done'    ? 'block' : 'none';
   document.getElementById('view-workers').style.display = tab === 'workers' ? 'block' : 'none';
@@ -1626,14 +1627,14 @@ async function _doRotateLink(workerId, name) {
   const w = (_workersData || []).find(x => x.id === workerId);
   if (!w) { toast('Worker not found'); return; }
   // Create new first — only deactivate old if insert succeeds
-  const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, active: true }).select('id').single();
+  const { data, error } = await sb.from('workers').insert({ name: w.name, daily_target: w.daily_target, account_name: w.account_name || null, active: true }).select('id').single();
   if (error) { toast('Failed to rotate: ' + error.message); return; }
   const newId = data.id;
   // Transfer assigned active listings to new worker — check for error before deactivating the old one
   const { error: tErr } = await sb.from('listings').update({ assigned_worker_id: newId }).eq('assigned_worker_id', workerId).eq('status', 'active');
   if (tErr) {
     // Roll back: delete the new worker record so we don't leave an orphan
-    await sb.from('workers').delete().eq('id', newId).catch(() => {});
+    try { await sb.from('workers').delete().eq('id', newId); } catch (_) {}
     toast('Rotate failed (listing transfer): ' + tErr.message);
     return;
   }

@@ -337,6 +337,7 @@ module.exports = async function handler(req, res) {
   if (isRefresh) {
     const { error: updateErr } = await sb.from('listings').update({
       assigned_worker_id: worker_id,
+      account_name:       worker.account_name || null,
       ai_title:           aiTitle,
       ai_description:     aiDescription,
       images:             p.images && p.images.length ? p.images : null,
