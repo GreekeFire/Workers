@@ -495,21 +495,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
   .toast.err { background: rgba(220,38,38,0.92); border-color: rgba(220,38,38,0.4); }
 
-  /* Sync status */
-  .sync-status {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-align: right;
-    padding: 4px 2px 8px;
-    min-height: 20px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    color: var(--text-tertiary);
-  }
-  .sync-status.visible { opacity: 1; }
-  .sync-status.synced { color: var(--success); }
-  .sync-status.error { color: var(--danger); }
 
   .refresh-btn {
     width: 46px;
@@ -578,7 +563,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       <span class="sess-val coral" id="cnt-revenue">$0</span>
     </div>
   </div>
-  <div class="sync-status" id="sync-status"></div>
 
   <!-- Segmented toggle + cloud refresh -->
   <div style="display:flex; gap:8px;">
@@ -678,7 +662,7 @@ async function init() {
   loadLocal();
   renderAll();
   await loadListingsFromSupabase();
-  await syncFromSupabase();
+  await loadSalesFromSupabase();
   renderAll();
   maybeBackupNudge();
 }
@@ -708,67 +692,36 @@ function loadLocal() {
   if (rawSales) salesLog = JSON.parse(rawSales);
 }
 
-async function syncFromSupabase() {
+// sales_log is the single source of truth. localStorage is just a read-cache so
+// the list paints instantly on open; it's overwritten from the server on load.
+async function loadSalesFromSupabase() {
   try {
-    const { data } = await sb.from('app_state').select('data').eq('key', 'carobiz_sales').single();
-    if (data?.data) {
-      const cloud = data.data;
-      const newestCloudTs = cloud.reduce((m, s) => ((s.ts || '') > m ? s.ts : m), '');
-      const cloudTs = new Set(cloud.map(s => s.ts));
-      const localOnly = salesLog.filter(s => s.ts && !cloudTs.has(s.ts) && s.ts > newestCloudTs);
-      salesLog = [...localOnly, ...cloud].sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
-      localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
-      if (localOnly.length) pushToSupabase();
-    }
+    const { data, error } = await sb
+      .from('sales_log')
+      .select('id,listing_id,name,price,source_cost,category,date,ts')
+      .order('ts', { ascending: false })
+      .limit(2000);
+    if (error) throw error;
+    salesLog = (data || []).map(r => ({
+      id: r.id,
+      name: r.name,
+      price: Number(r.price),
+      sourceCost: r.source_cost == null ? 0 : Number(r.source_cost),
+      category: r.category || '',
+      date: r.date,
+      ts: r.ts,
+      listing_id: r.listing_id || null,
+    }));
+    localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
   } catch (e) {
-    console.warn('Supabase sync error:', e);
-  }
-}
-
-let pendingPush = false;
-
-async function pushToSupabase() {
-  const now = new Date().toISOString();
-  setSyncStatus('syncing');
-  try {
-    await sb.from('app_state').upsert({ key: 'carobiz_sales', data: salesLog, updated_at: now });
-    pendingPush = false;
-    setSyncStatus('synced');
-  } catch (e) {
-    console.warn('Supabase push error:', e);
-    pendingPush = true;
-    setSyncStatus('error');
-  }
-}
-
-function retryPendingPush() {
-  if (pendingPush && navigator.onLine) pushToSupabase();
-}
-window.addEventListener('online', retryPendingPush);
-
-let syncStatusTimer = null;
-function setSyncStatus(state) {
-  const el = document.getElementById('sync-status');
-  if (!el) return;
-  clearTimeout(syncStatusTimer);
-  el.className = 'sync-status visible ' + state;
-  if (state === 'syncing') {
-    el.textContent = '⟳ Syncing…';
-  } else if (state === 'synced') {
-    el.textContent = '✓ Synced';
-    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 3000);
-  } else if (state === 'error') {
-    el.textContent = '✗ Sync failed';
-    syncStatusTimer = setTimeout(() => { el.className = 'sync-status'; }, 5000);
+    console.warn('Failed to load sales from Supabase:', e);
   }
 }
 
 // Re-pull everything from Supabase without restarting the PWA.
 async function refreshFromCloud() {
-  setSyncStatus('syncing');
   await loadListingsFromSupabase();
-  await syncFromSupabase();
-  setSyncStatus('synced');
+  await loadSalesFromSupabase();
   renderAll();
   toast('Refreshed ✓');
 }
@@ -788,7 +741,7 @@ function maybeBackupNudge() {
 
 // Sales
 let _logSaleBusy = false;
-function logSale() {
+async function logSale() {
   if (_logSaleBusy) return;
   const name = document.getElementById('sale-listing').value.trim();
   const price = parseFloat(document.getElementById('sale-price').value);
@@ -798,10 +751,10 @@ function logSale() {
   const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
   const saleTs = new Date().toISOString();
   const saleListingId = _selectedListingId || null;
-  salesLog.unshift({ name, price, sourceCost, category, date: getToday(), ts: saleTs, listing_id: saleListingId });
-  _selectedListingId = null;
-  // Fire-and-forget: mirror into normalized sales_log table for worker attribution
-  sb.from('sales_log').insert({
+
+  // sales_log is the source of truth — insert first, then update the UI from the
+  // row we get back (so a failed write never leaves a phantom sale on screen).
+  const { data, error } = await sb.from('sales_log').insert({
     listing_id:  saleListingId,
     name,
     price,
@@ -809,14 +762,22 @@ function logSale() {
     category:    category || null,
     date:        getToday(),
     ts:          saleTs,
-  }).then(({ error }) => { if (error) console.error('sales_log insert failed:', error.message); });
+  }).select('id').single();
+  if (error) {
+    console.error('sales_log insert failed:', error.message);
+    toast('Failed to log sale');
+    _logSaleBusy = false;
+    return;
+  }
+
+  salesLog.unshift({ id: data.id, name, price, sourceCost, category, date: getToday(), ts: saleTs, listing_id: saleListingId });
+  _selectedListingId = null;
+  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
   document.getElementById('sale-listing').value = '';
   document.getElementById('sale-price').value = '';
   document.getElementById('sale-cost').value = '';
   document.getElementById('sale-category').value = '';
   document.getElementById('sale-listing-info').style.display = 'none';
-  localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
-  pushToSupabase();
   renderSalesView();
   renderSessionBar();
   _logSaleBusy = false;
@@ -935,19 +896,33 @@ function renderSessionBar() {
   document.getElementById('cnt-revenue').textContent = '$' + todayRevenue().toFixed(2);
 }
 
-function deleteSale(idx) {
-  const removed = salesLog.splice(idx, 1)[0];
+async function deleteSale(idx) {
+  const removed = salesLog[idx];
+  if (!removed) return;
+  salesLog.splice(idx, 1);
   localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
-  pushToSupabase();
   renderSalesView();
   renderSessionBar();
-  toastWithUndo('Sale removed', () => {
-    // Reinsert by timestamp, not the captured index — the list may have
-    // shifted (new sale logged, another delete) before the undo fires
+  if (removed.id != null) {
+    const { error } = await sb.from('sales_log').delete().eq('id', removed.id);
+    if (error) console.error('sales_log delete failed:', error.message);
+  }
+  toastWithUndo('Sale removed', async () => {
+    // Re-insert the row (it gets a fresh id). Reinsert in memory by timestamp,
+    // not the captured index — the list may have shifted before undo fires.
+    const { data } = await sb.from('sales_log').insert({
+      listing_id:  removed.listing_id || null,
+      name:        removed.name,
+      price:       removed.price,
+      source_cost: removed.sourceCost || null,
+      category:    removed.category || null,
+      date:        removed.date,
+      ts:          removed.ts,
+    }).select('id').single();
+    const restored = { ...removed, id: data ? data.id : null };
     const pos = salesLog.findIndex(s => (s.ts || '') < (removed.ts || ''));
-    salesLog.splice(pos === -1 ? salesLog.length : pos, 0, removed);
+    salesLog.splice(pos === -1 ? salesLog.length : pos, 0, restored);
     localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
-    pushToSupabase();
     renderSalesView();
     renderSessionBar();
   });
@@ -1353,7 +1328,6 @@ function toastWithUndo(msg, undoFn) {
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  retryPendingPush();
   if (getToday() !== todayDate) {
     todayDate = getToday();
     renderAll();
