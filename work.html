@@ -1380,7 +1380,6 @@ async function doLogin() {
 // ═══════════════════════════════════════════════════════════════════
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
-let _workerAssignExpanded = null; // worker id whose inline assign panel is open
 let _rotateConfirmPending = null; // worker id awaiting rotation confirm (inline two-step)
 
 async function renderWorkersView() {
@@ -1466,28 +1465,14 @@ function _renderWorkersView() {
 
   const workers = _workersData || [];
 
-  // Count unassigned active listings
-  const confirmStrip = _assignBatchPending ? `
-    <div style="background:rgba(107,227,164,0.1);border:1px solid rgba(107,227,164,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <span style="font-size:13px;font-weight:600;color:var(--success)">Distribute ${_assignBatchPending.count} listings across ${_assignBatchPending.workerCount} workers?</span>
-      <div style="display:flex;gap:8px">
-        <button class="copy-btn" onclick="_assignBatchPending=null;_renderWorkersView()">Cancel</button>
-        <button class="ai-gen-btn" onclick="workersAssignBatch()">Confirm ✓</button>
-      </div>
-    </div>` : '';
-
   const unassignedBlock = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap">
       <h2 style="font-size:18px;font-weight:700;margin:0">Workers</h2>
       <div style="display:flex;gap:8px">
-        <button class="copy-btn" onclick="workersAssignBatch()" style="background:rgba(107,227,164,0.1);border-color:rgba(107,227,164,0.3);color:var(--success)">
-          ⚡ Auto-assign queue
-        </button>
         <button class="copy-btn" onclick="showAddWorkerForm()">+ Add worker</button>
         <button class="copy-btn" style="opacity:0.5" onclick="refreshWorkers()">↺</button>
       </div>
     </div>
-    ${confirmStrip}
 
     <div id="add-worker-form" style="display:none;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:16px;margin-bottom:20px">
       <div style="font-size:14px;font-weight:600;margin-bottom:12px">Add new worker</div>
@@ -1523,9 +1508,6 @@ function _renderWorkersView() {
                   <button class="copy-btn" onclick="copyVaLink('${w.id}')" title="${esc(vaUrl)}">
                     🔗 Copy VA link
                   </button>
-                  <button class="copy-btn" onclick="_workerAssignExpanded=(_workerAssignExpanded==='${w.id}'?null:'${w.id}');_renderWorkersView()">
-                    + Assign listings
-                  </button>
                   <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
                     🔄 Rotate link
                   </button>
@@ -1540,15 +1522,6 @@ function _renderWorkersView() {
                     <button class="copy-btn" onclick="_rotateConfirmPending=null;_renderWorkersView()">Cancel</button>
                     <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doRotateLink('${w.id}','${esc(w.name)}')">Rotate ✓</button>
                   </div>
-                </div>` : ''}
-                ${_workerAssignExpanded === w.id ? `
-                <div style="margin-top:12px;padding:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">Assign</span>
-                  <input id="assign-n-${w.id}" type="number" inputmode="numeric" min="1" max="500" value="20"
-                    style="width:72px;padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-primary);font-size:14px;font-weight:600;font-family:inherit">
-                  <span style="font-size:13px;color:var(--text-tertiary);white-space:nowrap">unassigned listings</span>
-                  <button class="ai-gen-btn" style="padding:7px 14px" onclick="workerAssignListings('${w.id}','${esc(w.name)}')">Assign</button>
-                  <button class="copy-btn" onclick="_workerAssignExpanded=null;_renderWorkersView()">✕</button>
                 </div>` : ''}
               </div>
             </div>
@@ -1698,109 +1671,6 @@ async function _doRotateLink(workerId, name) {
   const url = `${location.origin}/va?w=${newId}`;
   try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
   catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
-}
-
-let _assignListingsBusy = false;
-async function workerAssignListings(workerId, workerName) {
-  // Assign up to N unassigned active listings to this worker.
-  // Read N from the inline input (avoids prompt() which is disabled in iOS PWA mode).
-  if (_assignListingsBusy) return;
-  const inputEl = document.getElementById('assign-n-' + workerId);
-  const n = parseInt(inputEl?.value || '20');
-  if (!n || n < 1) { toast('Enter a number of listings to assign'); return; }
-  _assignListingsBusy = true;
-  // Disable the Assign button for feedback
-  const btn = inputEl?.parentElement?.querySelector('.ai-gen-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Assigning…'; }
-  try {
-    // Fetch unassigned active listings
-    const { data, error } = await sb.from('listings')
-      .select('id')
-      .eq('status', 'active')
-      .is('assigned_worker_id', null)
-      .order('id')
-      .limit(n);
-    if (error) { toast('Failed to fetch listings: ' + error.message); return; }
-    if (!data || !data.length) { toast('No unassigned listings available'); return; }
-    const ids = data.map(r => r.id);
-    const { error: uErr } = await sb.from('listings')
-      .update({ assigned_worker_id: workerId })
-      .in('id', ids);
-    if (uErr) { toast('Failed to assign: ' + uErr.message); return; }
-    toast(`Assigned ${ids.length} listings to ${workerName} ✓`);
-    _workerAssignExpanded = null;
-    _workersData = null;
-    await refreshWorkers();
-  } finally {
-    _assignListingsBusy = false;
-  }
-}
-
-let _assignBatchBusy = false;
-let _assignBatchPending = null; // { count, workerCount } — pending confirm step
-
-async function workersAssignBatch() {
-  if (_assignBatchBusy) return;
-  // Set busy immediately before any await so rapid double-taps can't bypass the guard
-  _assignBatchBusy = true;
-  try {
-  // Auto-distribute all unassigned active listings evenly across active workers
-  const workers = (_workersData || []).filter(w => w.active);
-  if (!workers.length) { toast('No active workers'); return; }
-  const { data: firstData, error } = await sb.from('listings')
-    .select('id')
-    .eq('status', 'active')
-    .is('assigned_worker_id', null)
-    .order('id');
-  if (error) { toast('Failed: ' + error.message); return; }
-  if (!firstData || !firstData.length) { toast('No unassigned listings'); return; }
-
-  // confirm() is silently blocked in iOS PWA standalone mode — use an inline
-  // two-step instead: first press shows a confirm banner in the workers header,
-  // second press (within 6 s) runs the action; anything else cancels.
-  if (!_assignBatchPending) {
-    _assignBatchPending = { count: firstData.length, workerCount: workers.length };
-    _assignBatchBusy = false; // allow second press
-    _renderWorkersView(); // re-render header with confirm strip visible
-    setTimeout(() => { if (_assignBatchPending) { _assignBatchPending = null; _renderWorkersView(); } }, 6000);
-    return;
-  }
-  // Second press — re-fetch fresh data so we don't double-assign listings that
-  // were assigned by another device during the 6-second confirm window
-  _assignBatchPending = null;
-  const { data, error: err2 } = await sb.from('listings')
-    .select('id')
-    .eq('status', 'active')
-    .is('assigned_worker_id', null)
-    .order('id');
-  if (err2) { toast('Failed: ' + err2.message); return; }
-  if (!data || !data.length) { toast('No unassigned listings'); return; }
-
-  // Round-robin assignment
-  const updates = data.map((r, i) => ({ id: r.id, assigned_worker_id: workers[i % workers.length].id }));
-  // Batch in groups of 100 (Supabase limit)
-  let assigned = 0;
-  for (let i = 0; i < updates.length; i += 100) {
-    const batch = updates.slice(i, i + 100);
-    for (const w of workers) {
-      const wIds = batch.filter(u => u.assigned_worker_id === w.id).map(u => u.id);
-      if (!wIds.length) continue;
-      const { error: bErr } = await sb.from('listings').update({ assigned_worker_id: w.id }).in('id', wIds);
-      if (bErr) {
-        toast(`Distributed ${assigned} of ${data.length} — failed: ${bErr.message}`);
-        _workersData = null;
-        await refreshWorkers();
-        return; // finally block resets _assignBatchBusy
-      }
-      assigned += wIds.length;
-    }
-  }
-  toast(`Distributed ${data.length} listings ✓`);
-  _workersData = null;
-  await refreshWorkers();
-  } finally {
-    _assignBatchBusy = false;
-  }
 }
 
 // Boot: if a session already exists (persisted in localStorage), start the app;
