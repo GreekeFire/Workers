@@ -166,9 +166,12 @@ function categoryAllowed(categories) {
 
 async function callClaudeInternal(system, userContent, maxTokens, temperature = 0.3) {
   const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
+  const headers = { 'content-type': 'application/json' };
+  // Shared secret so /api/claude only answers internal callers, not the public.
+  if (process.env.INTERNAL_API_SECRET) headers['x-internal-secret'] = process.env.INTERNAL_API_SECRET;
   const resp = await fetch(`${base}/api/claude`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({ system, userContent, maxTokens, temperature }),
   });
   if (!resp.ok) throw new Error('claude ' + resp.status);

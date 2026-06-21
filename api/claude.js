@@ -26,6 +26,14 @@ export default async function handler(req) {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
+  // Shared-secret gate: once INTERNAL_API_SECRET is set in the environment, only
+  // callers that send the matching x-internal-secret header are served. Until
+  // it's set, the gate is open (no breakage before the env var is configured).
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (secret && req.headers.get('x-internal-secret') !== secret) {
+    return json({ error: 'forbidden' }, 403);
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return json({ error: 'API key not configured on server' }, 500);
 
