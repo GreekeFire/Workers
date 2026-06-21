@@ -612,11 +612,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
       <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Find listings with broken/wrong Shopee or Carousell links">⚠ Scan links</button>
       <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button id="lf-all"        class="copy-btn" onclick="setListingsFilter('all')"        style="flex:1">All</button>
-      <button id="lf-assigned"   class="copy-btn" onclick="setListingsFilter('assigned')"   style="flex:1">Assigned</button>
-      <button id="lf-unassigned" class="copy-btn" onclick="setListingsFilter('unassigned')" style="flex:1">Unassigned</button>
-    </div>
     <div class="done-list" id="done-list"></div>
   </div>
 
@@ -1003,13 +998,6 @@ function switchTab(tab) {
     _listingsEditingId = null;
     _listingsCacheIsRecent = false;
     _recentReqSeq++;   // cancel any in-flight recent-items response from the previous visit
-    // Sync filter button visual state (buttons start at full opacity in HTML;
-    // setListingsFilter is never called on init so the active indicator is wrong
-    // until the user clicks a filter button)
-    ['all', 'assigned', 'unassigned'].forEach(k => {
-      const el = document.getElementById('lf-' + k);
-      if (el) el.style.opacity = k === _listingsFilter ? '1' : '0.45';
-    });
     renderDoneView();
   }
   else if (tab === 'workers') {
@@ -1023,7 +1011,6 @@ let _searchReqSeq = 0;    // incremented on every _searchAllListings call; guard
 let _listingsEditingId = null;
 let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
-let _listingsFilter = 'all'; // 'all' | 'assigned' | 'unassigned'
 
 const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
 
@@ -1126,7 +1113,6 @@ async function _searchAllListings(query) {
       if (!escaped) continue;
       q = q.or(`title.ilike.%${escaped}%,ai_title.ilike.%${escaped}%`);
     }
-    q = _applyListingsFilter(q);
     const { data, error } = await q.order('status').limit(30);
     if (mySeq !== _searchReqSeq) return; // a newer search fired while we were awaiting
     if (error) throw error;
@@ -1138,24 +1124,6 @@ async function _searchAllListings(query) {
     if (mySeq !== _searchReqSeq) return;
     list.innerHTML = `<p class="done-empty">Search failed</p>`;
   }
-}
-
-function setListingsFilter(f) {
-  _listingsFilter = f;
-  _listingsCache = [];
-  _listingsEditingId = null;
-  _listingsCacheIsRecent = false;
-  ['all', 'assigned', 'unassigned'].forEach(k => {
-    const el = document.getElementById('lf-' + k);
-    if (el) el.style.opacity = k === f ? '1' : '0.45';
-  });
-  renderDoneView();
-}
-
-function _applyListingsFilter(q) {
-  if (_listingsFilter === 'assigned')   return q.not('assigned_worker_id', 'is', null);
-  if (_listingsFilter === 'unassigned') return q.is('assigned_worker_id', null);
-  return q;
 }
 
 function _renderListingsResults(data, prefix) {
