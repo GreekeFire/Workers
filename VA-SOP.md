@@ -26,8 +26,10 @@ for and how to do it. Read it once fully before you start.
 
 ## 2. What product to find ✅
 
-Pick products that match **all** of these. The app shows a ⚠ warning if something
-is off — treat every warning as "stop and double-check."
+Pick products that match **all** of these. **The app only checks the price** — the
+other rules (category, SG seller, rating) are **your responsibility**: the app will
+NOT warn you, the owner checks them manually, and getting them wrong repeatedly is
+grounds for removal. So check them yourself, every time.
 
 **Category — must be home/household type goods:**
 - Furniture (chairs, tables, shelves, racks, stools, cabinets)
@@ -38,14 +40,13 @@ is off — treat every warning as "stop and double-check."
 - Safes & Security
 - Garden & Outdoors
 
-**Price (the Shopee cost):** between **S$15 and S$150.**
-- Under $15 → margin too thin (app warns "price low").
-- Over $150 → too expensive to move fast (app warns "price high").
+**Price (the Shopee cost):** between **S$15 and S$150.** *(This is the one rule the
+app checks — it warns "price low" under $15 or "price high" over $150.)*
 - Sweet spot: **$20–$80.**
 
-**Seller location:** **Singapore** sellers only. (Non-SG → app warns; skip it.)
+**Seller location:** **Singapore** sellers only. *(You must check this — the app won't.)*
 
-**Rating:** **4.0 stars or higher.** (Lower → app warns; skip it.)
+**Rating:** **4.0 stars or higher.** *(You must check this — the app won't.)*
 
 **Other green flags:**
 - Has real sales / reviews (proof people buy it).
@@ -70,12 +71,13 @@ is off — treat every warning as "stop and double-check."
 
 ## 4. Handling the ⚠ warnings
 
-When a product card shows warning chips (Category / Non-SG seller / Low rating /
-Price low / Price high):
+The app shows only **two** warning chips: **Price low** (under S$15) and
+**Price high** (over S$150).
 
-- **Default = skip it** and find a better product. Warnings exist because those
-  products sell worse or cause problems.
-- Only press **"Add anyway"** if your manager specifically told you that case is OK.
+- **Default = skip it** and find a product in the S$15–150 band. Press **"Add
+  anyway"** only if your manager told you that case is OK.
+- **Category, SG-seller, and rating are NOT warned by the app** — they're your
+  rules to enforce (section 2). No warning does **not** mean the product is fine.
 - If the card says **"AI title not generated — contact your manager"** → don't try
   to force it. Message your manager; that listing needs attention.
 
