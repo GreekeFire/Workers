@@ -761,10 +761,7 @@ function render() {
       <div class="action-row">
         <button class="btn-skip" onclick="doSkip(${cur.id})">Skip →</button>
         <button class="btn-done" id="done-btn" ${doneEnabled ? '' : 'disabled'} onclick="doDone(${cur.id}, ackedWarns.has(${cur.id}))">Done ✓</button>
-      </div>
-      <button onclick="doReturn(${cur.id})" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-tertiary);font-size:12px;cursor:pointer">
-        Dead link — return to owner
-      </button>`;
+      </div>`;
 
     html += `</div>`; // .listing-card
 
@@ -860,25 +857,6 @@ async function doSkip(listingId) {
   render();  // render first so the next card shows immediately
   busy = false;
   postSkip(listingId).catch(() => {});  // fire-and-forget — skip is local-only; API is just a heartbeat
-}
-
-async function doReturn(listingId) {
-  if (busy) return;
-  busy = true;
-  try {
-    await fetch('/api/worker-return', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ worker_id: WORKER_ID, listing_id: listingId }),
-    });
-    listings = listings.filter(l => l.id !== listingId);
-    delete caroUrlDraft[listingId];
-    render();
-    showToast('Returned to owner ✓');
-  } catch {
-    showToast('Failed to return listing', true);
-  }
-  busy = false;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
