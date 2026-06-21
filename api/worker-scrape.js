@@ -14,23 +14,6 @@ const { createClient } = require('@supabase/supabase-js');
 const SUPABASE_URL = 'https://tzwzmzabjmsocnxdtxqx.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const CATEGORY_ALLOWLIST = [
-  'Furniture',
-  'Home & Living',
-  'Bedding',
-  'Towels',
-  'Storage',
-  'Organisation',
-  'Organization',
-  'Home Appliances',
-  'Tools',
-  'Home Improvement',
-  'Safes',
-  'Security',
-  'Garden',
-  'Outdoors',
-];
-
 const PRICE_BAND_MIN = 15;
 const PRICE_BAND_MAX = 150;
 
@@ -157,13 +140,6 @@ function calcSellPrice(cost) {
   return Math.ceil(raw / 5) * 5;
 }
 
-// Returns true (allowed), false (warn), or null (unknown — skip guard)
-function categoryAllowed(categories) {
-  if (!Array.isArray(categories) || categories.length === 0) return null;
-  const topCat = categories[0] || '';
-  return CATEGORY_ALLOWLIST.some(a => topCat.toLowerCase().includes(a.toLowerCase()));
-}
-
 async function callClaudeInternal(system, userContent, maxTokens, temperature = 0.3) {
   const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
   const headers = { 'content-type': 'application/json' };
@@ -238,7 +214,7 @@ module.exports = async function handler(req, res) {
   // 2. Fetch oldest pending inbox row for this worker
   let q = sb
     .from('scrape_inbox')
-    .select('id, payload, categories, shop_location, rating_star, consumed')
+    .select('id, payload, consumed')
     .eq('worker_id', worker_id)
     .eq('kind', 'shopee')
     .eq('consumed', false)
@@ -260,9 +236,6 @@ module.exports = async function handler(req, res) {
   }
 
   const shopeeUrl    = normalizeShopeeUrl(p.url);
-  const categories   = row.categories   || p.categories   || null;
-  const shopLocation = row.shop_location || p.shop_location || null;
-  const ratingStar   = row.rating_star   != null ? row.rating_star : (p.rating_star != null ? p.rating_star : null);
   const cost = Math.max(
     p.price_max || 0,
     p.price_min || 0,
@@ -304,17 +277,12 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // 4. Soft guards — skip on refresh (owner already approved the listing)
+  // 4. Soft guards — price band only. Category / SG-seller / rating guards were
+  // removed: they only fired when the scrape happened to capture those fields
+  // (often null on the dataLayer path), so they gave false confidence. Product
+  // quality is enforced by the owner instead.
   const warnings = [];
   if (!isRefresh) {
-    const catOk = categoryAllowed(categories);
-    if (catOk === false) warnings.push('category');
-    if (shopLocation !== null && shopLocation !== undefined) {
-      if (String(shopLocation).toLowerCase() !== 'singapore') warnings.push('non-sg-seller');
-    }
-    if (ratingStar !== null && ratingStar !== undefined) {
-      if (Number(ratingStar) < 4.0) warnings.push('low-rating');
-    }
     if (cost > 0 && cost < PRICE_BAND_MIN) warnings.push('price-too-low');
     if (cost > 0 && cost > PRICE_BAND_MAX) warnings.push('price-too-high');
   }
