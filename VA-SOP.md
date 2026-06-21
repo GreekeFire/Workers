@@ -14,7 +14,8 @@ for and how to do it. Read it once fully before you start.
 2. On the product page, click your **bookmarklet** (your manager gives you a personal one).
 3. A green confirmation appears. Within ~10 seconds the product shows up in your
    work page (`/va?w=...`) with a ready-made **title** and **description**.
-4. **Copy** the title and description, **post the listing on Carousell**, then
+4. **Copy** the title and description, **download and clean the images** (remove
+   watermarks/logos — see step 5), **post the listing on Carousell**, then
    **paste the Carousell link back** and press **Done ✓**.
 5. Repeat. Aim for 150/day.
 
@@ -84,13 +85,18 @@ Price low / Price high):
 
 1. Press **Copy** on the Title → paste into Carousell's title.
 2. Press **Copy** on the Description → paste into Carousell's description.
-3. Download the images (**⬇ Download all images**) and upload them to Carousell.
-4. Use the **Sell price** shown on the card (already calculated — don't change it).
-5. Publish the listing on Carousell.
-6. Copy the **live Carousell listing link** and paste it into the box on the card.
+3. **Download** the images (**⬇ Download all images**).
+4. **Clean every image** at **[cleanup.pictures](https://cleanup.pictures)** — remove
+   any **watermarks, shop logos, text overlays, or weird badges** around the product.
+   The final images must be clean (just the product, no other seller's branding)
+   before they go on Carousell. **Do not upload raw Shopee images with watermarks.**
+5. Upload the cleaned images to Carousell.
+6. Use the **Sell price** shown on the card (already calculated — don't change it).
+7. Publish the listing on Carousell.
+8. Copy the **live Carousell listing link** and paste it into the box on the card.
    - It must be a real listing link (contains `/p/` or `/sell/`). A profile or
      homepage link will NOT be accepted.
-7. Press **Done ✓**. Your daily count goes up by one.
+9. Press **Done ✓**. Your daily count goes up by one.
 
 > **Skip →** if you decide not to use a product after it's on your card — it just
 > moves to the next one, no count change.
@@ -119,6 +125,7 @@ Price low / Price high):
 | Rating | 4.0★ and up |
 | Reviews | Has real sales |
 | Stock | In stock |
+| Images | Clean at cleanup.pictures — no watermarks/logos |
 | Avoid | Brands, fragile, food, restricted, huge items |
 | Target | 150 listings/day |
 
