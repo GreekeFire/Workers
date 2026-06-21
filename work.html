@@ -1598,6 +1598,9 @@ async function workerToggleActive(workerId, currentlyActive) {
   if (error) { _toggleActiveBusy = false; toast('Failed'); return; }
 
   // When deactivating, release all their active listings back to unassigned pool
+  // and clear any unconsumed inbox rows they left behind (those would never be
+  // processed once they're inactive, and the 30-day prune only targets consumed
+  // rows — so without this they'd accumulate as orphans forever).
   if (currentlyActive) {
     const { error: releaseErr, count } = await sb
       .from('listings')
@@ -1606,6 +1609,14 @@ async function workerToggleActive(workerId, currentlyActive) {
       .eq('status', 'active')
       .select('id', { count: 'exact', head: true });
     if (releaseErr) console.error('release listings error:', releaseErr.message);
+
+    const { error: inboxErr } = await sb
+      .from('scrape_inbox')
+      .delete()
+      .eq('worker_id', workerId)
+      .eq('consumed', false);
+    if (inboxErr) console.error('clear inbox error:', inboxErr.message);
+
     toast(count ? `Deactivated — ${count} listing${count > 1 ? 's' : ''} released` : 'Worker deactivated');
   } else {
     toast('Worker reactivated');
