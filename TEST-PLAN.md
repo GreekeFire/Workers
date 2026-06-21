@@ -1,591 +1,89 @@
-# 🧪 WORKERS APP — FULL TEST DAY PLAN
+# 🧪 Workers App — Test Plan
 
-## 🛠 Useful Commands
-
-| Command | What it does |
-|---|---|
-| `/code-review ultra` | Deep multi-agent cloud bug hunt — run after any major merge |
-| `/loop` | Autonomous improvement loop (Claude Code desktop app only) |
-
----
-
-> Created 2026-06-13. Covers everything shipped in the big fix/polish session:
-> dataLayer scrape fix, unified card-based NEW tab, refresh-safe batch,
-> dedup against Done, swipe gestures, demo polish, cross-device sync fixes.
+> Rewritten 2026-06-20 for the current (simplified) app. The old plan covered
+> removed features (FIX tab, NEW tab, Carousell autofill, listing assignment,
+> iOS Shortcut, app_state sync) — all gone. This covers only what ships today.
 >
-> **Updated 2026-06-15** after overnight automated fix pass (52 commits). New tests
-> added: 8.19–8.40. Manual queue updated.
->
-> Report failures by **test number** + what you saw instead.
+> **App = three things:** `work.html` (owner), `va.html` (VA worker), and the
+> `/api/*` serverless functions. Report failures by test number.
+
+Legend: 🤖 = can be checked automatically (curl/console) · 🙋 = needs a manual run
+(real Shopee / VA session / two devices).
 
 ---
 
-## 🎒 Before you start (10 min)
-
-1. **Hard-refresh everything.**
-   - Laptop: open `workers-v1.vercel.app/work.html`, press **Ctrl+Shift+R**.
-   - iPhone: close the Safari tab completely, reopen it. (If it's a home-screen PWA, swipe it away and reopen.)
-2. **Log in on both devices.**
-3. **Prepare 6 fresh Shopee products** you have NEVER listed. Write the links in a note.
-4. **Pick 1 product you already finished** (in your Done pile). Note its link too.
-
-> ⚠️ **Trip-up #1:** If you test with already-done products, NEW will correctly say
-> "You already did this ✓" and make no card — and you'll think it's broken. It's not.
-> **Fresh products only** for the main tests.
-
-> ⚠️ **Trip-up #2:** iPhone PWAs cache hard. If something looks old on the phone, it
-> probably IS the old version — close and reopen before assuming a bug.
-
----
-
-## PART 1 — The Scraper (laptop) 🟢
-
-### Test 1.1 — Green toast
-1. Open fresh product #1 on Shopee.
-2. Click **→ Work**.
-3. ✅ A **green** toast with a price + image count.
-
-> ⚠️ If the toast is **amber**, the scrape still worked — it just used the slower API
-> path. Amber once in a while = fine. Amber every time = problem.
-> ⚠️ Clicking → Work the *instant* the page loads may give amber. Let the page settle a second.
-
-### Test 1.2 — Non-product page
-1. Go to the Shopee **homepage**, click → Work.
-2. ✅ Red toast: **"Go to a Shopee product page first."** Nothing else happens.
-
-### Test 1.3 — AUTO mode
-1. Turn the **auto ○** chip to **AUTO ●**.
-2. From work.html FIX tab, hit **↗ Open next 10** (or open 2–3 product tabs manually).
-3. Click into each tab and wait a beat.
-4. ✅ Each tab shows a small green toast on its own — no clicking.
-
-> ⚠️ Background tabs don't scrape until you **focus** them (browser throttling — intentional).
-> ⚠️ A burst of 10 tabs may get popup-blocked. Allow popups, press the button again —
-> it opens only the missed ones, never duplicates.
-
----
-
-## PART 2 — NEW tab (laptop) ✨ *the most-changed area*
-
-### Test 2.1 — Empty state
-1. Go to **NEW** with nothing pending.
-2. ✅ ONE "Add listings" bar (textarea + **✨ Generate from URLs** + **⬇ Pull scraped** + **+ Blank**).
-   The old big single form is gone.
-
-### Test 2.2 — Pull scraped → cards
-1. Scrape fresh products #1–#3 (green toasts).
-2. NEW → **⬇ Pull scraped**.
-3. ✅ 3 cards appear. Shimmer → text fades in. Each has title, description, cost→sell, images.
-
-> ⚠️ Generation is ~10s per card, sequential. 3 cards ≈ 30s. The shimmer = loading, not frozen.
-
-### Test 2.3 — THE BIG ONE: refresh recovery
-1. With those 3 cards showing and **unsaved**, press **F5**.
-2. Go back to NEW (it may auto-pull on its own).
-3. ✅ The 3 cards come back (regenerated — wording may differ slightly; normal).
-
-### Test 2.4 — Save resolves
-1. **Save to Done →** on card 1.
-2. ✅ "Saved ✓", card gone, Done counter +1.
-3. Refresh → NEW → ✅ that card does NOT return. The other 2 do.
-
-### Test 2.5 — Clear resolves
-1. **Clear** on card 2.
-2. ✅ Card gone. Refresh → ✅ stays gone. (Card 3 remains.)
-
-### Test 2.6 — Swipe
-1. On card 3: drag it **left** past the green "Done ✓" reveal, release.
-2. ✅ It saves, same as the button.
-
-> ⚠️ Start the swipe on the card's **background**, not inside a textarea (drag in a
-> text box selects text). Laptop needs a touchscreen — otherwise test swipe on the phone (Part 5).
-> ⚠️ Swipe must be mostly **horizontal**. Diagonal drags cancel (so scrolling doesn't trigger it).
-
-### Test 2.7 — Already-done message
-1. Scrape the product you saved in 2.4 again.
-2. NEW → ⬇ Pull scraped.
-3. ✅ Toast: **"You already did this one ✓"** — no card.
-4. Pull again → ✅ "Nothing scraped yet — use the bookmarklet first." (the already-done re-scrape was consumed off the belt by step 2/3, so the inbox is now empty)
-
-### Test 2.8 — Generate from URLs
-1. Paste 2 fresh links (products #4, #5), one per line → **✨ Generate from URLs**.
-2. ✅ Textarea clears, 2 cards appear and generate.
-
-> ⚠️ This path fetches through the server, which Shopee sometimes blocks → a card can
-> error or come back with **cost $0**. Not a bug — type the cost manually, or scrape
-> that product with the bookmarklet instead.
-> ⚠️ URL-pasted and Blank cards do **NOT** survive a refresh (only scraped ones are on
-> the cloud queue). Save them before refreshing.
-
-### Test 2.9 — + Blank
-1. Click **+ Blank** → ✅ empty card.
-2. Type any title, cost 10 → ✅ Sell shows **$35** (calculator rounds up to the next $5, with a +$24 minimum margin: max(10×1.5, 10+24)=34 → 35).
-3. Save → ✅ saved. Check LISTINGS tab — it's there.
-
-### Test 2.10 — Append, not wipe
-1. With 1 unsaved card showing, paste 1 more URL → Generate.
-2. ✅ New card **adds below**; the existing card survives.
-
----
-
-## PART 3 — FIX tab (laptop) 🛠️
-
-### Test 3.1 — The loop
-1. Go to FIX. ✅ Progress bar + "N left".
-2. The card auto-pulls its scrape if you opened that product with AUTO on; otherwise **⬇ Pull**.
-3. ✅ Cost updates from the live price (note appears if changed), AI copy generates.
-
-### Test 3.2 — Advancing
-1. Press **D** (Done) or swipe.
-2. ✅ Next card **slides in**; progress bar grows.
-3. ✅ Watch for **⚡ next ready** — when shown, the next card's copy appears instantly.
-
-### Test 3.3 — Undo
-1. Mark one Done, hit **UNDO** on the toast within ~6 seconds.
-2. ✅ The card comes back with your edits intact.
-
-### Test 3.4 — Keyboard
-- ✅ ←/→ skip, **D** done, **X** delete, **G** generate, **F** fill+done.
-
-> ⚠️ Keys don't fire while the cursor is inside a text box. Click empty space first.
-> ⚠️ **F** refuses politely without generated AI copy; Done refuses without a cost.
-> Those toasts are guards, not errors.
-
----
-
-## PART 4 — Carousell fill (laptop) 🎯
-
-1. On a FIX card with a Carousell link + generated copy, press **F** (or **→ Fill Carousell**).
-2. ✅ Carousell listing opens in a new tab; chip says **⌨ Ctrl+Enter to open editor**.
-3. **Ctrl+Enter** → ✅ clicks Edit, form fills itself, toast "✓ Filled 3 fields".
-4. **Ctrl+Enter** again → clicks Save/Update. (Skip the real save if you don't want to
-   change a live listing — just close the tab.)
-
-> ⚠️ The fill is only valid **2 minutes** after pressing F (stale-slot guard). Timed
-> out? Press F again.
-> ⚠️ Never type the `/sell/` edit URL directly — Carousell 404s that. Always listing
-> page → Ctrl+Enter.
-
----
-
-## PART 5 — iPhone 📱
-
-### Test 5.1 — Scraper
-Open a fresh product in Safari, run the userscript → ✅ green toast.
-
-### Test 5.2 — NEW on mobile
-1. work.html → NEW → ⬇ Pull scraped.
-2. ✅ Cards appear. ✅ **Save/Clear buttons visible** (was broken before — hidden by CSS).
-3. **Swipe left** → ✅ saves. **Swipe right** on another → ✅ clears.
-
-> ⚠️ Swiping from the very screen edge triggers Safari's back gesture. Start from the
-> middle of the card.
-
-### Test 5.3 — FIX on mobile
-✅ Swipe works; ✅ Done/Delete **buttons hidden on purpose** (swipe replaces them — FIX only).
-
----
-
-## PART 6 — SALES + LISTINGS 💰
-
-### Test 6.1 — Log a sale
-1. SALES → search a listing by a title word → ✅ dropdown finds it, tap → price/cost auto-fill.
-2. Pick category, **Log Sale** → ✅ Revenue counter updates.
-3. Delete with ✕, press UNDO → ✅ it returns.
-4. In Supabase → `sales_log` → ✅ new row with correct `name`, `price`, `listing_id`, `ts`.
-5. In Supabase → `app_state` → row with `key = 'carobiz_sales'` → ✅ `data` array also updated (legacy sync still runs).
-
-### Test 6.2 — LISTINGS
-1. Search → ✅ results. Tap one → ✅ inline editor (title/cost/links).
-2. Edit title → Save → In Supabase → `listings` → ✅ `title` column updated.
-3. **⚠ Scan links** → ✅ reports broken links (or none).
-4. **⬇ Backup** → ✅ downloads JSON. **Do this for real — it's your only backup.**
-
----
-
-## PART 7 — Cross-device grand finale 🌐
-
-1. **Laptop:** scrape fresh product #6, NEW → pull → card appears. **Don't** resolve it.
-2. **iPhone:** open NEW → ✅ same product appears as a card.
-3. **iPhone:** swipe left to Save.
-4. **Laptop:** refresh → NEW → ✅ card gone. LISTINGS shows it. ✅ Done counters match.
-
-> ⚠️ **The one real landmine:** do NOT save the **same card on both devices at once** —
-> that creates a duplicate listing. Finish on one device, then switch. (Known edge case,
-> deliberately not engineered away.)
-
----
-
-## PART 8 — VA System 👷
-
-> Requires: one worker row in Supabase (`workers` table), and a fresh Shopee product not already in listings.
-
-### Test 8.1 — WORKERS tab loads
-1. Open `workers-v1.vercel.app/work.html` → click **WORKERS** tab.
-2. ✅ Worker list shows. Each worker shows name, done/target today, pending count.
-3. ✅ **Copy VA link**, **+ Assign listings**, **Rotate link**, **Deactivate** buttons visible.
-
-### Test 8.2 — Create a worker
-1. Click **+ Add worker** → enter a name, leave target at 100 → **Create worker**.
-2. ✅ Worker appears in the list immediately.
-3. Click **Copy VA link** → paste it somewhere → ✅ URL format is `workers-v1.vercel.app/va?w=UUID`.
-4. In Supabase → `workers` → ✅ new row with correct `name`, `active = true`, `daily_target = 100`.
-
-### Test 8.3 — VA page loads
-1. Open the VA link in a browser.
-2. ✅ Worker name shown at top, progress bar 0/100.
-3. ✅ If queue is empty: "Queue empty" card + bookmarklet shown below.
-4. ✅ If queue has listings: first listing card shown.
-
-### Test 8.4 — Bookmarklet sends to VA queue
-1. Copy the bookmarklet from the VA page.
-2. On a Shopee product page, paste and run it in the browser console (`javascript:` prefix optional in console).
-3. ✅ Green toast on Shopee page.
-4. Wait 10s on the VA page → ✅ listing card appears with sell price, title, images.
-5. In Supabase → `scrape_inbox` → ✅ row with correct `worker_id`, `consumed = false` (before Done), then `consumed = true` after Done.
-6. In Supabase → `listings` → ✅ new row with `assigned_worker_id` matching this worker, `ai_title` populated.
-
-### Test 8.5 — Guards show correctly
-1. Scrape a product that is: non-SG seller, wrong category, or price < $15.
-2. ✅ Warning chips appear above the card (Category / Non-SG seller / Price low).
-3. ✅ Done button is **disabled** (greyed out) until all warnings are acknowledged.
-4. Click **Add anyway** on each chip → ✅ chips turn green with ✓.
-5. ✅ Done button becomes **bright green** and enabled.
-6. In Supabase → `listings` → ✅ `guard_warnings` column is a JSON array with the warning keys (e.g. `["category","non-sg-seller"]`).
-
-### Test 8.6 — AI title missing / failed handling
-1. If `ai_title` is **null** in DB (AI never ran): ✅ Red notice: "AI title not generated — contact your manager before marking this done."
-2. If `ai_title` is **empty string ""** (AI ran but returned nothing): ✅ Red notice: "AI title generation failed — contact your manager to regenerate before marking this done."
-3. ✅ Done button is disabled in both cases regardless of warnings.
-
-### Test 8.7 — Copy buttons work
-1. On a listing card, tap **Copy** next to Title.
-2. ✅ Clipboard contains the title text (paste to verify).
-3. Tap **Copy** next to Description → ✅ clipboard has description.
-
-### Test 8.8 — Done flow
-1. Acknowledge any warnings → tap **Done ✓**.
-2. ✅ Count increments (e.g. 0/100 → 1/100), progress bar moves.
-3. ✅ Next listing in queue loads automatically.
-4. In Supabase → `listings` table → ✅ that listing's `status` = `done`.
-5. In Supabase → `worker_done` table → ✅ new row with correct `worker_id`, `listing_id`, `date`.
-
-### Test 8.9 — Skip flow
-1. On a listing, tap **Skip →**.
-2. ✅ Listing is hidden, next one loads.
-3. ✅ Count does NOT increment.
-4. ✅ Listing still shows as `active` in Supabase (skip doesn't delete it).
-
-### Test 8.10 — Deactivate worker
-1. In WORKERS tab, click **Deactivate** on a worker.
-2. ✅ Worker card dims in the list.
-3. Open that worker's VA link → ✅ shows "This link has been deactivated. Contact your manager."
-
-### Test 8.11 — WORKERS tab count updates
-1. Have a VA tap Done on a listing.
-2. In owner's WORKERS tab, click the refresh button (↻).
-3. ✅ Done count for that worker increments.
-
-### Test 8.12 — Assign listings
-1. In WORKERS tab, click **+ Assign listings** on a worker → enter a number (e.g. 5).
-2. ✅ Toast confirms assignment.
-3. Open that worker's VA link → ✅ assigned listings appear in their queue.
-4. In Supabase → `listings` → filter `assigned_worker_id = <worker UUID>` → ✅ correct number of rows updated.
-
-### Test 8.13 — Rotate VA link
-1. In WORKERS tab, click **Rotate link** on an active worker → confirm the dialog.
-2. ✅ Toast: "New VA link copied ✓".
-3. ✅ Old VA link (`?w=<old-UUID>`) now shows "This link has been deactivated."
-4. ✅ New VA link (`?w=<new-UUID>`) loads the worker page normally.
-5. In Supabase `workers` table → ✅ old row has `active = false`, new row has `active = true`.
-
-### Test 8.14 — Batch distribute listings
-1. Have at least 2 active workers and some unassigned listings.
-2. In WORKERS tab, click **Distribute all unassigned** → confirm the dialog.
-3. ✅ Toast: "Distributed N listings ✓".
-4. ✅ Each worker's pending count increases in the WORKERS view.
-5. ✅ LISTINGS tab → **Assigned** filter → listings now show "👤 VA" badge.
-
-### Test 8.15 — LISTINGS tab filters
-1. Open LISTINGS tab → ✅ Three filter buttons: **All**, **Assigned**, **Unassigned**.
-2. Click **Assigned** → ✅ only listings with a worker assigned show ("👤 VA" badge on each).
-3. Click **Unassigned** → ✅ only listings with no assigned worker show.
-4. Click **All** → ✅ all listings show again.
-5. Search with a keyword while **Assigned** is active → ✅ results are still filtered.
-
-### Test 8.16 — Sold count in WORKERS tab
-1. Log a sale in the SALES tab where you selected a listing via the dropdown (so `listing_id` is set).
-2. In WORKERS tab → click refresh (↻).
-3. ✅ The worker assigned to that listing shows **Sold: 1** (or incremented if already had sales).
-4. In Supabase `sales_log` table → ✅ new row exists with correct `listing_id`, `price`, `ts`.
-
-### Test 8.18 — Carousell URL required before Done
-1. On a listing card with all warnings acked and AI title present, tap **Done ✓** without pasting a URL.
-2. ✅ Toast: "Paste your Carousell listing link first" — Done does not proceed.
-3. Paste a non-Carousell URL (e.g. `https://shopee.sg/...`) → ✅ input border stays grey, Done still blocked.
-4. Paste a valid Carousell listing URL (e.g. `https://www.carousell.sg/p/...`) → ✅ input border turns green.
-5. Tap **Done ✓** → ✅ count increments, listing removed from queue.
-6. In Supabase → `listings` → ✅ `carousell_url` column now contains the pasted URL.
-7. In owner's LISTINGS tab → tap the listing → ✅ "Carousell ↗" link is present and opens the correct URL.
-
-### Test 8.19 — iOS PWA: Assign listings inline input
-1. Open `work.html` as a home-screen PWA on iPhone → WORKERS tab.
-2. Tap **+ Assign listings** on a worker → ✅ inline number input expands (no native prompt dialog).
-3. Enter a number → tap **Assign** → ✅ toast confirms, worker's pending count updates.
-4. Double-tap Assign quickly → ✅ second tap ignored, no duplicate assignment.
-
-### Test 8.20 — iOS PWA: Copy VA link
-1. In WORKERS tab, tap **Copy VA link** → ✅ dismissable overlay appears with a selectable URL input.
-2. Long-press the URL → copy → paste elsewhere → ✅ correct VA URL.
-
-### Test 8.21 — iOS PWA: Rotate link
-1. Tap **Rotate link** on a worker → ✅ inline two-step confirm strip appears (no native confirm dialog).
-2. Tap **Confirm** → ✅ link rotated, overlay shows new URL.
-
-### Test 8.22 — iOS PWA: Deactivate/Reactivate
-1. Tap **Deactivate** → ✅ inline confirm strip, no native dialog.
-2. Double-tap Deactivate quickly → ✅ second tap ignored, worker deactivated once only.
-3. Tap **Reactivate** → ✅ worker active again. Double-tap → ✅ only fires once.
-
-### Test 8.23 — iOS PWA: Auto-assign
-1. Tap **Distribute all unassigned** → ✅ inline two-step confirm strip with listing count shown.
-2. Tap **Confirm** within 6s → ✅ distributes. Tap **Cancel** → ✅ aborts with no change.
-
-### Test 8.24 — VA image download actually saves files
-1. On a VA listing card, tap **Download all images**.
-2. ✅ Files download to device (not new tabs opening).
-
-### Test 8.25 — VA poll refreshes existing listing data
-1. Open a VA listing card where AI title is still generating (`ai_title = null`).
-2. Wait for the 10s poll to fire after the server writes the title.
-3. ✅ The "AI title not generated" banner disappears and the title appears — without reloading.
-
-### Test 8.26 — VA double-tap Skip
-1. Tap **Skip →** twice in rapid succession.
-2. ✅ Only one listing is skipped — the second tap is ignored.
-
-### Test 8.27 — VA all-skipped empty state
-1. Skip every listing in the VA queue.
-2. ✅ Shows "All skipped" message with guidance — NOT "go source more products".
-
-### Test 8.28 — VA description Copy hidden when collapsed
-1. On a VA listing card, leave the description panel collapsed.
-2. ✅ The Copy button next to description is not visible.
-3. Expand the description panel → ✅ Copy button appears.
-
-### Test 8.29 — LISTINGS search finds AI-rewritten titles
-1. In LISTINGS tab, search for a word that appears in a listing's AI title but NOT in its original Shopee title.
-2. ✅ The listing appears in results.
-
-### Test 8.30 — LISTINGS edit sell price matches what Save writes
-1. Open a listing in the LISTINGS tab edit form.
-2. Note the sell price displayed.
-3. ✅ Sell price shown = `calcSell(cost)` formula result — not a stored DB value that may differ.
-4. Click Save → check Supabase → ✅ `sell_price` in DB matches what was displayed.
-
-### Test 8.31 — LISTINGS edit title saves to ai_title (VAs see it)
-1. In LISTINGS tab, edit a listing's title → Save.
-2. Open the VA queue for a worker assigned that listing.
-3. ✅ VA sees the owner's edited title (not the old AI or Shopee title).
-4. In Supabase → `listings` → ✅ `ai_title` column updated.
-
-### Test 8.32 — LISTINGS recent view not hidden by filter
-1. Set LISTINGS filter to **Unassigned**.
-2. Clear the search box so recent items view shows.
-3. ✅ Recent done listings appear even if all 25 were VA-assigned.
-
-### Test 8.33 — scanBadLinks only flags done listings
-1. LISTINGS tab → **⚠ Scan links**.
-2. ✅ Active listings (not yet posted) are NOT flagged for missing Carousell URL.
-3. ✅ Only `status = done` listings with no Carousell URL are flagged.
-
-### Test 8.34 — Send to FIX removes from VA queue
-1. In LISTINGS tab, find a done listing assigned to a VA → click **Send to FIX**.
-2. Open that VA's queue.
-3. ✅ The listing does NOT appear in the VA's queue.
-4. In Supabase → `listings` → ✅ `assigned_worker_id = null`, `status = active`.
-
-### Test 8.35 — NEW tab batch lock resets on error
-1. In NEW tab, trigger a batch generate that errors mid-way (e.g. disconnect network briefly).
-2. ✅ After the error, the NEW tab is not permanently locked — you can still pull/generate.
-
-### Test 8.36 — NEW tab: clear during batch blocked
-1. Start a batch generate with multiple cards loading.
-2. While a card is still in shimmer/loading state, tap **Clear** on it.
-3. ✅ Toast explains why Clear is blocked on loading cards. Card stays.
-
-### Test 8.37 — LISTINGS recent items don't overwrite active search
-1. In LISTINGS tab, type a search query.
-2. ✅ Recent-items results from a previous empty state don't replace your search results mid-type.
-
-### Test 8.38 — Cloud refresh clears AI state
-1. In FIX tab, view a card with AI title/description shown.
-2. Click **↻ Refresh from cloud**.
-3. ✅ The first card after refresh shows the correct product's AI copy — not leftover copy from the previous card.
-
-### Test 8.39 — Worker sold count accurate across devices
-1. Log a sale on one device (with a listing selected from dropdown).
-2. On a second device, open WORKERS tab → refresh.
-3. ✅ Sold count for the assigned worker updates correctly on both devices.
-
-### Test 8.40 — iOS Shortcut submissions go through guards
-1. Submit a product via the iOS Shortcut that is: non-SG seller OR wrong category OR low rating.
-2. After the VA scrapes it, open the VA listing card.
-3. ✅ Relevant warning chips appear (category / non-SG seller / low rating).
-
-### Test 8.17 — Fuzzy duplicate log
-1. Scrape a product whose title and cost are very similar (≥60% title match, cost within 10%) to an existing listing.
-2. ✅ The listing is NOT blocked — it still creates normally with no warning shown to VA.
-3. In Supabase `duplicate_log` table → ✅ new row logged with `incoming_title`, `incoming_url`, `worker_id`.
-
----
-
-## 🕐 Manual Testing Queue (run 2026-06-16)
-
-Automated tests were run on 2026-06-15. The following could not be automated — they require Shopee access, a real VA session, an iPhone, or two devices. Run these tomorrow in order.
-
-### Needs laptop + Shopee bookmarklet (Parts 1–4)
-- **1.1** Scraper green toast on a fresh product
-- **1.2** Scraper red guard on Shopee homepage
-- **1.3** Scraper AUTO mode
-- **2.1–2.10** Full NEW tab flow (pull, refresh, save, clear, swipe, already-done, generate from URLs, blank, append)
-- **3.1–3.4** FIX tab loop, advance, undo, keyboard shortcuts
-- **4** Carousell fill via Ctrl+Enter
-
-### Needs real VA session (open VA link + scrape a product first)
-- **8.4** Bookmarklet sends product to VA queue → listing card appears
-- **8.5** Guards show for non-SG / wrong category / price out of range
-- **8.6** AI title null vs empty string shows different red messages; Done blocked in both cases
-- **8.7** Copy title + description buttons copy correct text
-- **8.8** Done flow: paste Carousell URL → tap Done → count increments, `listings.status = done`, `carousell_url` saved, `worker_done` row written
-- **8.9** Skip flow: listing hidden, count unchanged, still `active` in DB
-- **8.11** Owner's WORKERS tab count refreshes after VA taps Done
-- **8.17** Fuzzy dupe: near-match product doesn't block VA, `duplicate_log` row written
-- **8.18** Carousell URL required: blocked without URL, grey → green on valid URL, saved to DB on Done
-
-### Needs clean manual test
-- **6.1 UNDO** — log a sale, tap ✕ to delete, press UNDO within 6 seconds, confirm sale returns
-
-### Needs iPhone / iOS PWA (Part 5 + overnight fixes)
-- **5.1** Scraper green toast on Safari
-- **5.2** NEW tab cards + swipe on mobile (Save/Clear visible)
-- **5.3** FIX swipe on mobile, Done/Delete buttons hidden
-- **8.19** Assign listings inline input (no prompt dialog)
-- **8.20** Copy VA link overlay (no prompt dialog)
-- **8.21** Rotate link inline confirm (no confirm dialog)
-- **8.22** Deactivate/Reactivate inline confirm + double-tap guard
-- **8.23** Auto-assign inline confirm strip
-
-### Needs two devices (Part 7)
-- **7** Cross-device handoff: scrape on laptop → resolve on iPhone → laptop confirms gone
-- **8.39** Sold count accurate across devices
-
-### Needs VA session (overnight fixes)
-- **8.24** VA image download saves files (not new tabs)
-- **8.25** VA poll refreshes existing listing AI title when it arrives late
-- **8.26** VA double-tap Skip only skips one card
-- **8.27** VA all-skipped empty state shows correct message
-- **8.28** VA description Copy hidden when panel collapsed
-- **8.34** Send to FIX removes listing from VA queue
-- **8.40** iOS Shortcut submissions go through guards
-
-### Needs LISTINGS tab
-- **8.29** Search finds AI-rewritten titles
-- **8.30** Edit sell price shown matches what Save will write
-- **8.31** Title edit saves to ai_title — VA sees updated title
-- **8.32** Recent view not hidden when filter = Unassigned
-- **8.33** Scan links only flags done listings
-- **8.37** Recent items don't overwrite active search
-
-### Needs NEW tab
-- **8.35** Batch lock resets after error
-- **8.36** Clear blocked on loading cards during batch
-
-### Needs FIX tab
-- **8.38** Cloud refresh clears AI state from previous card
-
----
-
-## 📋 Scorecard
-
-| #   | Test                                                                | Pass? |
-|-----|---------------------------------------------------------------------|-------|
-| 1.1 | Scraper: green toast                                                | ⏳ manual |
-| 1.2 | Scraper: non-product red guard                                      | ⏳ manual |
-| 1.3 | Scraper: AUTO mode                                                  | ⏳ manual |
-| 2.1 | NEW: empty state = add bar only                                     | ⏳ manual |
-| 2.2 | NEW: pull scraped → cards                                           | ⏳ manual |
-| 2.3 | NEW: refresh recovery                                               | ⏳ manual |
-| 2.4 | NEW: save resolves                                                  | ⏳ manual |
-| 2.5 | NEW: clear resolves                                                 | ⏳ manual |
-| 2.6 | NEW: swipe                                                          | ⏳ manual |
-| 2.7 | NEW: already-done message                                           | ⏳ manual |
-| 2.8 | NEW: generate from URLs                                             | ⏳ manual |
-| 2.9 | NEW: + Blank                                                        | ⏳ manual |
-| 2.10| NEW: append, not wipe                                               | ⏳ manual |
-| 3.1 | FIX: loop + auto-pull + cost update                                 | ⏳ manual |
-| 3.2 | FIX: slide-in + progress + ⚡ chip                                  | ⏳ manual |
-| 3.3 | FIX: undo                                                           | ⏳ manual |
-| 3.4 | FIX: keyboard shortcuts                                             | ⏳ manual |
-| 4   | Carousell fill via Ctrl+Enter                                       | ⏳ manual |
-| 5.1 | iPhone: scraper green                                               | ⏳ manual |
-| 5.2 | iPhone: NEW buttons + swipe                                         | ⏳ manual |
-| 5.3 | iPhone: FIX swipe, buttons hidden                                   | ⏳ manual |
-| 6.1 | Sales: log, autofill, undo                                          | ✅ log+DB / ⏳ undo manual |
-| 6.2 | Listings: editor, scan links, backup                                | ⏳ manual |
-| 7   | Cross-device handoff                                                | ⏳ manual |
-| 8.1 | WORKERS tab loads with worker list                                  | ✅ |
-| 8.2 | Create worker → appears in list + VA link correct                   | ✅ |
-| 8.3 | VA page loads with name + progress bar                              | ✅ |
-| 8.4 | Bookmarklet sends product to VA queue                               | ⏳ manual |
-| 8.5 | Guards show + Done blocked until acknowledged                       | ⏳ manual |
-| 8.6 | AI title missing → red notice + Done blocked                        | ⏳ manual |
-| 8.7 | Copy title + description buttons work                               | ⏳ manual |
-| 8.8 | Done → count increments, listing marked done in DB                  | ⏳ manual |
-| 8.9 | Skip → listing hidden, count unchanged, still active in DB          | ⏳ manual |
-| 8.10| Deactivate worker → VA link shows deactivated message               | ✅ |
-| 8.11| WORKERS tab count updates after VA taps Done                        | ⏳ manual |
-| 8.12| Assign listings → appears in VA queue                               | ✅ |
-| 8.13| Rotate link → old dead, new works                                   | ✅ |
-| 8.14| Batch distribute → listings split across workers                    | ✅ |
-| 8.15| LISTINGS filters: All / Assigned / Unassigned                       | ✅ |
-| 8.16| Sold count in WORKERS tab after logging a linked sale               | ✅ |
-| 8.17| Fuzzy dupe → listing created, duplicate_log row written             | ⏳ manual |
-| 8.18| Carousell URL required: blocked without, green on valid, saved to DB | ⏳ manual |
-| 8.19| iOS PWA: Assign listings inline input, no prompt, double-tap guard  | ⏳ manual |
-| 8.20| iOS PWA: Copy VA link overlay, selectable URL                       | ⏳ manual |
-| 8.21| iOS PWA: Rotate link inline confirm strip                           | ⏳ manual |
-| 8.22| iOS PWA: Deactivate/Reactivate inline confirm + double-tap guard    | ⏳ manual |
-| 8.23| iOS PWA: Auto-assign inline confirm strip                           | ⏳ manual |
-| 8.24| VA image download saves files (not new tabs)                        | ⏳ manual |
-| 8.25| VA poll refreshes existing listing data when AI title arrives late  | ⏳ manual |
-| 8.26| VA double-tap Skip only skips one card                              | ⏳ manual |
-| 8.27| VA all-skipped empty state shows correct message                    | ⏳ manual |
-| 8.28| VA description Copy hidden when panel collapsed                     | ⏳ manual |
-| 8.29| LISTINGS search finds AI-rewritten titles                           | ⏳ manual |
-| 8.30| LISTINGS edit sell price matches what Save will write               | ⏳ manual |
-| 8.31| LISTINGS title edit saves to ai_title — VA sees updated title       | ⏳ manual |
-| 8.32| LISTINGS recent view not hidden when filter = Unassigned            | ⏳ manual |
-| 8.33| scanBadLinks only flags done listings for missing Carousell URL     | ⏳ manual |
-| 8.34| Send to FIX removes listing from VA queue, clears assigned_worker_id| ⏳ manual |
-| 8.35| NEW tab batch lock resets after error                               | ⏳ manual |
-| 8.36| NEW tab Clear blocked on loading cards during batch                 | ⏳ manual |
-| 8.37| LISTINGS recent items don't overwrite active search mid-type        | ⏳ manual |
-| 8.38| FIX cloud refresh clears AI state from previous card               | ⏳ manual |
-| 8.39| Sold count accurate across devices                                  | ⏳ manual |
-| 8.40| iOS Shortcut submissions go through category/location/rating guards | ⏳ manual |
+## Part 1 — Owner app: SALES (`work.html`)
+
+- **1.1** 🙋 Search a listing by a title word → dropdown finds it (matches `ai_title` too) → tap → name/price/cost auto-fill.
+- **1.2** 🙋 Pick a category → **Log Sale** → Revenue Today increments; the sale appears in the list under "Today".
+- **1.3** 🙋 In Supabase → `sales_log` → new row with correct `name`, `price`, `listing_id`, `ts`. (There is no `app_state` anymore — `sales_log` is the only store.)
+- **1.4** 🙋 Delete a sale with ✕ → press **UNDO** within 6s → the sale returns (and a fresh `sales_log` row is re-inserted).
+- **1.5** 🙋 Revenue rolls over at **Singapore midnight**, not 8am — a sale logged at 1am SGT counts as today.
+
+## Part 2 — Owner app: LISTINGS
+
+- **2.1** 🤖 On load (logged in), the app opens straight to the **LISTINGS** tab — not a blank screen.
+- **2.2** 🙋 Search a word that's in a listing's **AI title** but not its original Shopee title → it still appears.
+- **2.3** 🙋 Tap a listing → inline editor → edit title + cost → **Save** → `listings.title` **and** `ai_title` update; `sell_price` = `calcSell(cost)`; any ⚠ warning flag is cleared.
+- **2.4** 🙋 **Mark Listed** → `status='done'`. **Delete** → row removed.
+- **2.5** 🙋 **⚠ Scan links** → flags done listings with bad/missing Shopee or Carousell links (active listings not flagged for missing Carousell).
+- **2.6** 🙋 **⬇ Backup** → downloads a JSON of all listings + sales. (Do this for real — it's your only backup.)
+- **2.7** 🙋 Filters **All / Assigned / Unassigned** narrow the results.
+
+## Part 3 — Owner app: WORKERS
+
+- **3.1** 🙋 WORKERS tab lists workers; each shows name, **account name**, done/target today, sold, pending. Buttons: Copy VA link, Rotate link, Deactivate. (No "Assign listings" / "Auto-assign" — removed.)
+- **3.2** 🙋 **+ Add worker** (name + Carousell account + target) → appears immediately; `workers` row has `account_name`, `active=true`.
+- **3.3** 🙋 **Copy VA link** → `…/va?w=<UUID>`.
+- **3.4** 🙋 **Rotate link** → old link shows "deactivated", new link works; new `workers` row keeps the **same `account_name`**; old row `active=false`.
+- **3.5** 🙋 **Deactivate** → their unposted (`active`) listings are **deleted** and their unconsumed `scrape_inbox` rows cleared; the VA link shows "This link has been deactivated."
+- **3.6** 🙋 Sold count: log a sale with a listing picked from the dropdown → refresh WORKERS → the assigned worker's **Sold** increments.
+
+## Part 4 — VA flow (`va.html` + bookmarklet)
+
+- **4.1** 🙋 Open a VA link → worker name + progress bar; empty queue shows the bookmarklet.
+- **4.2** 🙋 Run the bookmarklet on a fresh Shopee product → green toast → within ~10s a card appears in the VA queue with title, sell price, images. `listings` row has `assigned_worker_id` + `account_name` set, `ai_title` populated.
+- **4.3** 🙋 Guards: scrape a non-SG / wrong-category / low-rating / out-of-price-band product → warning chips appear; **Done** is disabled until each is "Add anyway"-acked.
+- **4.4** 🙋 If `ai_title` is null/empty → red "contact your manager" notice; Done blocked regardless of warnings.
+- **4.5** 🙋 **Copy** buttons copy the title and description text.
+- **4.6** 🙋 Carousell URL required before Done. A **profile/homepage** link (e.g. `carousell.sg/u/name`) keeps the border grey and Done disabled; only a real listing link (`/p/`, `/sell/`, or `app.link`) turns it green. (Client now matches the server check — no more "enabled then rejected".)
+- **4.7** 🙋 **Done** → `listings.status='done'`, `carousell_url` saved, `worker_done` row written (SGT date), count increments.
+- **4.8** 🙋 **Skip** → card hidden, count unchanged, listing still `active` in DB.
+- **4.9** 🙋 Scrape a product already listed (same Shopee URL) → it does **not** create a duplicate (app check + DB unique index).
+
+## Part 5 — Backend & security (🤖 mostly automatable)
+
+- **5.1** 🤖 `POST /api/claude` with **no** `x-internal-secret` → `403 forbidden`.
+- **5.2** 🤖 `GET /api/worker-profile?w=<bogus-uuid>` → `404 worker-not-found` (proves the service key is valid).
+- **5.3** 🤖 `GET /rest/v1/scrape_inbox` with the public anon key → `[]` (no worker_id leak).
+- **5.4** 🤖 `GET /rest/v1/workers` / `sales_log` / `worker_done` with the public anon key → `[]` (owner-only RLS).
+- **5.5** 🤖 `/api/image` and `/api/shopee` reject non-Shopee URLs (`400`).
+- **5.6** 🙋 Owner can still read/write everything (login → SALES/LISTINGS/WORKERS load and save) — RLS doesn't lock out the owner.
 
 ---
 
 ## Known edge cases (accepted, not bugs)
 
-- **Simultaneous save on two devices** → duplicate listing. Avoid by finishing on one device first.
-- **Blank / URL-pasted cards don't survive refresh** — only belt-backed (scraped) cards do. Save before refreshing.
-- **No dup-check when saving a Blank/pasted card** for a product already in Done — the
-  pull path is guarded, the manual paths aren't.
-- **URL-paste path can return cost $0** when Shopee blocks the server fetch — enter cost manually.
-- **VA bookmarklet blocked in Brave** — Brave blocks `javascript:` bookmarklets from the bookmarks bar. VAs must use Chrome.
-- **AI title null on old scrapes** — listings scraped before the VA system was built won't have ai_title. Owner must regenerate or the VA cannot mark them done.
-- **dataLayer scrapes miss guards** — VERIFIED 2026-06-14: Shopee product page dataLayer has no product metadata (only generic impression events). Category/SG seller/rating guards only fire when sc.js uses the v4 API path. If the v4 API is blocked, guard fields are null and those guards are silently skipped — listing still creates, VA still sees it.
-- **Shopee URL normalisation**: both slug (`/ShieldMonster-...-i.31165845.8302982366`) and product-ID (`/product/31165845/8302982366`) formats are now normalised to `shopee.sg/product/{shopid}/{itemid}` before the dupe check. Listings created before this fix (e.g. row 1431 vs 1432) may still be duplicates — clean them up manually in Supabase.
-- **Skip doesn't remove from queue permanently** — skipped listings stay active and will reappear on next page load. This is intentional (VA may want to come back to them).
+- **VA bookmarklet blocked in Brave** — Brave blocks `javascript:` bookmarklets; VAs must use Chrome.
+- **AI title null on very old scrapes** — listings scraped before the VA system won't have `ai_title`; regenerate or they can't be marked done.
+- **dataLayer scrapes can miss guards** — if Shopee's v4 API path is blocked, category/SG-seller/rating fields are null and those guards are silently skipped; the listing still creates.
+- **Not offline-capable** — the app needs a connection; with none it won't load (by design).
+- **Historical date seam** — sales logged 00:00–08:00 SGT *before* 2026-06-20 are filed under the previous (UTC) day; only new sales use SGT.
+
+---
+
+## Scorecard
+
+| # | Test | Result |
+|---|------|--------|
+| 1.1–1.5 | SALES: search, log, sales_log row, undo, SGT rollover | ⏳ |
+| 2.1 | Opens to LISTINGS, not blank | ⏳ |
+| 2.2–2.7 | LISTINGS: search, edit/save, mark/delete, scan, backup, filters | ⏳ |
+| 3.1–3.6 | WORKERS: list, add, copy, rotate, deactivate, sold count | ⏳ |
+| 4.1–4.9 | VA flow: load, scrape, guards, AI, copy, caro-URL, done, skip, dedupe | ⏳ |
+| 5.1 | /api/claude no-secret → 403 | ✅ 2026-06-20 |
+| 5.2 | /api/worker-profile bogus → 404 (service key ok) | ✅ 2026-06-20 |
+| 5.3 | anon read scrape_inbox → [] | ✅ 2026-06-20 |
+| 5.4 | anon read workers/sales_log/worker_done → [] | ✅ 2026-06-20 (listings too) |
+| 5.5 | image/shopee proxies reject non-Shopee | ✅ 2026-06-20 |
+| 5.6 | owner reads/writes fine under RLS | ⏳ manual (you, logged in) |
