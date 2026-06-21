@@ -1,5 +1,8 @@
 {
   "outputDirectory": ".",
+  "functions": {
+    "api/worker-scrape.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/", "destination": "/work.html" },
     { "source": "/va", "destination": "/va.html" },
