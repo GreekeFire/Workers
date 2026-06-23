@@ -541,17 +541,26 @@ function showDownloadPanel(images) {
   document.getElementById('dl-panel-close').onclick = () => panel.remove();
 }
 
-// Desktop: open proxy URLs in new tabs (Content-Disposition: attachment → download).
+// Desktop: download each image via same-origin proxy URL with a[download] attribute.
+// Stagger with setTimeout to bypass browser multiple-download limits — each
+// callback inherits the original user gesture within the allowed time window.
 // Mobile: show panel with tap-to-view links (user long-presses to save).
 function downloadImages(images) {
   if (!images || !images.length) { showToast('No images', true); return; }
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (isMobile) { showDownloadPanel(images); return; }
+  showToast('Downloading ' + images.length + ' images…');
   for (let i = 0; i < images.length; i++) {
     const proxyUrl = '/api/image?url=' + encodeURIComponent(images[i]) + '&n=' + (i + 1);
-    window.open(proxyUrl, '_blank');
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = proxyUrl;
+      a.download = 'shopee-' + (i + 1) + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i * 350);
   }
-  showToast('Opening ' + images.length + ' downloads…');
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
