@@ -140,32 +140,47 @@ function calcSellPrice(cost) {
   return Math.ceil(raw / 5) * 5;
 }
 
-async function callClaudeInternal(system, userContent, maxTokens, temperature = 0.3) {
-  const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
-  const headers = { 'content-type': 'application/json' };
-  // Shared secret so /api/claude only answers internal callers, not the public.
-  if (process.env.INTERNAL_API_SECRET) headers['x-internal-secret'] = process.env.INTERNAL_API_SECRET;
-  const resp = await fetch(`${base}/api/claude`, {
+// Call Anthropic directly — worker-scrape is server-side so it can use the key
+// directly rather than routing through /api/claude (which adds a fragile internal
+// HTTP hop that was the root cause of silent AI generation failures).
+async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.3) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers,
-    body: JSON.stringify({ system, userContent, maxTokens, temperature }),
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: maxTokens,
+      temperature,
+      system,
+      messages: [{ role: 'user', content: userContent }],
+    }),
   });
-  if (!resp.ok) throw new Error('claude ' + resp.status);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'anthropic ' + resp.status);
+  }
   const data = await resp.json();
-  return data.text || '';
+  if (data.error) throw new Error(data.error.message);
+  return data.content?.[0]?.text || '';
 }
 
 async function generateAI(productText) {
   const productContent = `Product info:\n\n${productText}`;
   const [rawTitle, rawDesc] = await Promise.all([
-    callClaudeInternal(TITLE_SYSTEM, productContent, 512, 0.3),
-    callClaudeInternal(DESC_SYSTEM, productContent, 1536, 0.5),
+    callClaudeDirect(TITLE_SYSTEM, productContent, 512, 0.3),
+    callClaudeDirect(DESC_SYSTEM, productContent, 1536, 0.5),
   ]);
   let title = rawTitle.trim().split('\n')[0].trim();
   // Retry once if title is too short (mirrors work.html behaviour)
   if (title.length < 180) {
     try {
-      const retry = await callClaudeInternal(
+      const retry = await callClaudeDirect(
         TITLE_SYSTEM,
         productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.',
         512, 0.3
