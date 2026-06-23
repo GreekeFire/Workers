@@ -589,6 +589,21 @@ async function doPull() {
   const btn = document.getElementById('pull-btn');
   if (btn) { btn.textContent = '…'; btn.disabled = true; }
   clearTimeout(pollTimer);
+
+  // If the current listing is missing AI content, run regen synchronously so
+  // the title is in the DB before we poll — otherwise Pull returns stale nulls.
+  const cur = currentListing();
+  if (cur && (cur.ai_title == null || cur.ai_title === '')) {
+    if (btn) btn.textContent = 'Generating…';
+    try {
+      await fetch('/api/worker-scrape', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ worker_id: WORKER_ID, listing_id: cur.id, regen: true }),
+      });
+    } catch (e) { /* silent — poll will still run */ }
+  }
+
   await poll();
   if (btn) { btn.textContent = '↻ Pull'; btn.disabled = false; }
 }
@@ -681,11 +696,11 @@ function render() {
 
     if (aiMissing) {
       html += `<div style="background:rgba(242,192,99,0.12);border:1px solid rgba(242,192,99,0.3);border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:var(--warning);font-weight:600">
-        ⏳ Generating AI title… tap ↻ Pull in ~20 seconds.
+        ⏳ AI title not generated yet — tap ↻ Pull to generate it now.
       </div>`;
     } else if (aiEmpty) {
       html += `<div style="background:rgba(242,192,99,0.12);border:1px solid rgba(242,192,99,0.3);border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:var(--warning);font-weight:600">
-        ⏳ AI title retrying… tap ↻ Pull in ~20 seconds.
+        ⏳ AI title generation failed — tap ↻ Pull to retry.
       </div>`;
     }
 
