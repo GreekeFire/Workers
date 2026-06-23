@@ -83,6 +83,22 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'listings-failed' });
   }
 
+  // Fire background AI re-generation for listings where AI gen failed on first scrape.
+  // Capped at 2 per poll so a backlog of failed listings doesn't hammer Claude all at once.
+  const needsRegen = (listingsResult.data || [])
+    .filter(l => l.ai_title == null || l.ai_title === '')
+    .slice(0, 2);
+  if (needsRegen.length > 0) {
+    const base = process.env.APP_URL || 'https://workers-v1.vercel.app';
+    for (const l of needsRegen) {
+      fetch(`${base}/api/worker-scrape`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ worker_id: w, listing_id: l.id, regen: true }),
+      }).catch(() => {});
+    }
+  }
+
   if (countResult.error) console.error('count_today error:', countResult.error);
   return res.json({ ok: true, listings: listingsResult.data || [], count_today: countResult.error ? null : (countResult.count || 0) });
 };

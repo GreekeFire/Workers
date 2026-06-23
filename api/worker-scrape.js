@@ -202,7 +202,7 @@ module.exports = async function handler(req, res) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set' });
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
-  const { worker_id, inbox_id } = req.body || {};
+  const { worker_id, inbox_id, listing_id: regenListingId, regen } = req.body || {};
   if (!worker_id) return res.status(400).json({ error: 'worker_id required' });
 
   // 1. Validate worker
@@ -210,6 +210,32 @@ module.exports = async function handler(req, res) {
     .from('workers').select('id, name, active, account_name').eq('id', worker_id).single();
   if (wErr || !worker) return res.status(404).json({ ok: false, error: 'worker-not-found' });
   if (!worker.active)  return res.status(403).json({ ok: false, error: 'worker-inactive' });
+
+  // Regen mode: re-run AI generation for a listing that missed it on first scrape.
+  // Called fire-and-forget from worker-listings.js for listings with null/empty ai_title.
+  if (regen && regenListingId) {
+    const { data: listing, error: lFetchErr } = await sb
+      .from('listings')
+      .select('id, title, ai_title')
+      .eq('id', regenListingId)
+      .single();
+    if (lFetchErr || !listing) return res.status(404).json({ ok: false, error: 'listing-not-found' });
+    // Another concurrent regen may have already succeeded — skip to avoid duplicate work.
+    if (listing.ai_title != null && listing.ai_title !== '') return res.json({ ok: true, already_generated: true });
+    const productText = (listing.title || '').trim();
+    if (!productText) return res.json({ ok: false, error: 'no-product-text' });
+    try {
+      const ai = await generateAI(productText);
+      await sb.from('listings').update({
+        ai_title:       ai.title       || null,
+        ai_description: ai.description || null,
+      }).eq('id', regenListingId);
+      return res.json({ ok: true, regen: true });
+    } catch (aiErr) {
+      console.error('regen AI failed:', aiErr.message);
+      return res.json({ ok: false, error: 'regen-failed' });
+    }
+  }
 
   // 2. Fetch oldest pending inbox row for this worker
   let q = sb
