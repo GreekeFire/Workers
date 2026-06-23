@@ -531,8 +531,10 @@ async function downloadImages(images) {
 
   if (!files.length) { showToast('No images loaded', true); return; }
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   // iOS / mobile: Web Share API shows native share sheet with "Save to Photos"
-  if (navigator.canShare && navigator.canShare({ files })) {
+  if (isMobile && navigator.canShare && navigator.canShare({ files })) {
     try {
       await navigator.share({ files, title: 'Product Images' });
       return;
@@ -542,7 +544,7 @@ async function downloadImages(images) {
     }
   }
 
-  // Desktop fallback: blob URL click
+  // Desktop (and mobile share fallback): blob URL click
   for (const file of files) {
     const objUrl = URL.createObjectURL(file);
     const a = document.createElement('a');
@@ -553,6 +555,7 @@ async function downloadImages(images) {
     URL.revokeObjectURL(objUrl);
     a.remove();
   }
+  showToast('Downloaded ' + files.length + ' image' + (files.length !== 1 ? 's' : '') + ' ✓');
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -781,7 +784,7 @@ function render() {
         html += `<div class="img-thumb"><img src="${esc(url)}" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
       }
       html += `</div>`;
-      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">${navigator.canShare ? '⬆ Save all images' : '⬇ Download all images'} (${images.length})</button>`;
+      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">⬇ Download all images (${images.length})</button>`;
     }
 
     // Carousell URL input (required before Done)
