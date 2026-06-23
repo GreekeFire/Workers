@@ -509,31 +509,49 @@ function copyText(text, btnId) {
 }
 
 // ── Download images ───────────────────────────────────────────────────────────
-// Routes through /api/image so the download attribute works — the `download`
-// attribute on <a> is silently ignored for cross-origin URLs (Shopee CDN).
-// Uses fetch→blob→objectURL: same-origin blobs are downloadable on mobile
-// where staggered setTimeout clicks get blocked as popups.
+// iOS blocks all programmatic downloads (blob URL clicks are silently ignored).
+// Strategy: fetch all images through the proxy, then:
+//   - iOS/mobile: use Web Share API → native share sheet → "Save to Photos"
+//   - Desktop:    blob URL click per file (standard approach)
 async function downloadImages(images) {
   if (!images || !images.length) { showToast('No images', true); return; }
-  showToast('Downloading ' + images.length + ' image' + (images.length !== 1 ? 's' : '') + '…');
+  showToast('Preparing ' + images.length + ' image' + (images.length !== 1 ? 's' : '') + '…');
+
+  // Fetch all images first, build File objects for share API compatibility
+  const files = [];
   for (let i = 0; i < images.length; i++) {
     try {
       const resp = await fetch('/api/image?url=' + encodeURIComponent(images[i]) + '&n=' + (i + 1));
       if (!resp.ok) { console.warn('image proxy', resp.status, images[i]); continue; }
-      const blob   = await resp.blob();
-      const ext    = blob.type.includes('png') ? 'png' : 'jpg';
-      const objUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objUrl;
-      a.download = 'img-' + (i + 1) + '.' + ext;
-      document.body.appendChild(a);
-      a.click();
-      await new Promise(r => setTimeout(r, 300));
-      URL.revokeObjectURL(objUrl);
-      a.remove();
+      const blob = await resp.blob();
+      const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+      files.push(new File([blob], 'img-' + (i + 1) + '.' + ext, { type: blob.type }));
+    } catch (e) { console.error('fetch failed', i + 1, e); }
+  }
+
+  if (!files.length) { showToast('No images loaded', true); return; }
+
+  // iOS / mobile: Web Share API shows native share sheet with "Save to Photos"
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try {
+      await navigator.share({ files, title: 'Product Images' });
+      return;
     } catch (e) {
-      console.error('image download failed', i + 1, e);
+      if (e.name === 'AbortError') return; // user cancelled share sheet
+      console.error('share failed, falling back:', e);
     }
+  }
+
+  // Desktop fallback: blob URL click
+  for (const file of files) {
+    const objUrl = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    await new Promise(r => setTimeout(r, 300));
+    URL.revokeObjectURL(objUrl);
+    a.remove();
   }
 }
 
@@ -763,7 +781,7 @@ function render() {
         html += `<div class="img-thumb"><img src="${esc(url)}" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
       }
       html += `</div>`;
-      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">⬇ Download all images (${images.length})</button>`;
+      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">${navigator.canShare ? '⬆ Save all images' : '⬇ Download all images'} (${images.length})</button>`;
     }
 
     // Carousell URL input (required before Done)
