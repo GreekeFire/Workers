@@ -7,8 +7,8 @@ export default async function handler(req) {
   const url = searchParams.get('url') || '';
   const n   = searchParams.get('n')   || '1';
 
-  // Only allow Shopee CDN URLs
-  if (!url.match(/^https?:\/\/(cf\.shopee\.sg|down-[a-z]+\.img\.susercontent\.com)\//)) {
+  // Allow any subdomain of known Shopee CDN domains
+  if (!url.match(/^https?:\/\/[a-zA-Z0-9.-]+(shopee\.sg|susercontent\.com|shopeemobile\.com)\//)) {
     return new Response('Invalid URL', { status: 400 });
   }
 

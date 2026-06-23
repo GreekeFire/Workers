@@ -33,7 +33,8 @@ function extractAllImages(html) {
     if (m[1] && m[1].includes('shopee')) images.add(m[1].split('?')[0]);
   }
 
-  const cdnRe = /https?:\/\/cf\.shopee\.sg\/file\/([a-f0-9]{32,})/gi;
+  // Match both legacy 32-char hex filenames and modern sg-NNNNN-* style filenames
+  const cdnRe = /https?:\/\/cf\.shopee\.sg\/file\/([^\s"'<>?#&]+)/gi;
   while ((m = cdnRe.exec(html)) !== null) {
     images.add(`https://cf.shopee.sg/file/${m[1]}`);
   }
