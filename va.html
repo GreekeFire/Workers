@@ -541,9 +541,9 @@ function showDownloadPanel(images) {
   document.getElementById('dl-panel-close').onclick = () => panel.remove();
 }
 
-// Desktop: download each image via same-origin proxy URL with a[download] attribute.
-// Stagger with setTimeout to bypass browser multiple-download limits — each
-// callback inherits the original user gesture within the allowed time window.
+// Desktop: create and click <a download> elements synchronously within the
+// user gesture. Browsers accept multiple programmatic downloads per gesture
+// (Chrome allows ~10, more than enough for product images).
 // Mobile: show panel with tap-to-view links (user long-presses to save).
 function downloadImages(images) {
   if (!images || !images.length) { showToast('No images', true); return; }
@@ -552,14 +552,12 @@ function downloadImages(images) {
   showToast('Downloading ' + images.length + ' images…');
   for (let i = 0; i < images.length; i++) {
     const proxyUrl = '/api/image?url=' + encodeURIComponent(images[i]) + '&n=' + (i + 1);
-    setTimeout(() => {
-      const a = document.createElement('a');
-      a.href = proxyUrl;
-      a.download = 'shopee-' + (i + 1) + '.jpg';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }, i * 350);
+    const a = document.createElement('a');
+    a.href = proxyUrl;
+    a.download = 'shopee-' + (i + 1) + '.jpg';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 }
 
@@ -789,7 +787,7 @@ function render() {
         html += `<div class="img-thumb"><img src="${esc(url)}" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
       }
       html += `</div>`;
-      html += `<button class="dl-btn" onclick="downloadImages(${JSON.stringify(images)})">⬇ Download all images (${images.length})</button>`;
+      html += `<button class="dl-btn" onclick='downloadImages(${JSON.stringify(images)})'>⬇ Download all images (${images.length})</button>`;
     }
 
     // Carousell URL input (required before Done)
