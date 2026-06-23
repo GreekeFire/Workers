@@ -537,24 +537,36 @@ function showDownloadPanel(images) {
   document.getElementById('dl-panel-close').onclick = () => panel.remove();
 }
 
-// Desktop: click a direct proxy link for each image — browser handles download
-// via Content-Disposition: attachment returned by /api/image.
-// Mobile: show a panel with individual tap-to-save links (iOS blocks programmatic
-// multi-downloads).
+// Mobile: show tap-to-save panel (iOS blocks programmatic multi-downloads).
+// Desktop: fetch each image as a blob then trigger a blob URL click — this is the
+// only reliable cross-browser approach; direct URL clicks with `download` attribute
+// don't consistently trigger downloads when called programmatically.
 async function downloadImages(images) {
   if (!images || !images.length) { showToast('No images', true); return; }
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
   if (isMobile) { showDownloadPanel(images); return; }
-  showToast('Downloading ' + images.length + ' image' + (images.length !== 1 ? 's' : '') + '…');
+  showToast('Preparing ' + images.length + ' image' + (images.length !== 1 ? 's' : '') + '…');
+  let ok = 0;
   for (let i = 0; i < images.length; i++) {
-    const a = document.createElement('a');
-    a.href = '/api/image?url=' + encodeURIComponent(images[i]) + '&n=' + (i + 1);
-    a.download = 'shopee-' + (i + 1) + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    if (i < images.length - 1) await new Promise(r => setTimeout(r, 500));
+    try {
+      const resp = await fetch('/api/image?url=' + encodeURIComponent(images[i]) + '&n=' + (i + 1));
+      if (!resp.ok) { console.warn('proxy', resp.status, images[i]); continue; }
+      const blob = await resp.blob();
+      const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = 'shopee-' + (i + 1) + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      await new Promise(r => setTimeout(r, 200));
+      URL.revokeObjectURL(objUrl);
+      a.remove();
+      ok++;
+    } catch (e) { console.error('dl failed', i + 1, e); }
   }
+  if (ok > 0) showToast('Downloaded ' + ok + ' image' + (ok !== 1 ? 's' : '') + ' ✓');
+  else showToast('Download failed — check console', true);
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
