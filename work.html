@@ -1012,6 +1012,26 @@ let _listingsEditingId = null;
 let _listingsCache = [];
 let _listingsCacheIsRecent = false; // true when _listingsCache holds recent-items (not search results)
 
+// Worker id → name lookup for the listing-card "· 👤 Name" badge. Loaded once
+// per session (null = not yet loaded) and reused across recent/search/scan renders.
+let _workerNames = null;
+let _workerNamesPromise = null;
+let _lastListingsRender = null; // guards the post-load re-render against staler data
+
+function ensureWorkerNames() {
+  if (_workerNames !== null) return Promise.resolve(_workerNames);
+  if (_workerNamesPromise) return _workerNamesPromise;
+  _workerNamesPromise = sb.from('workers').select('id,name')
+    .then(({ data, error }) => {
+      const map = {};
+      if (!error && data) data.forEach(w => { if (w.id) map[w.id] = w.name || 'VA'; });
+      _workerNames = map;
+      return map;
+    })
+    .catch(() => { _workerNames = {}; return _workerNames; });
+  return _workerNamesPromise;
+}
+
 const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently done — newest first. Type above to search all.</p>';
 
 function renderDoneView() {
@@ -1128,6 +1148,14 @@ async function _searchAllListings(query) {
 
 function _renderListingsResults(data, prefix) {
   const list = document.getElementById('done-list');
+  // Names power the "· 👤 Name" badge. Load them once, then re-render this same
+  // result set so the VA's name replaces the generic "VA" fallback label.
+  _lastListingsRender = { data, prefix };
+  if (_workerNames === null) {
+    ensureWorkerNames().then(() => {
+      if (_lastListingsRender && _lastListingsRender.data === data) _renderListingsResults(data, prefix);
+    });
+  }
   const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
   const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
 
@@ -1163,7 +1191,7 @@ function _renderListingsResults(data, prefix) {
         <div class="done-meta">
           Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
-          ${d.assigned_worker_id ? '<span style="color:#a5b4fc"> · 👤 VA</span>' : ''}
+          ${d.assigned_worker_id ? `<span style="color:#a5b4fc"> · 👤 ${esc((_workerNames && _workerNames[d.assigned_worker_id]) || 'VA')}</span>` : ''}
           ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> · ⚠ Dead link</span>' : ''}
         </div>
         <div style="display:flex;gap:6px;margin-top:6px">
