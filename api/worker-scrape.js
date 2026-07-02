@@ -143,6 +143,8 @@ function calcSellPrice(cost) {
 async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.3) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 45000);
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -157,7 +159,9 @@ async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.
       system,
       messages: [{ role: 'user', content: userContent }],
     }),
+    signal: ctrl.signal,
   });
+  clearTimeout(to);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.error?.message || 'anthropic ' + resp.status);
