@@ -588,13 +588,6 @@ async function postDone(listing_id, warnings_overridden, carousell_url) {
   return d;
 }
 
-async function postSkip(listing_id) {
-  await fetch('/api/worker-skip', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ worker_id: WORKER_ID, listing_id }),
-  }).catch(() => {});
-}
 
 // ── Poll ──────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -902,7 +895,6 @@ async function doSkip(listingId) {
   delete caroUrlDraft[listingId];
   render();  // render first so the next card shows immediately
   busy = false;
-  postSkip(listingId).catch(() => {});  // fire-and-forget — skip is local-only; API is just a heartbeat
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
