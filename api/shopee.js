@@ -2,15 +2,7 @@
 // falls back to scraping the page HTML for og: meta tags when Cloudflare blocks us.
 export const config = { runtime: 'edge', regions: ['sin1'] };
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
-}
+import { json } from '../lib/edge-json.js';
 
 function extractMeta(html, property) {
   const re = new RegExp(
