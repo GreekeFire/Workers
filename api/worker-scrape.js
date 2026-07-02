@@ -9,10 +9,7 @@
  *   { ok: false, error: 'duplicate'|'inactive-worker'|..., ... }
  */
 
-const { createClient } = require('@supabase/supabase-js');
-
-const SUPABASE_URL = 'https://tzwzmzabjmsocnxdtxqx.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { sb, SERVICE_KEY } = require('../lib/sb');
 
 const PRICE_BAND_MIN = 15;
 const PRICE_BAND_MAX = 150;
@@ -216,7 +213,6 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SERVICE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set' });
 
-  const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const { worker_id, inbox_id, listing_id: regenListingId, regen } = req.body || {};
   if (!worker_id) return res.status(400).json({ error: 'worker_id required' });
 

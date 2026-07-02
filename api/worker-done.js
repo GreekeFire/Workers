@@ -9,16 +9,12 @@
  * 4. Return { ok, count_today }
  */
 
-const { createClient } = require('@supabase/supabase-js');
-
-const SUPABASE_URL = 'https://tzwzmzabjmsocnxdtxqx.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { sb, SERVICE_KEY, sgtToday } = require('../lib/sb');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SERVICE_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY not set' });
 
-  const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const { worker_id, listing_id, warnings_overridden = false, carousell_url = null } = req.body || {};
 
   if (!worker_id)   return res.status(400).json({ error: 'worker_id required' });
@@ -53,8 +49,7 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'update-failed' });
   }
 
-  // Insert worker_done row
-  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // SGT (UTC+8)
+  const today = sgtToday();
   const { error: doneErr } = await sb.from('worker_done').insert({
     worker_id,
     listing_id,
@@ -64,7 +59,6 @@ module.exports = async function handler(req, res) {
   });
   if (doneErr) console.error('worker_done insert error:', doneErr); // non-fatal
 
-  // Count today
   const { count } = await sb
     .from('worker_done')
     .select('id', { count: 'exact', head: true })

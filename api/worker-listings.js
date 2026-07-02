@@ -8,10 +8,7 @@
  * Never returns source_cost — VA must not see margin data.
  */
 
-const { createClient } = require('@supabase/supabase-js');
-
-const SUPABASE_URL = 'https://tzwzmzabjmsocnxdtxqx.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { sb, SERVICE_KEY, sgtToday } = require('../lib/sb');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
@@ -19,8 +16,6 @@ module.exports = async function handler(req, res) {
 
   const w = req.query.w;
   if (!w) return res.status(400).json({ error: 'w (worker UUID) required' });
-
-  const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   // Validate worker
   const { data: worker, error: wErr } = await sb
@@ -64,8 +59,7 @@ module.exports = async function handler(req, res) {
     console.error('inbox prune error:', e.message);
   }
 
-  // Fetch assigned active listings — source_cost deliberately excluded
-  const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); // SGT (UTC+8)
+  const today = sgtToday();
   const [listingsResult, countResult] = await Promise.all([
     sb.from('listings')
       .select('id, title, ai_title, ai_description, sell_price, images, shopee_url, carousell_url, guard_warnings, status, created_at')

@@ -85,24 +85,22 @@ async function tryV4(cleanUrl) {
   const m = cleanUrl.match(/i\.(\d+)\.(\d+)/) || cleanUrl.match(/\/product\/(\d+)\/(\d+)/);
   if (!m) return null;
   const [, shopid, itemid] = m;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('v4 timeout')), 6000)
-    );
-    const resp = await Promise.race([
-      fetch(`https://shopee.sg/api/v4/item/get?itemid=${itemid}&shopid=${shopid}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-SG,en;q=0.9',
-          'Referer': 'https://shopee.sg/',
-          'x-api-source': 'pc',
-          'x-requested-with': 'XMLHttpRequest',
-          'x-shopee-language': 'en',
-        },
-      }),
-      timeout,
-    ]);
+    const resp = await fetch(`https://shopee.sg/api/v4/item/get?itemid=${itemid}&shopid=${shopid}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-SG,en;q=0.9',
+        'Referer': 'https://shopee.sg/',
+        'x-api-source': 'pc',
+        'x-requested-with': 'XMLHttpRequest',
+        'x-shopee-language': 'en',
+      },
+      signal: ctrl.signal,
+    });
+    clearTimeout(to);
     if (!resp.ok) return null;
     const ct = resp.headers.get('content-type') || '';
     if (!ct.includes('json')) return null;
@@ -161,12 +159,10 @@ export default async function handler(req) {
   const v4 = await tryV4(cleanUrl);
   if (v4) return json(v4);
 
+  const pageCtrl = new AbortController();
+  const pageTo = setTimeout(() => pageCtrl.abort(), 12000);
   try {
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), 12000)
-    );
-
-    const fetchPage = fetch(cleanUrl, {
+    const response = await fetch(cleanUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -175,9 +171,9 @@ export default async function handler(req) {
         'Cache-Control': 'no-cache',
       },
       redirect: 'follow',
+      signal: pageCtrl.signal,
     });
-
-    const response = await Promise.race([fetchPage, timeout]);
+    clearTimeout(pageTo);
 
     if (!response.ok) {
       return json({ error: `Page returned HTTP ${response.status}` }, 502);
