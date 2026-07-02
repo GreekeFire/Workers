@@ -548,7 +548,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
            onkeydown="if(event.key==='Enter')doLogin()"
            style="padding:12px 14px; border-radius:10px; border:1px solid #2a2a2e; background:#111114; color:#fff; font-size:16px;">
     <button id="login-btn" onclick="doLogin()"
-            style="padding:12px; border-radius:10px; border:none; background:#ff5a5f; color:#fff; font-size:16px; font-weight:600;">Sign in</button>
+            style="padding:12px; border-radius:10px; border:none; background:#E07658; color:#fff; font-size:16px; font-weight:600;">Sign in</button>
     <div id="login-err" style="color:#ff5a5f; font-size:13px; min-height:16px; text-align:center;"></div>
   </div>
 </div>
@@ -1188,7 +1188,7 @@ function _renderListingsResults(data, prefix) {
       <div class="done-info">
         <div class="done-title-text">${esc(d.ai_title || d.title)}</div>
         <div class="done-meta">
-          Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}
+          Cost $${cost.toFixed(2)} → Sell $${sell.toFixed(2)}${cost > 0 ? ` · <span style="color:var(--success)">+$${(sell-cost).toFixed(0)} (${Math.round((sell-cost)/cost*100)}%)</span>` : ''}
           <span style="color:${statusColor[d.status] || 'var(--text-tertiary)'}"> · ${statusLabel[d.status] || d.status}</span>
           ${d.assigned_worker_id ? `<span style="color:#a5b4fc"> · 👤 ${esc((_workerNames && _workerNames[d.assigned_worker_id]) || 'VA')}</span>` : ''}
           ${Array.isArray(d.guard_warnings) && d.guard_warnings.includes('dead-link') ? '<span style="color:#f87171"> · ⚠ Dead link</span>' : ''}
@@ -1458,9 +1458,10 @@ function _renderWorkersView() {
       </div>
     </div>`;
 
-  const rows = workers.length === 0
-    ? '<p style="color:var(--text-tertiary);padding:16px 0">No workers yet. Add one above.</p>'
-    : workers.map(w => {
+  const activeWorkers   = workers.filter(w => w.active);
+  const inactiveWorkers = workers.filter(w => !w.active);
+
+  const renderWorkerCard = w => {
         const pct = w.daily_target ? Math.min(100, Math.round(w.count_today / w.daily_target * 100)) : 0;
         const vaUrl = `${location.origin}/va?w=${w.id}`;
         return `
@@ -1484,10 +1485,10 @@ function _renderWorkersView() {
                   <button class="copy-btn" onclick="workerEditAccount('${w.id}')" style="opacity:0.6">
                     ✎ Account
                   </button>
-                  <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="opacity:0.6">
+                  <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="color:var(--danger);border-color:rgba(224,88,88,0.3)">
                     🔄 Rotate link
                   </button>
-                  <button class="copy-btn" onclick="workerToggleActive('${w.id}', ${w.active})" style="opacity:0.5">
+                  <button class="copy-btn" onclick="workerToggleActive('${w.id}', ${w.active})" style="${w.active ? 'color:var(--danger);border-color:rgba(224,88,88,0.3)' : 'opacity:0.5'}">
                     ${w.active ? 'Deactivate' : 'Reactivate'}
                   </button>
                 </div>
@@ -1508,9 +1509,21 @@ function _renderWorkersView() {
               </div>
             </div>
           </div>`;
-      }).join('');
+  };
 
-  wrap.innerHTML = unassignedBlock + rows;
+  const activeRows = activeWorkers.length === 0
+    ? '<p style="color:var(--text-tertiary);padding:16px 0">No active workers. Add one above.</p>'
+    : activeWorkers.map(renderWorkerCard).join('');
+
+  const inactiveSection = inactiveWorkers.length === 0 ? '' : `
+    <details style="margin-top:8px">
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-tertiary);letter-spacing:0.05em;text-transform:uppercase;list-style:none;padding:8px 0;user-select:none">
+        ▶ Inactive (${inactiveWorkers.length})
+      </summary>
+      <div style="margin-top:8px">${inactiveWorkers.map(renderWorkerCard).join('')}</div>
+    </details>`;
+
+  wrap.innerHTML = unassignedBlock + activeRows + inactiveSection;
 }
 
 function showAddWorkerForm() {
