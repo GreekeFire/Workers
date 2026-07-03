@@ -586,23 +586,13 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
         <div class="search-dropdown" id="search-dropdown" style="display:none"></div>
       </div>
       <div class="sale-listing-info" id="sale-listing-info" style="display:none"></div>
-      <select class="form-input" id="sale-category">
-        <option value="">Category…</option>
-        <option value="Electronics">Electronics</option>
-        <option value="Home">Home & Living</option>
-        <option value="Fashion">Fashion</option>
-        <option value="Sports">Sports & Outdoors</option>
-        <option value="Beauty">Beauty</option>
-        <option value="Other">Other</option>
-      </select>
-      <div style="display:flex;gap:8px">
+<div style="display:flex;gap:8px">
         <input type="number" inputmode="decimal" class="form-input" id="sale-cost" placeholder="Source cost ($)" step="0.01" min="0" style="flex:1">
         <input type="number" inputmode="decimal" class="form-input" id="sale-price" placeholder="Sell price ($)" step="0.01" min="0" style="flex:1">
       </div>
       <button class="btn-log" onclick="logSale()">Log Sale</button>
     </div>
     <div class="sales-list" id="sales-list"></div>
-    <div id="sales-breakdown"></div>
   </div>
 
   <!-- DONE view -->
@@ -695,7 +685,7 @@ async function loadSalesFromSupabase() {
   try {
     const { data, error } = await sb
       .from('sales_log')
-      .select('id,listing_id,name,price,source_cost,category,date,ts')
+      .select('id,listing_id,name,price,source_cost,date,ts')
       .order('ts', { ascending: false })
       .limit(2000);
     if (error) throw error;
@@ -704,7 +694,6 @@ async function loadSalesFromSupabase() {
       name: r.name,
       price: Number(r.price),
       sourceCost: r.source_cost == null ? 0 : Number(r.source_cost),
-      category: r.category || '',
       date: r.date,
       ts: r.ts,
       listing_id: r.listing_id || null,
@@ -744,7 +733,6 @@ async function logSale() {
   const price = parseFloat(document.getElementById('sale-price').value);
   if (!name || isNaN(price) || price <= 0) { toast('Fill in listing and sell price'); return; }
   _logSaleBusy = true;
-  const category   = document.getElementById('sale-category').value;
   const sourceCost = parseFloat(document.getElementById('sale-cost').value) || 0;
   const saleTs = new Date().toISOString();
   const saleListingId = _selectedListingId || null;
@@ -756,7 +744,6 @@ async function logSale() {
     name,
     price,
     source_cost: sourceCost || null,
-    category:    category || null,
     date:        getToday(),
     ts:          saleTs,
   }).select('id').single();
@@ -767,13 +754,12 @@ async function logSale() {
     return;
   }
 
-  salesLog.unshift({ id: data.id, name, price, sourceCost, category, date: getToday(), ts: saleTs, listing_id: saleListingId });
+  salesLog.unshift({ id: data.id, name, price, sourceCost, date: getToday(), ts: saleTs, listing_id: saleListingId });
   _selectedListingId = null;
   localStorage.setItem('carobiz_sales', JSON.stringify(salesLog));
   document.getElementById('sale-listing').value = '';
   document.getElementById('sale-price').value = '';
   document.getElementById('sale-cost').value = '';
-  document.getElementById('sale-category').value = '';
   document.getElementById('sale-listing-info').style.display = 'none';
   renderSalesView();
   renderSessionBar();
@@ -841,7 +827,6 @@ function selectListing(nameOverride, priceOverride, shopeeOverride, caroOverride
   const caroLink   = caro   ? `<a class="sale-info-link" href="${esc(caro)}"   target="_blank" rel="noopener">Carousell ↗</a>` : '';
   infoEl.innerHTML = `<span class="sale-info-price">$${price}</span>${shopeeLink}${caroLink}`;
   infoEl.style.display = 'flex';
-  document.getElementById('sale-category').focus();
 }
 
 function hideDropdown() {
@@ -931,7 +916,6 @@ function renderSalesView() {
   const list = document.getElementById('sales-list');
   if (salesLog.length === 0) {
     list.innerHTML = '<p style="text-align:center;color:var(--text-tertiary);font-size:13px;padding:24px 0">No sales yet</p>';
-    renderBreakdown();
     return;
   }
   const today = getToday();
@@ -943,7 +927,7 @@ function renderSalesView() {
       header = `<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-tertiary);padding:8px 4px 4px">${s.date === today ? 'Today' : esc(s.date)}</div>`;
     }
     const profit = s.sourceCost ? (s.price - s.sourceCost) : null;
-    const meta = [s.category, profit !== null ? `+$${profit.toFixed(0)} profit` : null].filter(Boolean).join(' · ');
+    const meta = profit !== null ? `+$${profit.toFixed(0)} profit` : '';
     return header + `<div class="sale-entry">
       <div class="sale-info">
         <div class="sale-name">${esc(s.name)}</div>
@@ -955,31 +939,6 @@ function renderSalesView() {
       </div>
     </div>`;
   }).join('');
-  renderBreakdown();
-}
-
-function renderBreakdown() {
-  const el = document.getElementById('sales-breakdown');
-  if (!el) return;
-  const withCat = salesLog.filter(s => s.category);
-  if (withCat.length === 0) { el.innerHTML = ''; return; }
-  const groups = {};
-  for (const s of withCat) {
-    if (!groups[s.category]) groups[s.category] = { count: 0, profit: 0 };
-    groups[s.category].count++;
-    groups[s.category].profit += s.price - (s.sourceCost || 0);
-  }
-  const rows = Object.entries(groups)
-    .sort((a, b) => b[1].profit - a[1].profit)
-    .map(([cat, g]) => `<div class="breakdown-row">
-      <div class="breakdown-cat">${esc(cat)}</div>
-      <div class="breakdown-stats">
-        <span>${g.count} sale${g.count > 1 ? 's' : ''}</span>
-        <span class="breakdown-profit">+$${g.profit.toFixed(0)}</span>
-        <span>avg +$${(g.profit / g.count).toFixed(0)}/sale</span>
-      </div>
-    </div>`).join('');
-  el.innerHTML = `<div class="breakdown-card"><div class="breakdown-title">What's Selling</div>${rows}</div>`;
 }
 
 function switchTab(tab) {
