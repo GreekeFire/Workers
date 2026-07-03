@@ -340,8 +340,8 @@
     transition: all 0.15s;
     font-family: inherit;
   }
-  .btn-done:hover:not(:disabled) { background: rgba(107,227,164,0.16); }
-  .btn-done:disabled {
+  .btn-done:hover:not(.btn-done-disabled) { background: rgba(107,227,164,0.16); }
+  .btn-done.btn-done-disabled {
     opacity: 0.35;
     cursor: not-allowed;
   }
@@ -808,7 +808,7 @@ function render() {
     html += `
       <div class="action-row">
         <button class="btn-skip" onclick="doSkip(${cur.id})">Skip →</button>
-        <button class="btn-done" id="done-btn" ${doneEnabled ? '' : 'disabled'} onclick="doDone(${cur.id}, ackedWarns.has(${cur.id}))">Done ✓</button>
+        <button class="btn-done${doneEnabled ? '' : ' btn-done-disabled'}" id="done-btn" onclick="doDone(${cur.id}, ackedWarns.has(${cur.id}))">Done ✓</button>
       </div>`;
 
     html += `</div>`; // .listing-card
@@ -819,20 +819,18 @@ function render() {
       html += `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:4px">${remaining - 1} more in queue</div>`;
     }
 
-    // Bookmarklet — always shown so VA can scrape from the Shopee link above
-    if (profile && profile.bookmarklet) {
-      html += `<div class="bm-card" style="margin-top:20px">
-        <div class="bm-label">Your Shopee bookmarklet</div>
-        <textarea class="bm-code" rows="3" readonly onclick="this.select()">${esc(profile.bookmarklet)}</textarea>
-        <div class="bm-instructions">Run this on the Shopee page to send the listing here with images and description.</div>
-      </div>`;
-    }
   }
 
   app().innerHTML = html;
 
   // Auto-resize textareas
   document.querySelectorAll('textarea').forEach(autoResize);
+
+  // Auto-focus Carousell input so VA can paste immediately without tapping
+  if (cur) {
+    const caroInput = document.getElementById('caro-url-' + cur.id);
+    if (caroInput) caroInput.focus();
+  }
 }
 
 function flashProgressBar() {
@@ -862,7 +860,7 @@ function _refreshDoneBtn(listingId) {
   const caroValid  = validCaroLink(caroUrlDraft[listingId] || '');
   const enabled    = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
   const btn = document.getElementById('done-btn');
-  if (btn) btn.disabled = !enabled;
+  if (btn) btn.classList.toggle('btn-done-disabled', !enabled);
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -881,11 +879,22 @@ function toggleDesc() {
   if (!expanded) autoResize(ta);
 }
 
+function highlightCaroInput(listingId) {
+  const input = document.getElementById('caro-url-' + listingId);
+  if (!input) return;
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  input.focus();
+  input.style.borderColor = 'rgba(224,118,88,0.8)';
+  setTimeout(() => {
+    input.style.borderColor = validCaroLink(input.value) ? 'rgba(107,227,164,0.5)' : 'rgba(255,255,255,0.12)';
+  }, 900);
+}
+
 async function doDone(listingId, warningsOverridden) {
   if (busy) return;
   const caroUrl = (document.getElementById('caro-url-' + listingId)?.value || '').trim();
   if (!validCaroLink(caroUrl)) {
-    showToast('Paste a valid Carousell listing link (/p/ or /sell/)', true);
+    highlightCaroInput(listingId);
     return;
   }
   busy = true;

@@ -610,6 +610,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
     <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
       <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
       <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
+      <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Scan all listings for bad or missing links">⚠ Scan</button>
     </div>
     <div class="done-list" id="done-list"></div>
   </div>
@@ -778,6 +779,7 @@ async function logSale() {
   renderSessionBar();
   _logSaleBusy = false;
   toast('Logged ✓');
+  document.getElementById('sale-listing')?.focus();
 }
 
 let _searchMatches = [];
