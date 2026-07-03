@@ -499,16 +499,6 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   .toast.err { background: rgba(220,38,38,0.92); border-color: rgba(220,38,38,0.4); }
 
 
-  .refresh-btn {
-    width: 46px;
-    margin-bottom: 24px;
-    border-radius: 12px;
-    border: 1px solid var(--card-border);
-    background: rgba(20,20,22,0.72);
-    color: var(--text-secondary);
-    font-size: 18px;
-    cursor: pointer;
-  }
   .kbd-hint {
     text-align: center;
     font-size: 11px;
@@ -568,13 +558,10 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   </div>
 
   <!-- Segmented toggle + cloud refresh -->
-  <div style="display:flex; gap:8px;">
-    <div class="seg-toggle" style="flex:1">
-      <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
-      <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
-      <button class="seg-btn" id="btn-workers" onclick="switchTab('workers')">WORKERS</button>
-    </div>
-    <button class="refresh-btn" onclick="refreshFromCloud()" title="Re-sync from cloud" aria-label="Refresh">⟳</button>
+  <div class="seg-toggle">
+    <button class="seg-btn" id="btn-sales" onclick="switchTab('sales')">SALES</button>
+    <button class="seg-btn" id="btn-done" onclick="switchTab('done')">LISTINGS</button>
+    <button class="seg-btn" id="btn-workers" onclick="switchTab('workers')">WORKERS</button>
   </div>
 
   <!-- SALES view -->
@@ -707,13 +694,6 @@ async function loadSalesFromSupabase() {
   }
 }
 
-// Re-pull everything from Supabase without restarting the PWA.
-async function refreshFromCloud() {
-  await loadListingsFromSupabase();
-  await loadSalesFromSupabase();
-  renderAll();
-  toast('Refreshed ✓');
-}
 
 // Once-a-day reminder when the last ⬇ Backup is over a week old.
 // Supabase is the only copy of this data — the habit matters.
