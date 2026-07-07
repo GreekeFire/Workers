@@ -11,8 +11,8 @@
 
 const { sb, SERVICE_KEY } = require('../lib/sb');
 
-const PRICE_BAND_MIN = 15;
-const PRICE_BAND_MAX = 150;
+const PRICE_BAND_MIN = 25;
+const PRICE_BAND_MAX = 300;
 
 // ── AI prompts — kept in sync with work.html ────────────────────────────────
 
