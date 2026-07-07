@@ -26,6 +26,20 @@ for and how to do it. Read it once fully before you start.
 
 ## 2. What product to find ✅
 
+**Setting up your search (do this first, every session):**
+
+1. Browse the **Home & Living → Furniture** category directly — do NOT keyword-search
+   from the homepage.
+2. In the filters sidebar, turn on:
+   - **Shipped From: Singapore**
+   - **Rating: 4 stars & up**
+   - **Next Day Delivery**
+3. Sort by **Top Sales** — items with real monthly sales come first.
+
+With these filters on, most of what you see already passes the rules below. The rules
+are still your responsibility — sellers miscategorise items, so junk (pails, containers,
+bedsheets) can still appear. The filters narrow the pool; **you** make the final call.
+
 Pick products that match **all** of these. **The app only checks the price** — the
 other rules (category, SG seller, rating) are **your responsibility**: the app will
 NOT warn you, the owner checks them manually, and getting them wrong repeatedly is
@@ -78,6 +92,9 @@ app checks — it warns "price low" under $25 or "price high" over $300.)*
 - **Huge / heavy / awkward** items that are a nightmare to deliver (full wardrobes, mattresses) unless told otherwise.
 - **Electronics with warranty/safety concerns** (chargers, batteries, power tools that could be fakes).
 - **Anything restricted** on Carousell (weapons, vapes, medical, adult, copyrighted).
+- **Pre-order items** — anything marked "Pre-Order" or with a long shipping lead
+  time. It can't arrive within the 3–5 days our listings promise. (The Next Day
+  Delivery filter hides most of these, but check the shipping section anyway.)
 - **Very few/no reviews + low rating** — no proof it sells or that it's decent.
 - **Duplicates** — if you (or another VA on your account) already listed it, don't relist. The app blocks exact repeats automatically, but don't waste time.
 
@@ -106,7 +123,18 @@ The app shows only **two** warning chips: **Price low** (under S$25) and
    any **watermarks, shop logos, text overlays, or weird badges** around the product.
    The final images must be clean (just the product, no other seller's branding)
    before they go on Carousell. **Do not upload raw Shopee images with watermarks.**
-5. Upload the cleaned images to Carousell.
+5. Upload **7–10 cleaned images** to Carousell. (If the product page has fewer
+   than 7, use all of them — never pad with images from a different product.)
+   **The first image is the cover** — it's what buyers see in search, so it must
+   be the strongest one:
+   - **GOOD cover:** the product alone, clean background, bright, sharp, no text.
+
+     *(insert GOOD example screenshot here)*
+
+   - **BAD cover:** watermarks, sale badges, text overlays, collages of multiple
+     angles, cluttered backgrounds, blurry shots.
+
+     *(insert BAD example screenshot here)*
 6. Turn ON **"I have more than one of the same item"**.
 7. Set Condition to **Brand New**.
 8. Set Delivery to **Custom, 3–5 working days**.
@@ -147,7 +175,7 @@ The app shows only **two** warning chips: **Price low** (under S$25) and
 | Rating | 4.0★ and up |
 | Reviews | Has real sales |
 | Stock | In stock |
-| Images | Clean at cleanup.pictures — no watermarks/logos |
+| Images | 7–10 per listing, clean at cleanup.pictures — no watermarks/logos |
 | Buy Button | ON for every listing — no exceptions |
 | Avoid | Anything not furniture, brands, fragile, restricted, huge items |
 | Target | 100 listings/day |
