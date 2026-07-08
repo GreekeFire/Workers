@@ -270,9 +270,24 @@ module.exports = async function handler(req, res) {
   const row = rows[0];
   const p   = row.payload || {};
 
+  // Claim the row NOW, before any processing. consumed used to be set only at
+  // the very end (after AI generation + insert), so a timeout or crash mid-way
+  // left the row pending — and every 10 s poll re-drained it, respawning the
+  // same listing over and over and burning AI tokens each time. Claim-first
+  // means a hard failure loses one scrape (the VA can re-scrape) instead of
+  // looping forever. The .eq('consumed', false) guard makes the claim atomic,
+  // so the up-to-3 concurrent drain calls per poll can't double-process a row.
+  const { data: claimed, error: cErr } = await sb
+    .from('scrape_inbox')
+    .update({ consumed: true })
+    .eq('id', row.id)
+    .eq('consumed', false)
+    .select('id');
+  if (cErr) return res.status(500).json({ ok: false, error: 'inbox-claim: ' + cErr.message });
+  if (!claimed || claimed.length === 0) return res.json({ ok: true, already_claimed: true });
+
   // Unloaded sentinel — AUTO mode couldn't get data
   if (p.unloaded) {
-    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'unloaded', skipped: true });
   }
 
@@ -284,7 +299,6 @@ module.exports = async function handler(req, res) {
   );
 
   if (!shopeeUrl) {
-    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'no-url' });
   }
 
@@ -296,7 +310,6 @@ module.exports = async function handler(req, res) {
   const isRefresh = existingListing && existingListing.status === 'active';
 
   if (existingListing && !isRefresh) {
-    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'duplicate', listing_id: existingListing.id });
   }
 
@@ -358,8 +371,6 @@ module.exports = async function handler(req, res) {
       sell_price:         sellPrice || null,
     }).eq('id', existingListing.id);
 
-    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
-
     if (updateErr) {
       console.error('listing refresh error:', updateErr);
       return res.status(500).json({ ok: false, error: 'listing-refresh: ' + updateErr.message });
@@ -395,16 +406,11 @@ module.exports = async function handler(req, res) {
 
   if (lErr) {
     console.error('listing insert error:', lErr);
-    // Give up on this row so it isn't re-drained every poll (which would re-run
-    // AI generation each time). Duplicates were already handled above; this is a
-    // hard failure (incl. a lost unique-index race, where the listing now exists
-    // anyway). The VA can re-scrape if a genuine listing was lost.
-    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+    // Row is already claimed, so it won't be re-drained. Duplicates were handled
+    // above; this is a hard failure (incl. a lost unique-index race, where the
+    // listing now exists anyway). The VA can re-scrape if a genuine listing was lost.
     return res.status(500).json({ ok: false, error: 'listing-insert: ' + lErr.message });
   }
-
-  // 8. Mark inbox row consumed
-  await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
 
   return res.json({
     ok: true,
