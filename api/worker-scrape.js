@@ -270,24 +270,9 @@ module.exports = async function handler(req, res) {
   const row = rows[0];
   const p   = row.payload || {};
 
-  // Claim the row NOW, before any processing. consumed used to be set only at
-  // the very end (after AI generation + insert), so a timeout or crash mid-way
-  // left the row pending — and every 10 s poll re-drained it, respawning the
-  // same listing over and over and burning AI tokens each time. Claim-first
-  // means a hard failure loses one scrape (the VA can re-scrape) instead of
-  // looping forever. The .eq('consumed', false) guard makes the claim atomic,
-  // so the up-to-3 concurrent drain calls per poll can't double-process a row.
-  const { data: claimed, error: cErr } = await sb
-    .from('scrape_inbox')
-    .update({ consumed: true })
-    .eq('id', row.id)
-    .eq('consumed', false)
-    .select('id');
-  if (cErr) return res.status(500).json({ ok: false, error: 'inbox-claim: ' + cErr.message });
-  if (!claimed || claimed.length === 0) return res.json({ ok: true, already_claimed: true });
-
   // Unloaded sentinel — AUTO mode couldn't get data
   if (p.unloaded) {
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'unloaded', skipped: true });
   }
 
@@ -299,6 +284,7 @@ module.exports = async function handler(req, res) {
   );
 
   if (!shopeeUrl) {
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'no-url' });
   }
 
@@ -310,6 +296,7 @@ module.exports = async function handler(req, res) {
   const isRefresh = existingListing && existingListing.status === 'active';
 
   if (existingListing && !isRefresh) {
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'duplicate', listing_id: existingListing.id });
   }
 
@@ -344,91 +331,85 @@ module.exports = async function handler(req, res) {
   // 5. Sell price
   const sellPrice = cost > 0 ? calcSellPrice(cost) : null;
 
-  // 6. Create/refresh the listing BEFORE AI generation. AI is the slowest,
-  // flakiest step (two Claude calls, up to 45 s each, against a 60 s function
-  // limit); running it first meant a timeout killed the function with the
-  // inbox row already claimed and no listing created — the scrape silently
-  // vanished. Insert-first guarantees the listing reaches the VA's queue on
-  // the next poll no matter what happens to AI; the AI fields fill in below,
-  // or via the worker-listings regen path if this invocation dies.
+  // 6. AI generation (non-fatal)
+  let aiTitle = null;
+  let aiDescription = null;
+  try {
+    const productText = [p.title, p.description].filter(Boolean).join('\n\n');
+    if (productText.trim()) {
+      const ai = await generateAI(productText);
+      aiTitle       = ai.title       ?? null;
+      aiDescription = ai.description ?? null;
+    }
+  } catch (aiErr) {
+    console.error('AI gen failed:', aiErr.message);
+  }
 
-  let listingId;
-
+  // 7a. Refresh existing active listing — update AI, images, price, and assignment
   if (isRefresh) {
-    // Refresh existing active listing — update images, price, and assignment.
-    // AI fields are left untouched: it's the same product, and if they were
-    // never generated the regen path fills them.
     const { error: updateErr } = await sb.from('listings').update({
       assigned_worker_id: worker_id,
       account_name:       worker.account_name || null,
+      ai_title:           aiTitle,
+      ai_description:     aiDescription,
       images:             p.images && p.images.length ? p.images : null,
       guard_warnings:     warnings.length ? warnings : null,
       source_cost:        cost || null,
       sell_price:         sellPrice || null,
     }).eq('id', existingListing.id);
 
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+
     if (updateErr) {
       console.error('listing refresh error:', updateErr);
       return res.status(500).json({ ok: false, error: 'listing-refresh: ' + updateErr.message });
     }
-    listingId = existingListing.id;
-  } else {
-    const { data: listing, error: lErr } = await sb
-      .from('listings')
-      .insert({
-        title:              p.title || '',
-        shopee_url:         shopeeUrl,
-        source_cost:        cost || null,
-        sell_price:         sellPrice,
-        images:             p.images && p.images.length ? p.images : null,
-        status:             'active',
-        assigned_worker_id: worker_id,
-        account_name:       worker.account_name || null,
-        guard_warnings:     warnings.length ? warnings : null,
-        ai_title:           null,
-        ai_description:     null,
-      })
-      .select('id')
-      .single();
 
-    if (lErr) {
-      console.error('listing insert error:', lErr);
-      // Row is already claimed, so it won't be re-drained. Duplicates were handled
-      // above; this is a hard failure (incl. a lost unique-index race, where the
-      // listing now exists anyway). The VA can re-scrape if a genuine listing was lost.
-      return res.status(500).json({ ok: false, error: 'listing-insert: ' + lErr.message });
-    }
-    listingId = listing.id;
+    return res.json({
+      ok: true,
+      listing_id: existingListing.id,
+      warnings,
+      ai_generated: !!(aiTitle || aiDescription),
+      refreshed: true,
+    });
   }
 
-  // 7. AI generation (non-fatal) — listing already exists, so a timeout or
-  // crash here can no longer lose the scrape. Skips listings that already
-  // have AI content (refresh of a previously generated listing, or a
-  // concurrent regen won the race).
-  let aiGenerated = false;
-  try {
-    const productText = [p.title, p.description].filter(Boolean).join('\n\n');
-    if (productText.trim()) {
-      const { data: current } = await sb
-        .from('listings').select('ai_title').eq('id', listingId).single();
-      if (!current || current.ai_title == null || current.ai_title === '') {
-        const ai = await generateAI(productText);
-        await sb.from('listings').update({
-          ai_title:       ai.title       || null,
-          ai_description: ai.description || null,
-        }).eq('id', listingId);
-        aiGenerated = true;
-      }
-    }
-  } catch (aiErr) {
-    console.error('AI gen failed:', aiErr.message);
+  // 7b. Create new listing
+  const { data: listing, error: lErr } = await sb
+    .from('listings')
+    .insert({
+      title:              p.title || '',
+      shopee_url:         shopeeUrl,
+      source_cost:        cost || null,
+      sell_price:         sellPrice,
+      images:             p.images && p.images.length ? p.images : null,
+      status:             'active',
+      assigned_worker_id: worker_id,
+      account_name:       worker.account_name || null,
+      guard_warnings:     warnings.length ? warnings : null,
+      ai_title:           aiTitle,
+      ai_description:     aiDescription,
+    })
+    .select('id')
+    .single();
+
+  if (lErr) {
+    console.error('listing insert error:', lErr);
+    // Give up on this row so it isn't re-drained every poll (which would re-run
+    // AI generation each time). Duplicates were already handled above; this is a
+    // hard failure (incl. a lost unique-index race, where the listing now exists
+    // anyway). The VA can re-scrape if a genuine listing was lost.
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+    return res.status(500).json({ ok: false, error: 'listing-insert: ' + lErr.message });
   }
+
+  // 8. Mark inbox row consumed
+  await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
 
   return res.json({
     ok: true,
-    listing_id: listingId,
+    listing_id: listing.id,
     warnings,
-    ai_generated: aiGenerated,
-    refreshed: isRefresh || undefined,
+    ai_generated: !!(aiTitle || aiDescription),
   });
 };

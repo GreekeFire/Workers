@@ -1297,7 +1297,6 @@ async function doLogin() {
 let _workersData = null;          // [{id,name,daily_target,active,count_today,pending}]
 let _workersLoading = false;
 let _rotateConfirmPending = null; // worker id awaiting rotation confirm (inline two-step)
-let _clearConfirmPending = null;  // worker id awaiting clear-listings confirm (inline two-step)
 let _editAccountPending = null;   // worker id whose inline account-name editor is open
 
 async function renderWorkersView() {
@@ -1430,9 +1429,6 @@ function _renderWorkersView() {
                   <button class="copy-btn" onclick="workerEditAccount('${w.id}')" style="opacity:0.6">
                     ✎ Account
                   </button>
-                  <button class="copy-btn" onclick="workerClearListings('${w.id}')" style="color:var(--danger);border-color:rgba(224,88,88,0.3)">
-                    🧹 Clear listings
-                  </button>
                   <button class="copy-btn" onclick="workerRotateLink('${w.id}', '${esc(w.name)}')" style="color:var(--danger);border-color:rgba(224,88,88,0.3)">
                     🔄 Rotate link
                   </button>
@@ -1445,14 +1441,6 @@ function _renderWorkersView() {
                   <input id="acct-${w.id}" class="link-edit-input" placeholder="Carousell account name" value="${esc(w.account_name || '')}" style="flex:1;min-width:140px">
                   <button class="ai-gen-btn" style="padding:7px 14px" onclick="_doSaveAccount('${w.id}')">Save</button>
                   <button class="copy-btn" onclick="_editAccountPending=null;_renderWorkersView()">✕</button>
-                </div>` : ''}
-                ${_clearConfirmPending === w.id ? `
-                <div style="margin-top:12px;padding:12px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.35);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                  <span style="font-size:13px;font-weight:600;color:#fca5a5">Delete ${w.pending} unposted listing${w.pending === 1 ? '' : 's'}? Done/posted history is kept.</span>
-                  <div style="display:flex;gap:8px">
-                    <button class="copy-btn" onclick="_clearConfirmPending=null;_renderWorkersView()">Cancel</button>
-                    <button class="ai-gen-btn" style="background:rgba(220,38,38,0.15);border-color:rgba(220,38,38,0.4);color:#fca5a5" onclick="_doClearListings('${w.id}')">Clear ✓</button>
-                  </div>
                 </div>` : ''}
                 ${_rotateConfirmPending === w.id ? `
                 <div style="margin-top:12px;padding:12px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.35);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -1601,53 +1589,6 @@ async function copyVaLink(workerId) {
   } catch (e) {
     showUrlFallback('VA link — long-press to copy:', url);
   }
-}
-
-// Clear a worker's queue without touching the worker row or link — used to reset
-// a trial account between candidates. Deletes their unposted (active) listings and
-// unconsumed inbox rows; worker_done history and posted/sold listings are untouched.
-// Two-step inline confirm, same pattern as rotate (confirm() is blocked in iOS PWA).
-function workerClearListings(workerId) {
-  if (_clearConfirmPending === workerId) {
-    // Already showing — treat a second tap on the button as cancel
-    _clearConfirmPending = null;
-    _renderWorkersView();
-    return;
-  }
-  _clearConfirmPending = workerId;
-  _renderWorkersView();
-  // Auto-cancel after 8 s so the strip doesn't linger indefinitely
-  setTimeout(() => { if (_clearConfirmPending === workerId) { _clearConfirmPending = null; _renderWorkersView(); } }, 8000);
-}
-
-let _clearListingsBusy = false;
-async function _doClearListings(workerId) {
-  if (_clearListingsBusy) return;
-  _clearListingsBusy = true;
-  _clearConfirmPending = null;
-
-  const { error: delErr, count } = await sb
-    .from('listings')
-    .delete({ count: 'exact' })
-    .eq('assigned_worker_id', workerId)
-    .eq('status', 'active');
-  if (delErr) {
-    _clearListingsBusy = false;
-    toast('Clear failed: ' + delErr.message);
-    return;
-  }
-
-  const { error: inboxErr } = await sb
-    .from('scrape_inbox')
-    .delete()
-    .eq('worker_id', workerId)
-    .eq('consumed', false);
-  if (inboxErr) console.error('clear inbox error:', inboxErr.message);
-
-  toast(count ? `Cleared ${count} unposted listing${count === 1 ? '' : 's'} ✓` : 'Nothing to clear — queue already empty');
-  _clearListingsBusy = false;
-  _workersData = null;
-  await refreshWorkers();
 }
 
 // First press shows an inline confirm strip on the card; second press calls _doRotateLink.
