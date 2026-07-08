@@ -921,10 +921,30 @@ async function doDone(listingId, warningsOverridden) {
 async function doSkip(listingId) {
   if (busy) return;
   busy = true;
+  // Optimistic: hide immediately so the next card shows without waiting on the API
   skipSet.add(listingId);
   delete caroUrlDraft[listingId];
-  render();  // render first so the next card shows immediately
+  ackedWarns.delete(listingId);
+  render();
   busy = false;
+
+  // Persist the skip — deletes the listing server-side so it can't come back
+  // on refresh (skipSet alone is session-only and used to cause exactly that).
+  try {
+    const r = await fetch('/api/worker-skip', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ worker_id: WORKER_ID, listing_id: listingId }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || r.status);
+    listings = listings.filter(l => l.id !== listingId);
+    render();
+  } catch (e) {
+    // Server didn't remove it — keep it hidden for this session but warn, so
+    // the VA isn't surprised when it reappears after a refresh.
+    showToast('Skip not saved — listing may return on refresh', true);
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
