@@ -646,14 +646,27 @@ async function init() {
 
 async function loadListingsFromSupabase() {
   try {
-    const { data, error } = await sb
-      .from('listings')
-      .select('id,title,shopee_url,carousell_url,source_cost,sell_price,assigned_worker_id')
-      .eq('status', 'done')
-      .order('id');
-    if (error) throw error;
-    LISTINGS = data.map(r => ({
-      id: r.id, title: r.title, shopee: r.shopee_url, caro: r.carousell_url,
+    // PostgREST hard-caps every select at 1000 rows (project max-rows), so with
+    // 2600+ done listings a single query silently dropped everything past #1000 —
+    // the sales search filters this array client-side, so those listings were
+    // unfindable. Page through with .range() until a short page comes back.
+    // ponytail: full preload of ~all done listings. If this gets slow, switch the
+    // sales search to server-side ilike like the LISTINGS tab (_searchAllListings).
+    const PAGE = 1000;
+    const rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb
+        .from('listings')
+        .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,assigned_worker_id')
+        .eq('status', 'done')
+        .order('id')
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < PAGE) break;
+    }
+    LISTINGS = rows.map(r => ({
+      id: r.id, title: r.title, ai_title: r.ai_title || '', shopee: r.shopee_url, caro: r.carousell_url,
       cost: r.source_cost == null ? '' : String(r.source_cost),
       sell: r.sell_price  == null ? '' : String(r.sell_price),
       assigned_worker_id: r.assigned_worker_id || null
@@ -769,7 +782,9 @@ function searchListings(query) {
   _searchMatches = [];
   _searchSel = -1;
   for (let i = 0; i < LISTINGS.length && _searchMatches.length < 10; i++) {
-    if (!matchesQuery(LISTINGS[i].title)) continue;
+    // Match title OR ai_title — Shopee shows the AI-rewritten title, so that's
+    // what gets typed/pasted here (same reason as the LISTINGS tab search).
+    if (!matchesQuery(LISTINGS[i].title + ' ' + LISTINGS[i].ai_title)) continue;
     _searchMatches.push({ name: LISTINGS[i].title, price: LISTINGS[i].sell, shopee: LISTINGS[i].shopee, caro: LISTINGS[i].caro, cost: LISTINGS[i].cost, listingDbId: LISTINGS[i].id || null });
   }
   if (_searchMatches.length === 0) { dropdown.style.display = 'none'; return; }
