@@ -25,7 +25,45 @@
   // Read worker UUID injected by the VA's personalised bookmarklet, or null for owner.
   const wid = window.__swWorker || null;
 
+  // Best-effort enrichment from v4 pdp/get_pc — the only endpoint with
+  // per-variant availability (has_stock) and shipping EDT; neither the
+  // dataLayer nor v4 item/get carries them. Runs same-origin with the VA's
+  // cookies. Any failure → payload posts unenriched (old behaviour).
+  const enrich = async (p) => {
+    try {
+      const m = (p.url || '').match(/i\.(\d+)\.(\d+)/) || (p.url || '').match(/\/product\/(\d+)\/(\d+)/);
+      if (!m) return p;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 6000);
+      let d;
+      try {
+        const r = await fetch('https://shopee.sg/api/v4/pdp/get_pc?item_id=' + m[2] + '&shop_id=' + m[1], {
+          credentials: 'include',
+          headers: { accept: 'application/json' },
+          signal: ctrl.signal,
+        });
+        d = (await r.json()).data;
+      } finally { clearTimeout(to); }
+      if (!d || !d.item) return p;
+
+      // Drop variants the source can no longer supply (only when explicitly flagged)
+      const oos = new Set((d.item.models || []).filter(x => x && x.has_stock === false).map(x => x.name));
+      if (oos.size && Array.isArray(p.models)) p.models = p.models.filter(x => !oos.has(x.name));
+
+      // Shipping EDT (days) + origin — server turns this into the delivery promise
+      const infos = (((d.product_shipping || {}).ungrouped_channel_infos) || [])
+        .map(c => c && c.channel_delivery_info)
+        .filter(i => i && i.estimated_delivery_time_max > 0);
+      const ch = infos.find(i => i.is_fastest_edt_channel) || infos[0];
+      if (ch) { p.edt_min = ch.estimated_delivery_time_min; p.edt_max = ch.estimated_delivery_time_max; }
+      const from = ((d.product_shipping || {}).shipping_fee_info || {}).ship_from_location;
+      if (from) p.ship_from = from;
+    } catch (e) { /* enrichment is optional */ }
+    return p;
+  };
+
   const post = async (p) => {
+    if (!p.unloaded) p = await enrich(p);
     const body = { kind: 'shopee', payload: p };
     // Include worker_id at top level on the scrape_inbox row so
     // /api/worker-scrape can find it without parsing the payload JSON.

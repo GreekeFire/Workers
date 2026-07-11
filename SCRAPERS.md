@@ -18,9 +18,12 @@ editor (Dashboard → SQL Editor → paste → Run). *(Done 2026-06-11.)*
   sc.js (hosted loader target)
         │  reads window.dataLayer  ──► ·page  (no request, NO bot puzzle)
         │  └ if not ready, falls back to v4 fetch ──► ·api (puzzle possible)
+        │  then enriches via v4 pdp/get_pc (best-effort): drops out-of-stock
+        │  variants from models[], adds edt_min/edt_max (shipping days) + ship_from
         ▼
   Supabase  scrape_inbox  (kind:'shopee', payload:{title,description,
-        │                   price_min/max, models[], images[], sold, stock, url})
+        │                   price_min/max, models[] (in-stock only), images[],
+        │                   sold, stock, url, edt_min?, edt_max?, ship_from?})
         ▼
   work.html
     NEW tab  → auto-pulls on open; 1 item fills the form, several → batch cards

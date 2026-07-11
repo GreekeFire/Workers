@@ -14,66 +14,75 @@ const { sb, SERVICE_KEY } = require('../lib/sb');
 const PRICE_BAND_MIN = 25;
 const PRICE_BAND_MAX = 300;
 
-// ── AI prompts — kept in sync with work.html ────────────────────────────────
+// ── AI prompts (server-side only — no other copy exists) ────────────────────
 
 const TITLE_SYSTEM = `You are a Carousell Singapore listing title writer. Buyers find the listing by typing words into search, so the title must be packed with the DISTINCT, RELEVANT terms a real buyer would type for THIS specific item.
 
 TASK: Write one Carousell title for the product below. Output the title text only — no JSON, no quotes, no explanation.
 
 STEP 1 — Silently identify the category from the product text:
-- FURNITURE / BULKY HOME (sofa, chair, table, shelf, bed, mattress, safe, cabinet, rack): buyers search by item type, size/dimensions, material, load/weight capacity, room, style.
-- ELECTRONICS / GADGET (keyboard, charger, speaker, lamp, fan, small appliance): item type, key spec, connectivity, compatibility, standout feature.
+- FURNITURE / BULKY HOME (sofa, chair, table, shelf, bed, mattress, safe, cabinet, rack, drawers): buyers search by item type, size/dimensions, material, load/weight capacity, room, style.
 - HOMEWARE / KITCHEN (plates, cookware, storage, organiser): item type, set/piece count, material, capacity/size, use.
-- If unclear, lead with item type + strongest concrete attributes.
+- Anything else: lead with item type + strongest concrete attributes.
 
 STEP 2 — Write the title:
-1. Length: 180–225 characters. Count every character. This is the strictest rule.
-2. Format: pipe-separated ( | ) Title Case segments, each 3–6 words, each a complete phrase a buyer could actually type into search.
-3. Front-load the single strongest search phrase in the first 40 characters — the feed truncates the visible title there.
+1. Exactly 8 to 10 pipe-separated ( | ) segments. Each segment is a Title Case phrase of 3-5 words a buyer could actually type into search. Aim for roughly 200 characters total; never exceed 225.
+2. Front-load the single strongest search phrase as the FIRST segment — the feed truncates the visible title around 40 characters.
+3. If dimensions appear in the product text, at least ONE segment MUST contain them (e.g. "130x70cm Dining Table").
 4. COVER DIFFERENT SEARCH ANGLES — never repeat the same phrase. Each segment adds a NEW angle: item-type synonyms, a real attribute (size, material, capacity, colour), a feature, a use case. You may reuse the core item word with a DIFFERENT modifier each time, but near-duplicate segments read as keyword stuffing and get listings hidden.
 5. Use ONLY attributes that appear in the product text. NEVER invent dimensions, weights, materials, capacities or compatibility.
 6. Correct spelling. Do not copy source typos.
 7. NEVER include: brand names, model numbers/SKUs, platform names (Shopee, Carousell, Lazada, Amazon), seller phrases ("Local Seller", "SG Seller", "Fast Delivery"), prices, the words "Brand New / Free Shipping / nice / cheap / best", emojis, or the symbols ! @ # $ % * &.
 
-GOOD (distinct angles, not repetition):
-Plastic Stool | Modern Stackable Stool | Bathroom Stool | Dining Stool | Dressing Table Stool | Compact Side Stool | Space Saving Stool | Minimalist Home Furniture
+GOOD (distinct angles, concrete attributes taken from the product text):
+Solid Wood Coffee Table | 100x50cm Living Room Table | Walnut Finish Low Table | Scandinavian Side Table | Sturdy Pine Frame | Compact Apartment Table | Minimalist Home Furniture | Easy Assembly Centre Table
 
 BAD (same phrase repeated — gets hidden):
 Gaming Keyboard | RGB Gaming Keyboard | Best Gaming Keyboard | Gaming Keyboard SG | Gaming Keyboard Cheap
 
-Silently count characters. If under 180 or over 225, fix by adding or removing a DISTINCT angle — never by repeating a segment. Output only the final title.`;
+Silently count your segments. Fewer than 8: add a NEW distinct angle. More than 10: drop the weakest. Output only the final title.`;
 
-const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY a JSON object: {"description":"..."}. Plain text inside — no markdown, no **bold**, no #headers.
+const DESC_SYSTEM = `You are a Carousell Singapore listing copywriter. Output ONLY the listing description as plain text — no JSON, no markdown, no **bold**, no #headers, no commentary before or after. Do NOT write a delivery line — it is added automatically.
 
-STEP 1 — Silently detect the category from the product text: FURNITURE/BULKY, ELECTRONICS/GADGET, or HOMEWARE/KITCHEN. This sets the depth and which details lead.
+STEP 1 — Silently detect the category from the product text: FURNITURE/BULKY or HOMEWARE/KITCHEN (anything else: treat it as homeware). This sets the depth and which details lead.
 
 STEP 2 — Choose depth:
-- HIGH-TICKET BULKY FURNITURE (sofa, table, bed, mattress, large cabinet, shelf): fuller — 6 to 8 bullets, lead with what reassures a considered buyer.
-- CHEAP / SIMPLE items (small homeware, gadgets, organisers): leaner — 3 to 5 bullets. Do not pad; an over-bulleted block on a cheap item reads as spam.
+- HIGH-TICKET BULKY FURNITURE (sofa, table, bed, mattress, large cabinet, shelf, rack): fuller — 6 to 8 bullets, lead with what reassures a considered buyer.
+- CHEAP / SIMPLE items (small homeware, organisers): leaner — 3 to 5 bullets. Do not pad; an over-bulleted block on a cheap item reads as spam.
 
 STEP 3 — Write in exactly this structure:
 
-LINE 1 (must start with 🚚): a short, punchy delivery line. MUST always include the word "Free" and "Delivery". e.g. "🚚 Free Doorstep Delivery | 1-3 Working Days". You may vary the wording naturally (e.g. "Free Delivery", "Free Doorstep Delivery", "Free Shipping") but "Free" and "Delivery" must always appear. Keep it to one tight line — do NOT cram the value-sell here.
-
-(blank line)
-
-ONE hook sentence: what it is + 2–3 standout features + who/what it's for.
+ONE hook sentence: what it is + 2-3 standout features + who/what it's for.
 
 (blank line)
 
 Bullets, each: ✅ [Feature] — [what it means for the buyer]. ORDER BY WHAT THIS BUYER DECIDES ON:
 - FURNITURE/BULKY: dimensions FIRST (will it fit), then material/build, weight or load capacity, assembly, colour/finish, room/use.
-- ELECTRONICS/GADGET: key specs first, then compatibility, connectivity, features, what's in the box.
 - HOMEWARE/KITCHEN: set/piece count first, then material, dimensions/capacity, microwave/dishwasher/oven safe, care.
 For BULKY items, include one value bullet worded to the item, e.g. "✅ Delivered To Your Door — no lorry to rent, no carrying it up yourself". For small/light items, skip this bullet (a delivery hard-sell looks overblown).
 Always include: "✅ Brand New — unused" (sealed/flat-packed as appropriate).
 
-If the source lists colour/size variants, add ONE line BEFORE the payment line: "📦 Sizes available: ..." or "📦 Finishes available: ...". Summarise many variants into a readable range (e.g. "45×30, 55×35, 65×42cm footprints · 1 to 5 layers") — do not dump every row. Omit this line entirely if there are no variants. Then add: "💬 Message us to order or check stock".
+If the product text lists colour/size variants, add ONE line after the bullets: "📦 Sizes available: ..." or "📦 Finishes available: ...". Summarise many variants into a readable range (e.g. "45×30, 55×35, 65×42cm footprints · 1 to 5 layers") — do not dump every row. If a "Variants (in stock)" line is present, it is the ONLY source of truth for what can be bought: any size or colour mentioned elsewhere in the product text but missing from that line is OUT OF STOCK and must not appear anywhere in your listing. Omit the 📦 line entirely if there are no variants. Then add: "💬 Message us to order or check stock".
 
 LAST LINE (exact, verbatim, nothing after it):
 💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
 
+EXAMPLE (structure and tone ONLY — NEVER copy its facts into a real listing):
+Sturdy 4-tier foldable laundry drying rack that holds a full family wash and folds flat when not in use — ideal for HDB service yards and balconies.
+
+✅ 170cm Tall, 64cm Wide — takes a full load of laundry in one go
+✅ Powder-Coated Steel Frame — rustproof for humid weather
+✅ Folds Flat — slides beside the washing machine when done
+✅ No Assembly Needed — unfold and use straight away
+✅ Brand New — unused, in original packaging
+✅ Delivered To Your Door — no lorry to rent, no carrying it up yourself
+
+💬 Message us to order or check stock
+
+💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂
+
 RULES:
+- The product text may include the original seller's shop boilerplate: warranty offers, refund policies, review requests, shop promotions, wholesale offers, self-pickup notes, authenticity claims, addresses. NEVER copy any warranty, refund, pickup, or service promise into the listing — describe only the item itself.
 - State ONLY facts in the product text. NEVER invent dimensions, weight, material, capacity or compatibility. If a key spec is missing, write a genuine benefit bullet instead — do not guess. Wrong specs cause returns.
 - No brand names, no platform names (Shopee/Lazada/Amazon).
 - No vague filler on its own ("high quality", "amazing", "best", "premium") — pair a concrete feature with a concrete benefit.
@@ -82,37 +91,35 @@ RULES:
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// Mirrors work.html normalizeDesc — ensures delivery line is first and payment
-// line is last, exactly matching what the owner's FIX tab produces. Without this,
-// VA-generated descriptions could have the 🚚 line buried mid-text or missing.
-function normalizeDesc(text) {
+// No-EDT fallback is deliberately date-free: a missing EDT usually means the
+// source uses "Seller's own delivery" (bulky furniture) — timing unknown, so
+// we promise none. Those listings also get a 'no-edt' guard warning.
+const DELIVERY_DEFAULT = '🚚 Free Doorstep Delivery';
+
+// Delivery promise = source EDT +1 day both ends (source 3-4 days → "4-5"),
+// covering our re-order lag. Computed in code, never by the AI.
+function deliveryLine(p) {
+  const min = Number(p && p.edt_min);
+  const max = Number(p && p.edt_max);
+  if (min >= 1 && max >= min && max <= 30) {
+    return `🚚 Free Doorstep Delivery | ${min + 1}-${max + 1} Working Days`;
+  }
+  return DELIVERY_DEFAULT;
+}
+
+// The server is the single authority for listing structure (no client copy).
+// Stamps the computed delivery line first and the payment line last, replacing
+// whatever the model wrote for either.
+function normalizeDesc(text, delivery = DELIVERY_DEFAULT) {
   if (!text) return text;
-  const DELIVERY = '🚚 Free Doorstep Delivery | 1-3 Working Days';
-  const PAYMENT  = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
-  let lines = text.split('\n');
-
-  // Delivery line must be first
-  if (!lines[0].trim().startsWith('🚚')) {
-    const idx = lines.findIndex(l => l.includes('🚚') || l.includes('FREE Local Delivery'));
-    if (idx > 0) {
-      const [found] = lines.splice(idx, 1);
-      while (lines.length && !lines[0].trim()) lines.shift();
-      lines = [found.trim(), '', ...lines];
-    } else if (idx === -1) {
-      lines = [DELIVERY, '', ...lines];
-    }
-  }
-
-  // Payment line must be last
-  const lastNonEmptyIdx = [...lines].map((l, i) => l.trim() ? i : -1).filter(i => i !== -1).pop();
-  const hasPaymentAtEnd = lastNonEmptyIdx !== undefined && lines[lastNonEmptyIdx].trim() === PAYMENT;
-  if (!hasPaymentAtEnd) {
-    const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
-    if (idx !== -1) lines.splice(idx, 1);
-    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-    lines.push('', PAYMENT);
-  }
-
+  const PAYMENT = '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂';
+  let lines = text.split('\n').filter(l => !(l.includes('🚚') || l.includes('FREE Local Delivery')));
+  while (lines.length && !lines[0].trim()) lines.shift();
+  lines = [delivery, '', ...lines];
+  const idx = lines.findIndex(l => l.includes('💳') || l.includes('PayNow'));
+  if (idx !== -1) lines.splice(idx, 1);
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  lines.push('', PAYMENT);
   return lines.join('\n');
 }
 
@@ -140,7 +147,10 @@ function calcSellPrice(cost) {
 // Call Anthropic directly — worker-scrape is server-side so it can use the key
 // directly rather than routing through /api/claude (which adds a fragile internal
 // HTTP hop that was the root cause of silent AI generation failures).
-async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.3) {
+// Sonnet 5: no temperature param (non-default values are rejected), thinking
+// disabled explicitly (defaults to adaptive when omitted, which burns output
+// tokens on reasoning we don't need for listing copy).
+async function callClaudeDirect(system, userContent, maxTokens) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
   const ctrl = new AbortController();
@@ -153,9 +163,9 @@ async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-5',
       max_tokens: maxTokens,
-      temperature,
+      thinking: { type: 'disabled' },
       system,
       messages: [{ role: 'user', content: userContent }],
     }),
@@ -168,23 +178,23 @@ async function callClaudeDirect(system, userContent, maxTokens, temperature = 0.
   }
   const data = await resp.json();
   if (data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text || '';
+  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('') || '';
 }
 
-async function generateAI(productText) {
+async function generateAI(productText, delivery = DELIVERY_DEFAULT) {
   const productContent = `Product info:\n\n${productText}`;
   const [rawTitle, rawDesc] = await Promise.all([
-    callClaudeDirect(TITLE_SYSTEM, productContent, 512, 0.3),
-    callClaudeDirect(DESC_SYSTEM, productContent, 1536, 0.5),
+    callClaudeDirect(TITLE_SYSTEM, productContent, 512),
+    callClaudeDirect(DESC_SYSTEM, productContent, 1536),
   ]);
   let title = rawTitle.trim().split('\n')[0].trim();
-  // Retry once if title is too short (mirrors work.html behaviour)
+  // Retry once if title is too short (code-level backstop; prompt asks for segments)
   if (title.length < 180) {
     try {
       const retry = await callClaudeDirect(
         TITLE_SYSTEM,
-        productContent + '\n\nIMPORTANT: Previous attempt was too short. Reach at least 180 characters by ADDING A NEW DISTINCT ANGLE (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.',
-        512, 0.3
+        productContent + '\n\nIMPORTANT: Previous attempt was too short. Add 1-2 NEW DISTINCT segments (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.',
+        512
       );
       title = retry.trim().split('\n')[0].trim();
     } catch { /* keep original if retry fails */ }
@@ -195,19 +205,12 @@ async function generateAI(productText) {
     while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
     title = parts.join(' | ');
   }
-  let description = '';
-  try {
-    // Strip markdown code fences if present before parsing
-    const cleaned = rawDesc.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    description = normalizeDesc(JSON.parse(cleaned).description || '');
-  } catch {
-    // Claude returned malformed JSON — strip wrapper and use raw text
-    const raw = rawDesc.trim()
-      .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')
-      .replace(/^\s*\{[^"]*"description"\s*:\s*"/, '')
-      .replace(/"\s*\}\s*$/, '');
-    description = normalizeDesc(raw || rawDesc.trim());
+  // Desc is plain text; strip stray code fences / JSON wrapper if the model regresses
+  let description = rawDesc.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  if (description.startsWith('{')) {
+    try { description = JSON.parse(description).description || description; } catch { /* use as-is */ }
   }
+  description = normalizeDesc(description, delivery);
   return { title, description };
 }
 
@@ -326,6 +329,9 @@ module.exports = async function handler(req, res) {
   if (!isRefresh) {
     if (cost > 0 && cost < PRICE_BAND_MIN) warnings.push('price-too-low');
     if (cost > 0 && cost > PRICE_BAND_MAX) warnings.push('price-too-high');
+    // No shipping estimate from the source (usually "Seller's own delivery") —
+    // listing goes out date-free; VA should confirm timing before promising one.
+    if (!(Number(p.edt_max) >= 1)) warnings.push('no-edt');
   }
 
   // 5. Sell price
@@ -335,9 +341,16 @@ module.exports = async function handler(req, res) {
   let aiTitle = null;
   let aiDescription = null;
   try {
-    const productText = [p.title, p.description].filter(Boolean).join('\n\n');
+    // Variant names carry the specs on Shopee furniture (e.g. "Type B (32*30*41cm)");
+    // sc.js has already dropped out-of-stock variants from p.models.
+    const variantNames = (p.models || []).map(m => m && m.name).filter(Boolean);
+    const productText = [
+      p.title,
+      p.description,
+      variantNames.length ? 'Variants (in stock): ' + variantNames.join(', ') : '',
+    ].filter(Boolean).join('\n\n');
     if (productText.trim()) {
-      const ai = await generateAI(productText);
+      const ai = await generateAI(productText, deliveryLine(p));
       aiTitle       = ai.title       ?? null;
       aiDescription = ai.description ?? null;
     }
@@ -413,3 +426,5 @@ module.exports = async function handler(req, res) {
     ai_generated: !!(aiTitle || aiDescription),
   });
 };
+
+module.exports._test = { normalizeDesc, deliveryLine, generateAI };
