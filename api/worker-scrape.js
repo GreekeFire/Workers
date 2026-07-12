@@ -140,9 +140,11 @@ function normalizeShopeeUrl(url) {
   return clean;
 }
 
+// max(×1.5, +$25), rounded up to the next $10 then −$1 → $x9 endings
+// (left-digit pricing). MUST match calcSell in work.html.
 function calcSellPrice(cost) {
-  const raw = Math.max(cost * 1.5, cost + 24);
-  return Math.ceil(raw / 5) * 5;
+  const raw = Math.max(cost * 1.5, cost + 25);
+  return Math.ceil(raw / 10) * 10 - 1;
 }
 
 // Call Anthropic directly — worker-scrape is server-side so it can use the key
@@ -428,4 +430,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice };

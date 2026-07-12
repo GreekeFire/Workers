@@ -609,10 +609,12 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
 <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');</script>
 
 <script>
+// max(×1.5, +$25), rounded up to the next $10 then −$1 → $x9 endings
+// (left-digit pricing). MUST match calcSellPrice in api/worker-scrape.js.
 function calcSell(cost) {
   const c = parseFloat(cost) || 0;
-  const raw = Math.ceil(Math.max(c * 1.5, c + 24) / 5) * 5;
-  return raw;
+  if (c <= 0) return 0;
+  return Math.ceil(Math.max(c * 1.5, c + 25) / 10) * 10 - 1;
 }
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
