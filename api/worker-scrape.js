@@ -102,7 +102,8 @@ function deliveryLine(p) {
   const min = Number(p && p.edt_min);
   const max = Number(p && p.edt_max);
   if (min >= 1 && max >= min && max <= 30) {
-    return `🚚 Free Doorstep Delivery | ${min + 1}-${max + 1} Working Days`;
+    const range = min === max ? `${max + 1}` : `${min + 1}-${max + 1}`;
+    return `🚚 Free Doorstep Delivery | ${range} Working Days`;
   }
   return DELIVERY_DEFAULT;
 }
