@@ -1114,8 +1114,8 @@ function _renderListingsResults(data, prefix) {
       if (_lastListingsRender && _lastListingsRender.data === data) _renderListingsResults(data, prefix);
     });
   }
-  const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean' };
-  const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)' };
+  const statusLabel = { active: 'In Queue', done: 'Listed', to_delete: 'To Clean', skipped: 'VA Skipped' };
+  const statusColor = { active: 'var(--text-tertiary)', done: 'var(--success)', to_delete: 'var(--danger)', skipped: '#fbbf24' };
 
   list.innerHTML = (prefix || '') + data.map(d => {
     const cost = parseFloat(d.source_cost) || 0;

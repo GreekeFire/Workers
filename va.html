@@ -925,6 +925,22 @@ async function doSkip(listingId) {
   skipSet.add(listingId);
   delete caroUrlDraft[listingId];
   render();  // render first so the next card shows immediately
+  try {
+    // Persist server-side (status → 'skipped') so it never comes back on
+    // refresh and the owner sees it left the queue.
+    const r = await fetch('/api/worker-done', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ worker_id: WORKER_ID, listing_id: listingId, skip: true }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || r.status);
+    listings = listings.filter(l => l.id !== listingId);
+  } catch (e) {
+    skipSet.delete(listingId);
+    showToast('Skip failed — tap Skip again to retry', true);
+    render();
+  }
   busy = false;
 }
 
