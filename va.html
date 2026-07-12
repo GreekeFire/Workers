@@ -926,8 +926,8 @@ async function doSkip(listingId) {
   delete caroUrlDraft[listingId];
   render();  // render first so the next card shows immediately
   try {
-    // Persist server-side (status → 'skipped') so it never comes back on
-    // refresh and the owner sees it left the queue.
+    // Persist server-side (deletes the listing) so it never comes back on
+    // refresh and never reaches the owner's listings.
     const r = await fetch('/api/worker-done', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

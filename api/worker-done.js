@@ -5,7 +5,7 @@
  *         carousell_url?: string, skip?: bool }
  *
  * 1. Validate worker + listing ownership
- * 2. Set listing status = 'done' (or 'skipped' when skip=true)
+ * 2. Set listing status = 'done' — or DELETE the listing entirely when skip=true
  * 3. Insert worker_done row (title snapshot + warnings_overridden flag) — done only
  * 4. Return { ok, count_today } (skip returns { ok, skipped })
  */
@@ -40,19 +40,28 @@ module.exports = async function handler(req, res) {
   if (listing.assigned_worker_id !== worker_id)  return res.status(403).json({ error: 'listing-not-assigned-to-worker' });
   if (listing.status !== 'active')               return res.status(409).json({ error: 'listing-not-active', status: listing.status });
 
-  // skip=true → status 'skipped': drops out of the VA queue AND the owner's
-  // pending counts; owner finds it via LISTINGS search (no status filter there).
-  // No worker_done row — a skip is not a completion.
-  const update = { status: skip ? 'skipped' : 'done' };
-  if (!skip && carousell_url) update.carousell_url = carousell_url;
+  // skip=true → the VA isn't listing this item, so remove it entirely. Hard
+  // delete: the row (Shopee link and all) is gone, not archived. No worker_done
+  // row — a skip is not a completion. Ownership + active checks above still gate
+  // it, so a VA can only delete their own unlisted item.
+  if (skip) {
+    const { error: delErr } = await sb.from('listings').delete().eq('id', listing_id);
+    if (delErr) {
+      console.error('listing delete error:', delErr);
+      return res.status(500).json({ error: 'delete-failed' });
+    }
+    return res.json({ ok: true, skipped: true });
+  }
+
+  // Mark listing done + save Carousell URL if provided
+  const update = { status: 'done' };
+  if (carousell_url) update.carousell_url = carousell_url;
   const { error: updateErr } = await sb
     .from('listings').update(update).eq('id', listing_id);
   if (updateErr) {
     console.error('listing update error:', updateErr);
     return res.status(500).json({ error: 'update-failed' });
   }
-
-  if (skip) return res.json({ ok: true, skipped: true });
 
   const today = sgtToday();
   const { error: doneErr } = await sb.from('worker_done').insert({
