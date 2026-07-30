@@ -33,17 +33,21 @@
     try {
       const m = (p.url || '').match(/i\.(\d+)\.(\d+)/) || (p.url || '').match(/\/product\/(\d+)\/(\d+)/);
       if (!m) return p;
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 6000);
+      // get_pc is intermittent (bot check / slow) — retry once with a longer
+      // timeout so swatch images + EDT don't silently drop on a single miss.
       let d;
-      try {
-        const r = await fetch('https://shopee.sg/api/v4/pdp/get_pc?item_id=' + m[2] + '&shop_id=' + m[1], {
-          credentials: 'include',
-          headers: { accept: 'application/json' },
-          signal: ctrl.signal,
-        });
-        d = (await r.json()).data;
-      } finally { clearTimeout(to); }
+      for (let attempt = 0; attempt < 2 && !(d && d.item); attempt++) {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 9000);
+        try {
+          const r = await fetch('https://shopee.sg/api/v4/pdp/get_pc?item_id=' + m[2] + '&shop_id=' + m[1], {
+            credentials: 'include',
+            headers: { accept: 'application/json' },
+            signal: ctrl.signal,
+          });
+          d = (await r.json()).data;
+        } catch (e) { /* timeout/abort → retry */ } finally { clearTimeout(to); }
+      }
       if (!d || !d.item) return p;
 
       // Drop variants the source can no longer supply (only when explicitly flagged)
