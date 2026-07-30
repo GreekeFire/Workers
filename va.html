@@ -467,6 +467,10 @@ function validCaroLink(u) {
   return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u);
 }
 
+// TEST ONLY — REVERT BEFORE LAUNCH. Lets a VA press Done with no Carousell link
+// (server already accepts an empty link). Set to false to restore the gate.
+const ALLOW_EMPTY_CARO = true;
+
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
@@ -708,7 +712,7 @@ function render() {
     const aiMissing    = cur.ai_title == null;
     const aiEmpty      = !aiMissing && cur.ai_title === '';
     if (cur.carousell_url && !caroUrlDraft[cur.id]) caroUrlDraft[cur.id] = cur.carousell_url;
-    const caroValid    = validCaroLink(caroUrlDraft[cur.id] || '');
+    const caroValid    = validCaroLink(caroUrlDraft[cur.id] || '') || ALLOW_EMPTY_CARO;
     const doneEnabled  = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
     // Ref-code = base36 of the listing id, appended to the title so it rides into
     // the Carousell listing. Lets the owner look up the Shopee source from any order
@@ -862,7 +866,7 @@ function _refreshDoneBtn(listingId) {
   const acked      = ackedWarns.has(listingId);
   const aiMissing  = cur.ai_title == null;
   const aiEmpty    = !aiMissing && cur.ai_title === '';
-  const caroValid  = validCaroLink(caroUrlDraft[listingId] || '');
+  const caroValid  = validCaroLink(caroUrlDraft[listingId] || '') || ALLOW_EMPTY_CARO;
   const enabled    = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
   const btn = document.getElementById('done-btn');
   if (btn) btn.classList.toggle('btn-done-disabled', !enabled);
@@ -898,7 +902,8 @@ function highlightCaroInput(listingId) {
 async function doDone(listingId, warningsOverridden) {
   if (busy) return;
   const caroUrl = (document.getElementById('caro-url-' + listingId)?.value || '').trim();
-  if (!validCaroLink(caroUrl)) {
+  // ALLOW_EMPTY_CARO lets an empty link through (testing); a non-empty invalid link still blocks.
+  if (!validCaroLink(caroUrl) && !(ALLOW_EMPTY_CARO && !caroUrl)) {
     highlightCaroInput(listingId);
     return;
   }
