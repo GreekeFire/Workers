@@ -588,7 +588,7 @@ const SUPABASE_KEY = 'sb_publishable_jvJXUrcqtFYroCF6tBNrsw_9hqAODjr';
   <!-- DONE view -->
   <div id="view-done" style="display:none">
     <div class="done-search-wrap" style="display:flex;gap:8px;align-items:center">
-      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…" autocomplete="off" oninput="renderDoneView()" style="flex:1">
+      <input type="text" class="form-input" id="done-search" placeholder="Search all listings…  (or #REFCODE)" autocomplete="off" oninput="renderDoneView()" style="flex:1">
       <button class="copy-btn" onclick="exportBackup()" style="white-space:nowrap" title="Download a JSON backup of all data">⬇ Backup</button>
       <button class="copy-btn" onclick="scanBadLinks()" style="white-space:nowrap" title="Scan all listings for bad or missing links">⚠ Scan</button>
     </div>
@@ -997,6 +997,24 @@ const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently don
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
   const list = document.getElementById('done-list');
+  // Ref-code lookup: "#0002BS" (base36 of the listing id, from the Carousell title)
+  // → jump straight to that listing so you can grab the Shopee source from any order.
+  if (/^#[0-9a-z]{1,8}$/i.test(query)) {
+    const id = parseInt(query.slice(1), 36);
+    if (id > 0) {
+      list.innerHTML = '<p class="done-empty">Looking up ref…</p>';
+      sb.from('listings')
+        .select('id,title,ai_title,shopee_url,carousell_url,source_cost,sell_price,status,assigned_worker_id')
+        .eq('id', id).limit(1)
+        .then(({ data, error }) => {
+          if ((document.getElementById('done-search')?.value || '').trim() !== query) return;
+          if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">No listing for ref ' + esc(query) + '</p>'; return; }
+          _listingsCache = data; _listingsCacheIsRecent = false;
+          _renderListingsResults(data, 'Ref ' + query.slice(1).toUpperCase());
+        });
+    } else { list.innerHTML = '<p class="done-empty">Bad ref code</p>'; }
+    return;
+  }
   if (!query) {
     // Recently-done list (newest first) loaded into the same editor as search.
     // Bad Carousell links (not /p/, /sell/, app.link) get flagged below.

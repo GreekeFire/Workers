@@ -116,7 +116,7 @@
 
     const models = priced.models
       .filter(m => m && m.price != null)
-      .map(m => ({ name: m.name, price: m.price / 1e5 }));
+      .map(m => ({ name: m.name, price: m.price / 1e5, image: m.image ? mapImg(m.image) : null }));
     const prices = models.map(m => m.price);
 
     // TEST LATER: confirm these field names exist in the dataLayer shape.
@@ -192,7 +192,7 @@
       description: it.description || '',
       price_min: (it.price_min || it.price || 0) / 1e5,
       price_max: (it.price_max || it.price || 0) / 1e5,
-      models: (it.models || []).map(x => ({ name: x.name, price: (x.price || 0) / 1e5 })).filter(x => x.price > 0),
+      models: (it.models || []).map(x => ({ name: x.name, price: (x.price || 0) / 1e5, image: x.image ? mapImg(x.image) : null })).filter(x => x.price > 0),
       images: (it.images || []).map(mapImg),
       sold: it.historical_sold || it.sold || 0,
       stock: it.stock || 0,

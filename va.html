@@ -710,7 +710,11 @@ function render() {
     if (cur.carousell_url && !caroUrlDraft[cur.id]) caroUrlDraft[cur.id] = cur.carousell_url;
     const caroValid    = validCaroLink(caroUrlDraft[cur.id] || '');
     const doneEnabled  = (!hasWarnings || acked) && !aiMissing && !aiEmpty && caroValid;
-    const title        = cur.ai_title || cur.title || '';
+    // Ref-code = base36 of the listing id, appended to the title so it rides into
+    // the Carousell listing. Lets the owner look up the Shopee source from any order
+    // (work.html lookup box). Unique because id is unique — no DB storage needed.
+    const refCode      = cur.id.toString(36).toUpperCase().padStart(6, '0');
+    const title        = (cur.ai_title || cur.title || '') + '  |  ' + refCode;
     const desc         = cur.ai_description || '';
     const images       = cur.images || [];
 

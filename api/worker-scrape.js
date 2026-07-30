@@ -13,6 +13,15 @@ const { sb, SERVICE_KEY } = require('../lib/sb');
 
 const PRICE_BAND_MIN = 25;
 const PRICE_BAND_MAX = 300;
+// ALLOW_DUPLICATES: when 'true', the same Shopee URL can be listed more than once
+// (needed for the duplicate-listing / repost strategy). Off by default — flip the
+// Vercel env var to enable. Pair with per-repost image variation to avoid identical clones.
+const ALLOW_DUPLICATES = process.env.ALLOW_DUPLICATES === 'true';
+// IMAGE_PICK: when 'true', keep only [cover, dimensions-image] instead of all
+// scraped images (dimensions image found via a cheap vision call). Off by default —
+// flip the Vercel env var to test. Cover background-swap is a separate, later step
+// (needs a bg-removal API + result hosting) — see swapCoverBackground note below.
+const IMAGE_PICK = process.env.IMAGE_PICK === 'true';
 
 // ── AI prompts (server-side only — no other copy exists) ────────────────────
 
@@ -147,6 +156,44 @@ function calcSellPrice(cost) {
   return Math.ceil(raw / 10) * 10 - 1;
 }
 
+// ── Variant splitting (Option A) ────────────────────────────────────────────
+// Group in-stock models by DISTINCT price → each price becomes its own listing
+// (size variants differ in price; same-price colours collapse into one). Returns
+// null when there's nothing to split (0/1 distinct price) so the caller falls back
+// to a single listing. All splits share the base shopee_url (payload has no model
+// id) — but each gets its own listing id → own ref-code + attribution, and its
+// title carries the variant label so fulfilment knows which to order.
+function variantGroups(models) {
+  const priced = (models || []).filter(m => m && m.price > 0 && m.name);
+  if (priced.length < 2) return null;
+  const byPrice = new Map();
+  for (const m of priced) {
+    if (!byPrice.has(m.price)) byPrice.set(m.price, { names: [], image: null });
+    const g = byPrice.get(m.price);
+    g.names.push(String(m.name).trim());
+    if (!g.image && m.image) g.image = m.image; // first variant swatch for this price
+  }
+  if (byPrice.size < 2) return null;                    // all one price → don't split
+  return [...byPrice.entries()].map(([price, g]) => ({ price, label: variantLabel(g.names), image: g.image || null }));
+}
+
+// Short distinguishing label appended to a split listing's title. Prefer a
+// dimensions chunk from the variant name (what buyers pick on); else the first name.
+function variantLabel(names) {
+  const joined = names.join(' / ');
+  const dims = joined.match(/\d+\s*[x*×]\s*\d+(?:\s*[x*×]\s*\d+)?\s*(?:cm|mm)?/i);
+  return (dims ? dims[0] : names[0]).replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+// A split listing IS a single variant — drop the "📦 Sizes/Finishes available"
+// line so it doesn't advertise sizes the buyer can't pick on that listing.
+function stripSizesLine(desc) {
+  if (!desc) return desc;
+  return desc.split('\n')
+    .filter(l => !/^📦\s*(Sizes|Finishes|Colours|Colors)\s+available/i.test(l.trim()))
+    .join('\n');
+}
+
 // Call Anthropic directly — worker-scrape is server-side so it can use the key
 // directly rather than routing through /api/claude (which adds a fragile internal
 // HTTP hop that was the root cause of silent AI generation failures).
@@ -215,6 +262,54 @@ async function generateAI(productText, delivery = DELIVERY_DEFAULT) {
   }
   description = normalizeDesc(description, delivery);
   return { title, description };
+}
+
+// ── Image selection (flag-gated by IMAGE_PICK) ──────────────────────────────
+// Cheap Haiku vision call: which image is the measurement/dimensions diagram?
+// Returns its index, or -1 for none. Shopee CDN blocks hotlinking, so images are
+// fetched with the Shopee referer and sent as base64.
+async function findDimsImage(images) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || !images || images.length < 2) return -1;
+  const imgs = images.slice(0, 8);
+  const content = [];
+  for (let i = 0; i < imgs.length; i++) {
+    try {
+      const r = await fetch(imgs[i], { headers: { Referer: 'https://shopee.sg/' } });
+      if (!r.ok) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      const ct = r.headers.get('content-type') || 'image/jpeg';
+      content.push({ type: 'text', text: `Image ${i}:` });
+      content.push({ type: 'image', source: { type: 'base64', media_type: ct.includes('png') ? 'image/png' : 'image/jpeg', data: buf.toString('base64') } });
+    } catch { /* skip unreachable image */ }
+  }
+  if (!content.length) return -1;
+  content.push({ type: 'text', text: 'Which image number is the product\'s MEASUREMENT / DIMENSIONS diagram (a spec drawing with size numbers like cm/mm, dimension arrows, or a labelled schematic)? Reply with ONLY the number. If none is a dimensions diagram, reply "none".' });
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 8, messages: [{ role: 'user', content }] }),
+    });
+    if (!resp.ok) return -1;
+    const data = await resp.json();
+    const txt = (data.content || []).map(b => b.text || '').join('').trim();
+    const n = parseInt(txt, 10);
+    return Number.isInteger(n) && n >= 0 && n < imgs.length ? n : -1;
+  } catch { return -1; }
+}
+
+// Keep only [cover, dimensions]. Cover = images[0]. Dimensions = the diagram if
+// found, else the 2nd product photo (always return 2 when we can). URLs pass
+// through UNCHANGED — dimensions image stays same size, no crop (owner's rule).
+// ponytail: cover background-swap is deferred — it needs a bg-removal API
+// (Photoroom/Replicate) + somewhere to host the result. Wire swapCoverBackground()
+// here behind its own flag once that API is chosen; until then the raw cover ships.
+async function pickCoverAndDims(images) {
+  if (!images || !images.length) return null;
+  if (images.length <= 2) return images;
+  const dimsIdx = await findDimsImage(images);
+  return [images[0], dimsIdx > 0 ? images[dimsIdx] : images[1]];
 }
 
 // ── main handler ──────────────────────────────────────────────────────────────
@@ -299,9 +394,10 @@ module.exports = async function handler(req, res) {
   const { data: existing } = await sb
     .from('listings').select('id, status').eq('shopee_url', shopeeUrl).neq('status', 'deleted').limit(1);
   const existingListing = existing && existing.length > 0 ? existing[0] : null;
-  const isRefresh = existingListing && existingListing.status === 'active';
+  // When duplicates are allowed, never treat a repeat URL as a refresh — always create a new listing.
+  const isRefresh = !ALLOW_DUPLICATES && existingListing && existingListing.status === 'active';
 
-  if (existingListing && !isRefresh) {
+  if (!ALLOW_DUPLICATES && existingListing && !isRefresh) {
     await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
     return res.json({ ok: false, error: 'duplicate', listing_id: existingListing.id });
   }
@@ -361,6 +457,13 @@ module.exports = async function handler(req, res) {
     console.error('AI gen failed:', aiErr.message);
   }
 
+  // Image selection (flag-gated): keep only cover + dimensions image, else all.
+  // Falls back to all images if the vision pick fails, so a listing never loses
+  // its photos. Used by every insert/refresh path below.
+  const listingImages = IMAGE_PICK
+    ? (await pickCoverAndDims(p.images) || (Array.isArray(p.images) && p.images.length ? p.images : null))
+    : (Array.isArray(p.images) && p.images.length ? p.images : null);
+
   // 7a. Refresh existing active listing — update AI, images, price, and assignment
   if (isRefresh) {
     const { error: updateErr } = await sb.from('listings').update({
@@ -368,7 +471,7 @@ module.exports = async function handler(req, res) {
       account_name:       worker.account_name || null,
       ai_title:           aiTitle,
       ai_description:     aiDescription,
-      images:             p.images && p.images.length ? p.images : null,
+      images:             listingImages,
       guard_warnings:     warnings.length ? warnings : null,
       source_cost:        cost || null,
       sell_price:         sellPrice || null,
@@ -390,7 +493,48 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // 7b. Create new listing
+  // 7b-split. Variant splitting — one Shopee product → N listings, one per distinct
+  // price. Reuses the single AI generation across variants (no N× cost); each split
+  // gets its own id/ref-code and a variant label appended to its title. Skipped on
+  // refresh; null → falls through to the single-insert path below.
+  const groups = isRefresh ? null : variantGroups(p.models);
+  if (groups) {
+    const splitDesc = stripSizesLine(aiDescription);
+    const ids = [];
+    for (const g of groups) {
+      // Variant swatch as cover (deduped), gallery after — else the shared gallery.
+      const vImages = g.image
+        ? [g.image, ...(listingImages || []).filter(u => u !== g.image)]
+        : listingImages;
+      const { data: v, error: vErr } = await sb.from('listings').insert({
+        title:              p.title || '',
+        shopee_url:         shopeeUrl,
+        source_cost:        g.price,
+        sell_price:         calcSellPrice(g.price),
+        images:             vImages,
+        status:             'active',
+        assigned_worker_id: worker_id,
+        account_name:       worker.account_name || null,
+        guard_warnings:     warnings.length ? warnings : null,
+        ai_title:           aiTitle ? (aiTitle + ' | ' + g.label) : null,
+        ai_description:     splitDesc,
+      }).select('id').single();
+      if (!vErr && v) ids.push(v.id);
+      else console.error('variant insert error:', vErr && vErr.message);
+    }
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+    if (!ids.length) return res.status(500).json({ ok: false, error: 'variant-insert-failed' });
+    return res.json({
+      ok: true,
+      listing_id: ids[0],
+      listing_ids: ids,
+      split: ids.length,
+      warnings,
+      ai_generated: !!(aiTitle || aiDescription),
+    });
+  }
+
+  // 7b. Create new listing (single — no splittable variants)
   const { data: listing, error: lErr } = await sb
     .from('listings')
     .insert({
@@ -398,7 +542,7 @@ module.exports = async function handler(req, res) {
       shopee_url:         shopeeUrl,
       source_cost:        cost || null,
       sell_price:         sellPrice,
-      images:             p.images && p.images.length ? p.images : null,
+      images:             listingImages,
       status:             'active',
       assigned_worker_id: worker_id,
       account_name:       worker.account_name || null,
@@ -430,4 +574,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine };
