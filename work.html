@@ -997,10 +997,14 @@ const RECENT_HDR = '<p class="done-empty" style="margin-bottom:8px">Recently don
 function renderDoneView() {
   const query = (document.getElementById('done-search')?.value || '').trim();
   const list = document.getElementById('done-list');
-  // Ref-code lookup: "#0002BS" (base36 of the listing id, from the Carousell title)
-  // → jump straight to that listing so you can grab the Shopee source from any order.
-  if (/^#[0-9a-z]{1,8}$/i.test(query)) {
-    const id = parseInt(query.slice(1), 36);
+  // Ref-code lookup: "0003B6" or "#0003B6" (base36 of the listing id, from the
+  // Carousell title) → jump straight to that listing so you can grab the Shopee
+  // source from any order. The # is optional; a bare code is only treated as a ref
+  // if it contains a digit (ref codes are zero-padded so always do) — so word
+  // searches like "drawer" aren't hijacked. No match → falls back to text search.
+  const refMatch = query.match(/^#?([0-9a-z]{1,8})$/i);
+  if (refMatch && (query.startsWith('#') || /\d/.test(refMatch[1]))) {
+    const id = parseInt(refMatch[1], 36);
     if (id > 0) {
       list.innerHTML = '<p class="done-empty">Looking up ref…</p>';
       sb.from('listings')
@@ -1008,12 +1012,15 @@ function renderDoneView() {
         .eq('id', id).limit(1)
         .then(({ data, error }) => {
           if ((document.getElementById('done-search')?.value || '').trim() !== query) return;
-          if (error || !data || !data.length) { list.innerHTML = '<p class="done-empty">No listing for ref ' + esc(query) + '</p>'; return; }
-          _listingsCache = data; _listingsCacheIsRecent = false;
-          _renderListingsResults(data, 'Ref ' + query.slice(1).toUpperCase());
+          if (!error && data && data.length) {
+            _listingsCache = data; _listingsCacheIsRecent = false;
+            _renderListingsResults(data, 'Ref ' + refMatch[1].toUpperCase());
+          } else {
+            _searchAllListings(query); // not an id we have → treat as normal search
+          }
         });
-    } else { list.innerHTML = '<p class="done-empty">Bad ref code</p>'; }
-    return;
+      return;
+    }
   }
   if (!query) {
     // Recently-done list (newest first) loaded into the same editor as search.

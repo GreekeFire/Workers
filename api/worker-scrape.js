@@ -165,16 +165,17 @@ function calcSellPrice(cost) {
 // title carries the variant label so fulfilment knows which to order.
 function variantGroups(models) {
   const priced = (models || []).filter(m => m && m.price > 0 && m.name);
-  if (priced.length < 2) return null;
-  const byPrice = new Map();
-  for (const m of priced) {
-    if (!byPrice.has(m.price)) byPrice.set(m.price, { names: [], image: null });
-    const g = byPrice.get(m.price);
-    g.names.push(String(m.name).trim());
-    if (!g.image && m.image) g.image = m.image; // first variant swatch for this price
-  }
-  if (byPrice.size < 2) return null;                    // all one price → don't split
-  return [...byPrice.entries()].map(([price, g]) => ({ price, label: variantLabel(g.names), image: g.image || null }));
+  if (priced.length < 2) return null;             // 0/1 variant → single listing
+  // Each in-stock variant (colour AND size) becomes its own listing — own ref-code,
+  // price, label, and swatch image. The distinct swatch cover is what makes same-
+  // price colour listings read as genuinely different products, not obvious dupes.
+  // ponytail: splits per model, so colour×size products fan out to all combos;
+  //           cap or group-by-tier here if that ever over-produces.
+  return priced.map(m => ({
+    price: m.price,
+    label: variantLabel([String(m.name).trim()]),
+    image: m.image || null,
+  }));
 }
 
 // Short distinguishing label appended to a split listing's title. Prefer a

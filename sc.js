@@ -50,6 +50,24 @@
       const oos = new Set((d.item.models || []).filter(x => x && x.has_stock === false).map(x => x.name));
       if (oos.size && Array.isArray(p.models)) p.models = p.models.filter(x => !oos.has(x.name));
 
+      // Per-variant swatch image. Shopee keeps swatches in tier_variations[].images
+      // (aligned to .options), not on the model — each model maps in via
+      // extinfo.tier_index. get_pc has this, so fill p.models[].image by name.
+      // Best-effort: any shape mismatch leaves images null (falls back to gallery).
+      try {
+        const tvs = d.tier_variations || d.item.tier_variations || [];
+        const ti  = tvs.findIndex(t => Array.isArray(t.images) && t.images.some(Boolean));
+        if (ti >= 0 && Array.isArray(p.models)) {
+          const imgs = tvs[ti].images || [];
+          const byName = {};
+          for (const m of (d.item.models || [])) {
+            const idx = ((m.extinfo && m.extinfo.tier_index) || m.tier_index || [])[ti];
+            if (idx != null && imgs[idx]) byName[m.name] = CDN + imgs[idx];
+          }
+          for (const pm of p.models) if (!pm.image && byName[pm.name]) pm.image = byName[pm.name];
+        }
+      } catch (e) { /* swatch mapping optional */ }
+
       // Shipping EDT (days) + origin — server turns this into the delivery promise
       const infos = (((d.product_shipping || {}).ungrouped_channel_infos) || [])
         .map(c => c && c.channel_delivery_info)

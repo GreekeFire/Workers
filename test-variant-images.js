@@ -8,22 +8,22 @@ Module._load = (req, ...a) => req === '@supabase/supabase-js'
   ? { createClient: () => ({}) } : _load(req, ...a);
 const { variantGroups } = require('./api/worker-scrape.js')._test;
 
-// variantGroups carries the first swatch image per distinct price.
+// Each variant (colour AND size) becomes its own listing, carrying its swatch.
 const groups = variantGroups([
-  { name: 'Type A (30x40cm)', price: 20, image: 'https://cdn/a.jpg' },
-  { name: 'Type A White',     price: 20, image: 'https://cdn/a2.jpg' }, // same price → same group, first image wins
-  { name: 'Type B (50x60cm)', price: 35, image: 'https://cdn/b.jpg' },
-  { name: 'Type C',           price: 50, image: null },                 // missing image → null
+  { name: 'White', price: 69.99, image: 'https://cdn/white.jpg' },
+  { name: 'Black', price: 69.99, image: 'https://cdn/black.jpg' }, // same price still splits
+  { name: 'Brown', price: 69.99, image: null },                   // missing swatch → null
 ]);
-assert.strictEqual(groups.length, 3, '3 distinct prices');
-assert.strictEqual(groups.find(g => g.price === 20).image, 'https://cdn/a.jpg', 'first swatch of the price group');
-assert.strictEqual(groups.find(g => g.price === 50).image, null, 'missing swatch stays null');
+assert.strictEqual(groups.length, 3, 'one listing per variant, no same-price collapse');
+assert.strictEqual(groups.find(g => g.label === 'White').image, 'https://cdn/white.jpg', 'carries its swatch');
+assert.strictEqual(groups.find(g => g.label === 'Brown').image, null, 'missing swatch stays null');
+assert.strictEqual(variantGroups([{ name: 'Only', price: 20, image: null }]), null, 'single variant → no split');
 
 // Cover dedup: swatch first, gallery after, no duplicate when swatch is already gallery[0].
-const gallery = ['https://cdn/a.jpg', 'https://cdn/dims.jpg'];
+const gallery = ['https://cdn/white.jpg', 'https://cdn/dims.jpg'];
 const cover = (g) => g.image ? [g.image, ...gallery.filter(u => u !== g.image)] : gallery;
-assert.deepStrictEqual(cover(groups.find(g => g.price === 20)), ['https://cdn/a.jpg', 'https://cdn/dims.jpg'], 'no dupe');
-assert.deepStrictEqual(cover(groups.find(g => g.price === 35)), ['https://cdn/b.jpg', 'https://cdn/a.jpg', 'https://cdn/dims.jpg'], 'swatch prepended');
-assert.deepStrictEqual(cover(groups.find(g => g.price === 50)), gallery, 'null swatch → gallery unchanged');
+assert.deepStrictEqual(cover(groups.find(g => g.label === 'White')), ['https://cdn/white.jpg', 'https://cdn/dims.jpg'], 'no dupe');
+assert.deepStrictEqual(cover(groups.find(g => g.label === 'Black')), ['https://cdn/black.jpg', 'https://cdn/white.jpg', 'https://cdn/dims.jpg'], 'swatch prepended');
+assert.deepStrictEqual(cover(groups.find(g => g.label === 'Brown')), gallery, 'null swatch → gallery unchanged');
 
 console.log('ok');
