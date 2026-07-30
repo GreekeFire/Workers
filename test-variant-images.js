@@ -19,6 +19,12 @@ assert.strictEqual(groups.find(g => g.label === 'White').image, 'https://cdn/whi
 assert.strictEqual(groups.find(g => g.label === 'Brown').image, null, 'missing swatch stays null');
 assert.strictEqual(variantGroups([{ name: 'Only', price: 20, image: null }]), null, 'single variant → no split');
 
+// Each split gets a unique shopee_url (variant name as fragment) → clears the
+// active-unique constraint. Names must be distinct so the URLs are distinct.
+const base = 'https://shopee.sg/product/1/2';
+const urls = groups.map(g => base + '#' + encodeURIComponent(g.name));
+assert.strictEqual(new Set(urls).size, groups.length, 'unique shopee_url per variant');
+
 // Cover dedup: swatch first, gallery after, no duplicate when swatch is already gallery[0].
 const gallery = ['https://cdn/white.jpg', 'https://cdn/dims.jpg'];
 const cover = (g) => g.image ? [g.image, ...gallery.filter(u => u !== g.image)] : gallery;

@@ -175,6 +175,7 @@ function variantGroups(models) {
     price: m.price,
     label: variantLabel([String(m.name).trim()]),
     image: m.image || null,
+    name: String(m.name).trim(),   // used to make each split's shopee_url unique
   }));
 }
 
@@ -509,7 +510,9 @@ module.exports = async function handler(req, res) {
         : listingImages;
       const { data: v, error: vErr } = await sb.from('listings').insert({
         title:              p.title || '',
-        shopee_url:         shopeeUrl,
+        // Unique per variant so each split clears listings_shopee_url_active_unique.
+        // Fragment is ignored by Shopee — the URL still opens the product page.
+        shopee_url:         shopeeUrl + '#' + encodeURIComponent(g.name),
         source_cost:        g.price,
         sell_price:         calcSellPrice(g.price),
         images:             vImages,
