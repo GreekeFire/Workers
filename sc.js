@@ -101,6 +101,11 @@
   };
 
   const mapImg = (h) => (/^https?:/.test(h) ? h.split('?')[0] : CDN + h);
+  // Shopee's rich_text_description is sometimes a structured object, not a string.
+  // Coerce to a string at the source so every consumer (desc-image harvest, server
+  // AI) is safe — a non-string description otherwise threw "(intermediate value)
+  // .split is not a function" in harvestDescImages.
+  const asText = (v) => (typeof v === 'string' ? v : '');
 
   // Read the full item for `itemid` out of window.dataLayer. Shopee pushes
   // several copies (some with prices nulled for analytics); we collect every
@@ -157,7 +162,7 @@
 
     return {
       title: priced.name || priced.title || withDesc.name || '',
-      description: withDesc.description || withDesc.rich_text_description || '',
+      description: asText(withDesc.description) || asText(withDesc.rich_text_description),
       price_min: priced.price_min != null ? priced.price_min / 1e5 : Math.min(...prices),
       price_max: priced.price_max != null ? priced.price_max / 1e5 : Math.max(...prices),
       models,
@@ -211,7 +216,7 @@
 
     return {
       title: it.name,
-      description: it.description || '',
+      description: asText(it.description),
       price_min: (it.price_min || it.price || 0) / 1e5,
       price_max: (it.price_max || it.price || 0) / 1e5,
       models: (it.models || []).map(x => ({ name: x.name, price: (x.price || 0) / 1e5, image: x.image ? mapImg(x.image) : null })).filter(x => x.price > 0),
