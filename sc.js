@@ -302,6 +302,41 @@
     return out;
   };
 
+  // Buyer-uploaded review photos — real, unique, un-watermarked cover candidates
+  // (and colour-diverse: buyers photograph the variant they bought). Pure API
+  // (item/get_ratings, media-only) so no DOM/lazy-load. Capped to keep it bounded.
+  const harvestReviewImages = async (url) => {
+    const m = (url || '').match(/i\.(\d+)\.(\d+)/) || (url || '').match(/\/product\/(\d+)\/(\d+)/);
+    if (!m) return [];
+    const shopid = m[1], itemid = m[2];
+    const out = [], seen = new Set();
+    try {
+      for (let offset = 0; offset < 60 && out.length < 40; offset += 20) {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 6000);
+        let d;
+        try {
+          const r = await fetch('https://shopee.sg/api/v4/item/get_ratings?filter=1&type=0&itemid=' + itemid + '&shopid=' + shopid + '&limit=20&offset=' + offset, {
+            credentials: 'include', headers: { accept: 'application/json' }, signal: ctrl.signal,
+          });
+          d = (await r.json()).data;
+        } finally { clearTimeout(to); }
+        const ratings = (d && d.ratings) || [];
+        if (!ratings.length) break;
+        for (const rt of ratings) {
+          for (const h of (rt.images || [])) {
+            if (!h || seen.has(h)) continue;
+            seen.add(h);
+            out.push(mapImg(h));
+            if (out.length >= 40) break;
+          }
+          if (out.length >= 40) break;
+        }
+      }
+    } catch (e) { /* reviews optional */ }
+    return out;
+  };
+
   const cur = /i\.\d+\.\d+|\/product\/\d+\/\d+/.test(location.href) ? location.href.split('?')[0] : '';
   if (cur) {
     const itemid = ((cur.match(/i\.\d+\.(\d+)/) || cur.match(/\/product\/\d+\/(\d+)/)) || [])[1];
@@ -350,10 +385,12 @@
       }
       if (dl && dl.title && dl.models.length) {
         dl.desc_images = await harvestDescImages(dl.images, dl.description);  // page path only — needs the DOM
+        dl.review_images = await harvestReviewImages(dl.url);                 // pure API — works on both paths
         p = await post(dl); via = 'page';
       }
       else { p = await send(cur); via = 'api'; }
-      note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs' + (p.desc_images ? ' +' + p.desc_images.length + ' desc' : ''), false, false, via === 'api');
+      note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs'
+        + (p.desc_images ? ' +' + p.desc_images.length + ' desc' : '') + (p.review_images ? ' +' + p.review_images.length + ' rev' : ''), false, false, via === 'api');
     } catch (e) {
       note('✗ ' + e.message, 1);
     }
