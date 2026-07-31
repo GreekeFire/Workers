@@ -6,7 +6,7 @@ const Module = require('module');
 const _load = Module._load;
 Module._load = (req, ...a) => req === '@supabase/supabase-js'
   ? { createClient: () => ({}) } : _load(req, ...a);
-const { variantGroups, rotateTitle } = require('./api/worker-scrape.js')._test;
+const { variantGroups, rotateTitle, mapLimit } = require('./api/worker-scrape.js')._test;
 
 // Each variant (colour AND size) becomes its own listing, carrying its swatch.
 const groups = variantGroups([
@@ -42,4 +42,29 @@ assert.strictEqual(rotateTitle(t, 3), 'A | B | C', 'full cycle = no-op');
 assert.strictEqual(rotateTitle('Solo', 1), 'Solo', 'single segment unchanged');
 assert.strictEqual(new Set([0,1,2].map(k => rotateTitle(t, k))).size, 3, 'distinct per listing');
 
-console.log('ok');
+// mapLimit backs the classifier's image fetching: results MUST stay in pool order
+// (the classifier addresses images by index) and concurrency must stay bounded.
+(async () => {
+  let live = 0, peak = 0;
+  const src = Array.from({ length: 25 }, (_, i) => i);
+  const out = await mapLimit(src, 8, async (x) => {
+    peak = Math.max(peak, ++live);
+    await new Promise(r => setTimeout(r, x % 3));
+    live--;
+    return x * 2;
+  });
+  assert.deepStrictEqual(out, src.map(x => x * 2), 'results stay in input order');
+  assert.ok(peak <= 8, 'never exceeds the concurrency limit, saw ' + peak);
+  assert.ok(peak > 1, 'actually runs in parallel, saw ' + peak);
+  assert.deepStrictEqual(await mapLimit([], 8, async () => 1), [], 'empty input is safe');
+
+  // Batch boundaries: a pool split into batches of 20 must cover every index
+  // exactly once — an off-by-one here silently drops images from classification.
+  const BATCH = 20, total = 81, starts = [];
+  for (let s = 0; s < total; s += BATCH) starts.push(s);
+  const covered = [].concat(...starts.map(s =>
+    Array.from({ length: Math.min(BATCH, total - s) }, (_, n) => n + s)));
+  assert.deepStrictEqual(covered, Array.from({ length: total }, (_, i) => i), 'batches tile the pool exactly');
+
+  console.log('ok');
+})();

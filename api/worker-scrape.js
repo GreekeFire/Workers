@@ -355,6 +355,7 @@ const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
 const STORAGE_BASE = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/storage/v1';
 const CLEAN_COVERS = process.env.CLEAN_COVERS === 'true';
 const CLEAN_MODEL = process.env.CLEAN_MODEL || 'google/gemini-2.5-flash-image';
+const CLEAN_MAX = Number(process.env.CLEAN_MAX || 8);  // max covers cleaned per product
 // Framed as retouching marketing overlays — NOT "remove watermark", which trips the
 // model's copyright guardrail and gets the request refused.
 const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Output only the retouched image.';
@@ -402,37 +403,77 @@ async function cleanCover(url) {
   finally { clearTimeout(to); }
 }
 
-async function classifyGallery(images) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey || !images || !images.length) return null;
-  const imgs = images.slice(0, 40);  // cap payload size; mega review-pools would batch
-  // OpenRouter is OpenAI-compatible: one user message, content = text + image_url
-  // (base64 data URIs). Shopee CDN blocks hotlinking, so fetch with the referer.
+// Big pools (a product with many review photos easily passes 80 images) are split
+// into batches classified IN PARALLEL — one 80-image request would be a ~30MB body
+// and would blow the function timeout. Batches also fail independently: one bad
+// batch loses its own images, not the whole classification.
+const CLASSIFY_BATCH = Number(process.env.CLASSIFY_BATCH || 20);
+const CLASSIFY_MAX = Number(process.env.CLASSIFY_MAX || 200);  // sanity ceiling
+
+// Run fn over arr with at most `limit` in flight — Shopee CDN fetches are the slow
+// part, and firing 200 at once gets us rate-limited.
+async function mapLimit(arr, limit, fn) {
+  const out = new Array(arr.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, arr.length) }, async () => {
+    while (next < arr.length) { const k = next++; out[k] = await fn(arr[k], k); }
+  }));
+  return out;
+}
+
+// → base64 data URI, or null if the image can't be fetched.
+// Shopee CDN blocks hotlinking, so fetch with the referer.
+async function fetchDataUri(url) {
+  try {
+    const r = await fetch(url, { headers: { Referer: 'https://shopee.sg/' } });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    const ct = (r.headers.get('content-type') || '').includes('png') ? 'image/png' : 'image/jpeg';
+    return `data:${ct};base64,` + buf.toString('base64');
+  } catch { return null; }
+}
+
+// Classify one batch. Images are numbered 0..n-1 within the batch (the prompt is
+// written that way); returned indices are shifted back to pool-global by `start`.
+async function classifyBatch(uris, start, apiKey) {
+  // OpenRouter is OpenAI-compatible: one user message, content = text + image_url.
   const content = [];
-  for (let i = 0; i < imgs.length; i++) {
-    try {
-      const r = await fetch(imgs[i], { headers: { Referer: 'https://shopee.sg/' } });
-      if (!r.ok) { content.push({ type: 'text', text: `Image ${i}: (unavailable)` }); continue; }
-      const buf = Buffer.from(await r.arrayBuffer());
-      const ct = (r.headers.get('content-type') || '').includes('png') ? 'image/png' : 'image/jpeg';
-      content.push({ type: 'text', text: `Image ${i}:` });
-      content.push({ type: 'image_url', image_url: { url: `data:${ct};base64,` + buf.toString('base64') } });
-    } catch { content.push({ type: 'text', text: `Image ${i}: (unavailable)` }); }
-  }
-  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(imgs.length)).replace('{N1}', String(imgs.length - 1)) });
+  uris.forEach((uri, n) => {
+    if (!uri) { content.push({ type: 'text', text: `Image ${n}: (unavailable)` }); return; }
+    content.push({ type: 'text', text: `Image ${n}:` });
+    content.push({ type: 'image_url', image_url: { url: uri } });
+  });
+  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(uris.length)).replace('{N1}', String(uris.length - 1)) });
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({ model: CLASSIFY_MODEL, max_tokens: 3000, messages: [{ role: 'user', content }] }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) { console.error('classify batch', start, 'http', resp.status); return []; }
     const data = await resp.json();
     let txt = (((data.choices || [])[0] || {}).message || {}).content || '';
     txt = String(txt).replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     const arr = JSON.parse(txt);
-    return Array.isArray(arr) ? arr : null;
-  } catch { return null; }
+    if (!Array.isArray(arr)) return [];
+    // Shift local → global, and drop anything pointing outside this batch.
+    return arr.filter(r => r && Number.isInteger(r.i) && r.i >= 0 && r.i < uris.length)
+      .map(r => ({ ...r, i: r.i + start }));
+  } catch (e) { console.error('classify batch', start, 'failed:', e.message); return []; }
+}
+
+async function classifyGallery(images) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey || !images || !images.length) return null;
+  const imgs = images.slice(0, CLASSIFY_MAX);
+  const uris = await mapLimit(imgs, 8, fetchDataUri);
+  const starts = [];
+  for (let s = 0; s < uris.length; s += CLASSIFY_BATCH) starts.push(s);
+  const batches = await Promise.all(
+    starts.map(s => classifyBatch(uris.slice(s, s + CLASSIFY_BATCH), s, apiKey))
+  );
+  const merged = [].concat(...batches);
+  return merged.length ? merged : null;
 }
 
 // ── main handler ──────────────────────────────────────────────────────────────
@@ -646,9 +687,14 @@ module.exports = async function handler(req, res) {
       if (coverMap.size) {
         // Clean flagged covers in parallel — bounds wall-time to ~one image-gen call
         // (not N), and falls back to the raw cover on any failure so a listing never
-        // loses its cover. No-op unless CLEAN_COVERS is on.
-        const covers = await Promise.all([...coverMap.entries()].map(async ([url, needsClean]) =>
-          (CLEAN_COVERS && needsClean) ? (await cleanCover(url)) || url : url));
+        // loses its cover. No-op unless CLEAN_COVERS is on. Capped at CLEAN_MAX: a
+        // big review pool can flag many covers, and each clean costs ~$0.04 and a
+        // slow image-gen call. Beyond the cap covers ship raw (buyer review photos
+        // usually aren't watermarked anyway, so the cap rarely bites).
+        const entries = [...coverMap.entries()];
+        const toClean = new Set(entries.filter(([, n]) => n).slice(0, CLEAN_MAX).map(([u]) => u));
+        const covers = await Promise.all(entries.map(async ([url]) =>
+          (CLEAN_COVERS && toClean.has(url)) ? (await cleanCover(url)) || url : url));
         const ids = [];
         for (let k = 0; k < covers.length; k++) {
           const imgs = [covers[k], ...dims.filter(u => u !== covers[k])];
@@ -768,4 +814,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, findDimsImage };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, mapLimit, findDimsImage };
