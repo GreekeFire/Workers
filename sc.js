@@ -267,9 +267,12 @@
     let scope = null;
     const line = (descText || '').split('\n').map(s => s.trim()).filter(s => s.length > 15).sort((a, b) => b.length - a.length)[0];
     if (line) {
-      const el = [...document.querySelectorAll('p,div,span')].find(e => e.textContent.includes(line));
+      // Pick the SMALLEST element containing the line (the actual <p>, not an outer
+      // wrapper), then climb just to the container that also holds the images.
+      const el = [...document.querySelectorAll('p,div,span')].filter(e => e.textContent.includes(line))
+        .sort((a, b) => a.textContent.length - b.textContent.length)[0];
       let c = el;
-      for (let i = 0; i < 6 && c; i++) { if (c.querySelectorAll('picture,img').length >= 1 && c.textContent.length > line.length) { scope = c; break; } c = c.parentElement; }
+      for (let i = 0; i < 5 && c; i++) { if (c.querySelectorAll('picture,img').length >= 1) { scope = c; break; } c = c.parentElement; }
     }
     if (!scope) return [];  // no anchor → skip rather than flood with page chrome
 
