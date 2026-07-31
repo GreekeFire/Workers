@@ -259,13 +259,26 @@
       await sleep(400);
     } catch (e) { /* scroll is best-effort */ }
     const out = [], seen = new Set();
-    for (const im of document.querySelectorAll('img')) {
-      const s = (im.currentSrc || im.src || '').split('?')[0];
-      if (!/susercontent\.com\/file\//.test(s) || im.naturalWidth < 500) continue;
+    const add = (raw) => {
+      const s = (raw || '').split('?')[0];
+      if (!/susercontent\.com\/file\//.test(s)) return;
       const hash = s.split('/file/')[1] || '';
-      if (!hash || gal.has(hash) || seen.has(hash)) continue;
+      if (!hash || gal.has(hash) || seen.has(hash)) return;
       seen.add(hash);
       out.push(s);
+    };
+    // <img> path (some sellers use real images)
+    for (const im of document.querySelectorAll('img')) {
+      if (im.naturalWidth >= 500) add(im.currentSrc || im.src);
+    }
+    // background-image path — Shopee renders description images as CSS backgrounds
+    // on wide divs (not <img>). Pre-filter by rendered width to skip small icons.
+    for (const el of document.querySelectorAll('div,a,figure')) {
+      if (el.getBoundingClientRect().width < 300) continue;
+      const bg = getComputedStyle(el).backgroundImage;
+      if (!bg || bg === 'none') continue;
+      const m = bg.match(/url\(["']?(https?:\/\/[^"')]+)/);
+      if (m) add(m[1]);
     }
     return out;
   };
