@@ -249,8 +249,10 @@
   // scroll the page to force them in, then collect the LARGE product images
   // (icons/logos are tiny; gallery is excluded). Promo banners may slip through;
   // the downstream classifier decides dims/cover/skip. Best-effort, page path only.
-  const harvestDescImages = async (galleryUrls) => {
-    const gal = new Set((galleryUrls || []).map(u => (String(u).split('/file/')[1] || '').split('?')[0]));
+  const harvestDescImages = async (galleryUrls, descText) => {
+    // Normalize to a bare hash so webp/jpg + @resize variants collapse to one.
+    const hashOf = (u) => (String(u).split('/file/')[1] || '').split('?')[0].split('@')[0].replace(/\.(webp|jpe?g|png)$/i, '');
+    const gal = new Set((galleryUrls || []).map(hashOf));
     const y0 = window.scrollY;
     try {
       const H = document.body.scrollHeight;
@@ -258,34 +260,40 @@
       window.scrollTo(0, y0);
       await sleep(400);
     } catch (e) { /* scroll is best-effort */ }
+
+    // Scope to the description block, or every <picture> on the page (related
+    // products, recommendations, shop banners) floods in. Anchor on a distinctive
+    // line of the scraped description text, then climb to the container holding it.
+    let scope = null;
+    const line = (descText || '').split('\n').map(s => s.trim()).filter(s => s.length > 15).sort((a, b) => b.length - a.length)[0];
+    if (line) {
+      const el = [...document.querySelectorAll('p,div,span')].find(e => e.textContent.includes(line));
+      let c = el;
+      for (let i = 0; i < 6 && c; i++) { if (c.querySelectorAll('picture,img').length >= 1 && c.textContent.length > line.length) { scope = c; break; } c = c.parentElement; }
+    }
+    if (!scope) return [];  // no anchor → skip rather than flood with page chrome
+
     const out = [], seen = new Set();
     const add = (raw) => {
       const s = (raw || '').split('?')[0];
       if (!/susercontent\.com\/file\//.test(s)) return;
-      const hash = (s.split('/file/')[1] || '').split('@')[0];   // strip @resize suffix
-      if (!hash || gal.has(hash) || seen.has(hash)) return;
-      seen.add(hash);
-      out.push('https://down-sg.img.susercontent.com/file/' + hash);  // bare full-res URL
+      const h = hashOf(s);
+      if (!h || gal.has(h) || seen.has(h)) return;
+      seen.add(h);
+      out.push('https://down-sg.img.susercontent.com/file/' + h);  // bare full-res URL
     };
     const firstUrl = (srcset) => (srcset || '').split(',')[0].trim().split(/\s+/)[0];
-    // <picture> path — Shopee wraps description images in <picture> (lazy, aspect-ratio
-    // box), so the inner <img> reports naturalWidth 0. The URL lives in <source srcset>.
-    for (const pic of document.querySelectorAll('picture')) {
+    // <picture> (lazy inner <img> reports naturalWidth 0; URL is in <source srcset>)
+    for (const pic of scope.querySelectorAll('picture')) {
       for (const src of pic.querySelectorAll('source')) add(firstUrl(src.getAttribute('srcset')));
       const im = pic.querySelector('img');
       if (im) add(im.currentSrc || im.src || firstUrl(im.getAttribute('srcset')));
     }
-    // <img> path (some sellers use plain images) — size-gated to skip icons
-    for (const im of document.querySelectorAll('img')) {
-      if (im.closest('picture')) continue;
-      if (im.naturalWidth >= 500) add(im.currentSrc || im.src);
-    }
-    // background-image path — some sellers render description images as CSS backgrounds
-    for (const el of document.querySelectorAll('div,a,figure')) {
-      if (el.getBoundingClientRect().width < 300) continue;
+    // plain <img> and CSS background fallbacks (other sellers' layouts)
+    for (const im of scope.querySelectorAll('img')) if (!im.closest('picture') && im.naturalWidth >= 300) add(im.currentSrc || im.src);
+    for (const el of scope.querySelectorAll('div,a,figure')) {
       const bg = getComputedStyle(el).backgroundImage;
-      if (!bg || bg === 'none') continue;
-      const m = bg.match(/url\(["']?(https?:\/\/[^"')]+)/);
+      const m = bg && bg !== 'none' && bg.match(/url\(["']?(https?:\/\/[^"')]+)/);
       if (m) add(m[1]);
     }
     return out;
@@ -338,7 +346,7 @@
         await sleep(300);
       }
       if (dl && dl.title && dl.models.length) {
-        dl.desc_images = await harvestDescImages(dl.images);  // page path only — needs the DOM
+        dl.desc_images = await harvestDescImages(dl.images, dl.description);  // page path only — needs the DOM
         p = await post(dl); via = 'page';
       }
       else { p = await send(cur); via = 'api'; }
