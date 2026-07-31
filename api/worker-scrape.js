@@ -534,6 +534,29 @@ module.exports = async function handler(req, res) {
   if (!rows || rows.length === 0) return res.json({ ok: true, nothing_pending: true });
 
   const row = rows[0];
+
+  // 2b. CLAIM the row atomically before doing any slow work. `update ... where
+  // consumed = false` is a compare-and-swap in Postgres: only the invocation that
+  // flips the flag gets a row back, everyone else gets nothing and bails.
+  // Without this, the row stayed pending for the ~30s of AI + classification +
+  // inserts, so a second Pull click started a whole second pipeline on the same
+  // scrape. Observed in prod: three overlapping runs on one product produced 57
+  // listings from 47 distinct covers — each run re-classified independently (the
+  // classifier is non-deterministic, so they disagreed on the cover count) and the
+  // active-unique index only blocked the overlapping #c indices, letting the extra
+  // higher ones through as duplicate-cover listings.
+  // Trade-off: a crash after claiming loses the scrape rather than re-running it.
+  // That matches what the failure paths below already do (they consume the row so a
+  // poison payload can't re-run AI generation on every poll) — VA can re-scrape.
+  const { data: claimed, error: claimErr } = await sb
+    .from('scrape_inbox')
+    .update({ consumed: true })
+    .eq('id', row.id)
+    .eq('consumed', false)
+    .select('id');
+  if (claimErr) return res.status(500).json({ ok: false, error: 'inbox-claim: ' + claimErr.message });
+  if (!claimed || !claimed.length) return res.json({ ok: true, already_claimed: true });
+
   const p   = row.payload || {};
 
   // Unloaded sentinel — AUTO mode couldn't get data
