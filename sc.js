@@ -333,6 +333,13 @@
             out.push(mapImg(h));
             if (out.length >= CAP) break;
           }
+          for (const v of (rt.videos || [])) {       // video reviews carry a poster frame in .cover
+            const c = v && v.cover;
+            if (!c || seen.has(c)) continue;
+            seen.add(c);
+            out.push(c.split('?')[0]);
+            if (out.length >= CAP) break;
+          }
           if (out.length >= CAP) break;
         }
       }
