@@ -262,17 +262,25 @@
     const add = (raw) => {
       const s = (raw || '').split('?')[0];
       if (!/susercontent\.com\/file\//.test(s)) return;
-      const hash = s.split('/file/')[1] || '';
+      const hash = (s.split('/file/')[1] || '').split('@')[0];   // strip @resize suffix
       if (!hash || gal.has(hash) || seen.has(hash)) return;
       seen.add(hash);
-      out.push(s);
+      out.push('https://down-sg.img.susercontent.com/file/' + hash);  // bare full-res URL
     };
-    // <img> path (some sellers use real images)
+    const firstUrl = (srcset) => (srcset || '').split(',')[0].trim().split(/\s+/)[0];
+    // <picture> path — Shopee wraps description images in <picture> (lazy, aspect-ratio
+    // box), so the inner <img> reports naturalWidth 0. The URL lives in <source srcset>.
+    for (const pic of document.querySelectorAll('picture')) {
+      for (const src of pic.querySelectorAll('source')) add(firstUrl(src.getAttribute('srcset')));
+      const im = pic.querySelector('img');
+      if (im) add(im.currentSrc || im.src || firstUrl(im.getAttribute('srcset')));
+    }
+    // <img> path (some sellers use plain images) — size-gated to skip icons
     for (const im of document.querySelectorAll('img')) {
+      if (im.closest('picture')) continue;
       if (im.naturalWidth >= 500) add(im.currentSrc || im.src);
     }
-    // background-image path — Shopee renders description images as CSS backgrounds
-    // on wide divs (not <img>). Pre-filter by rendered width to skip small icons.
+    // background-image path — some sellers render description images as CSS backgrounds
     for (const el of document.querySelectorAll('div,a,figure')) {
       if (el.getBoundingClientRect().width < 300) continue;
       const bg = getComputedStyle(el).backgroundImage;
