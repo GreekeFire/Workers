@@ -22,11 +22,12 @@ const ALLOW_DUPLICATES = process.env.ALLOW_DUPLICATES === 'true';
 // flip the Vercel env var to test. Cover background-swap is a separate, later step
 // (needs a bg-removal API + result hosting) — see swapCoverBackground note below.
 const IMAGE_PICK = process.env.IMAGE_PICK === 'true';
-// COVER_SPLIT: when 'true', classify the full image pool (gallery + description +
-// review photos) and emit ONE listing per usable cover image — colour-agnostic, the
-// count is however many clean covers we found. Needs OPENROUTER_API_KEY. Off by
-// default; falls through to the variant/single paths when off or when no covers.
-const COVER_SPLIT = process.env.COVER_SPLIT === 'true';
+// COVER_SPLIT: classify the full image pool (gallery + description + review photos)
+// and emit ONE listing per usable cover image — colour-agnostic, the count is however
+// many clean covers we found. This is the default listing model; set COVER_SPLIT=false
+// to fall back to the older variant/price split. Needs OPENROUTER_API_KEY — without it
+// classification returns null and we fall through to the variant/single paths anyway.
+const COVER_SPLIT = process.env.COVER_SPLIT !== 'false';
 
 // ── AI prompts (server-side only — no other copy exists) ────────────────────
 
