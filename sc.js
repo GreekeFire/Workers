@@ -101,11 +101,34 @@
   };
 
   const mapImg = (h) => (/^https?:/.test(h) ? h.split('?')[0] : CDN + h);
-  // Shopee's rich_text_description is sometimes a structured object, not a string.
-  // Coerce to a string at the source so every consumer (desc-image harvest, server
-  // AI) is safe — a non-string description otherwise threw "(intermediate value)
-  // .split is not a function" in harvestDescImages.
-  const asText = (v) => (typeof v === 'string' ? v : '');
+  // Shopee ships the description either as a plain string or as a structured
+  // rich-text OBJECT (paragraph / extended-description blocks) whose exact schema
+  // varies by product. Rather than guess the schema, walk it generically and pull
+  // both the text runs and any image hashes it carries — rich-text products keep
+  // their description images HERE, so this is also a desc-image source that needs
+  // no DOM anchor. A non-string description previously threw "(intermediate
+  // value).split is not a function" in harvestDescImages.
+  const richText = (v) => {
+    if (typeof v === 'string') return { text: v, images: [] };
+    const text = [], images = [], seen = new Set();
+    const walk = (o, d) => {
+      if (!o || typeof o !== 'object' || d > 8 || seen.has(o)) return;
+      seen.add(o);
+      if (Array.isArray(o)) { for (const x of o) walk(x, d + 1); return; }
+      let ks; try { ks = Object.keys(o); } catch (e) { return; }
+      for (const k of ks) {
+        let val; try { val = o[k]; } catch (e) { continue; }
+        if (typeof val === 'string') {
+          if (/^(text|content|paragraph|description)$/i.test(k)) text.push(val);
+          // Long hash-like values under an image key — real hashes are ~30+ chars,
+          // so the length floor keeps ids/flags out.
+          else if (/image|img|photo/i.test(k) && (/^https?:\/\//.test(val) || /^[a-z0-9_-]{16,}$/i.test(val))) images.push(val);
+        } else if (val && typeof val === 'object') walk(val, d + 1);
+      }
+    };
+    walk(v, 0);
+    return { text: text.join('\n'), images };
+  };
 
   // Read the full item for `itemid` out of window.dataLayer. Shopee pushes
   // several copies (some with prices nulled for analytics); we collect every
@@ -160,13 +183,18 @@
       : priced.rating_star != null ? priced.rating_star : priced.shop_rating;
     if (rat != null) extra.rating_star = Number(rat);
 
+    // Whichever field actually carries text wins; images from both are kept.
+    const d1 = richText(withDesc.description), d2 = richText(withDesc.rich_text_description);
+    const dsc = { text: d1.text || d2.text, images: [...d1.images, ...d2.images] };
+
     return {
       title: priced.name || priced.title || withDesc.name || '',
-      description: asText(withDesc.description) || asText(withDesc.rich_text_description),
+      description: dsc.text,
       price_min: priced.price_min != null ? priced.price_min / 1e5 : Math.min(...prices),
       price_max: priced.price_max != null ? priced.price_max / 1e5 : Math.max(...prices),
       models,
       images: (withImgs.images || []).map(mapImg),
+      rich_images: dsc.images.map(mapImg),   // merged into desc_images by the caller
       sold: priced.historical_sold || priced.global_sold || 0,
       stock: priced.stock || 0,
       url: location.href.split('?')[0],
@@ -210,13 +238,19 @@
       categories = it.fe_categories.map(c => c.display_name || c.name || String(c.catid || ''));
     }
 
+    // v4 keeps rich-text products' body in description_info (extended blocks with
+    // their own image hashes); plain products keep it in description.
+    const i1 = richText(it.description), i2 = richText(it.description_info);
+    const itd = { text: i1.text || i2.text, images: [...i1.images, ...i2.images] };
+
     const shop_location = it.shop_location || null;
     const rating_star = (it.item_rating && it.item_rating.rating_star != null)
       ? it.item_rating.rating_star : null;
 
     return {
       title: it.name,
-      description: asText(it.description),
+      description: itd.text,
+      rich_images: itd.images.map(mapImg),
       price_min: (it.price_min || it.price || 0) / 1e5,
       price_max: (it.price_max || it.price || 0) / 1e5,
       models: (it.models || []).map(x => ({ name: x.name, price: (x.price || 0) / 1e5, image: x.image ? mapImg(x.image) : null })).filter(x => x.price > 0),
@@ -277,6 +311,15 @@
       const el = [...document.querySelectorAll('p,div,span')].filter(e => e.textContent.includes(line))
         .sort((a, b) => a.textContent.length - b.textContent.length)[0];
       let c = el;
+      for (let i = 0; i < 5 && c; i++) { if (c.querySelectorAll('picture,img').length >= 1) { scope = c; break; } c = c.parentElement; }
+    }
+    if (!scope) {
+      // Fallback: anchor on the section heading. Works when the description text is
+      // empty or rich-text (nothing to match on), and is stable across sellers.
+      const hd = [...document.querySelectorAll('div,span,h1,h2,h3,section,label')]
+        .filter(e => /^product description$/i.test((e.textContent || '').trim()))
+        .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+      let c = hd && hd.parentElement;
       for (let i = 0; i < 5 && c; i++) { if (c.querySelectorAll('picture,img').length >= 1) { scope = c; break; } c = c.parentElement; }
     }
     if (!scope) return [];  // no anchor → skip rather than flood with page chrome
@@ -399,7 +442,11 @@
         await sleep(300);
       }
       if (dl && dl.title && dl.models.length) {
-        dl.desc_images = await harvestDescImages(dl.images, dl.description);  // page path only — needs the DOM
+        // Rich-text products carry their desc images in the payload itself; plain
+        // ones need the DOM harvest. Union both — either can come back empty.
+        const dom = await harvestDescImages(dl.images, dl.description);       // page path only — needs the DOM
+        dl.desc_images = [...new Set([...(dl.rich_images || []), ...dom])];
+        delete dl.rich_images;
         dl.review_images = await harvestReviewImages(dl.url);                 // pure API — works on both paths
         p = await post(dl); via = 'page';
       }
