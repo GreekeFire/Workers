@@ -22,6 +22,11 @@ const ALLOW_DUPLICATES = process.env.ALLOW_DUPLICATES === 'true';
 // flip the Vercel env var to test. Cover background-swap is a separate, later step
 // (needs a bg-removal API + result hosting) — see swapCoverBackground note below.
 const IMAGE_PICK = process.env.IMAGE_PICK === 'true';
+// COVER_SPLIT: when 'true', classify the full image pool (gallery + description +
+// review photos) and emit ONE listing per usable cover image — colour-agnostic, the
+// count is however many clean covers we found. Needs OPENROUTER_API_KEY. Off by
+// default; falls through to the variant/single paths when off or when no covers.
+const COVER_SPLIT = process.env.COVER_SPLIT === 'true';
 
 // ── AI prompts (server-side only — no other copy exists) ────────────────────
 
@@ -187,6 +192,18 @@ function variantLabel(names) {
   return (dims ? dims[0] : names[0]).replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
+// Distinct title per same-product cover-split listing: rotate the pipe segments so
+// each listing leads with a different phrase (the feed truncates ~40 chars, so the
+// visible title differs) and the whole string is unique — avoids same-account clone
+// flagging without a second AI call. k=0 (or a rotation that lands back at 0) is a
+// no-op returning the title unchanged.
+function rotateTitle(title, k) {
+  const parts = (title || '').split(' | ').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2 || !(k % parts.length)) return title;
+  const r = k % parts.length;
+  return [...parts.slice(r), ...parts.slice(0, r)].join(' | ');
+}
+
 // A split listing IS a single variant — drop the "📦 Sizes/Finishes available"
 // line so it doesn't advertise sizes the buyer can't pick on that listing.
 function stripSizesLine(desc) {
@@ -312,6 +329,54 @@ async function pickCoverAndDims(images) {
   if (images.length <= 2) return images;
   const dimsIdx = await findDimsImage(images);
   return [images[0], dimsIdx > 0 ? images[dimsIdx] : images[1]];
+}
+
+// One Haiku vision call over the whole pool (gallery + description images) → a role
+// per image. Everything after this is deterministic (cover-per-colour, dims, skip),
+// no more AI. Shopee CDN blocks hotlinking, so images fetch with the referer.
+const CLASSIFY_PROMPT = `You are sorting {N} e-commerce furniture photos (numbered 0..{N1}). For EACH image output one JSON object:
+- "i": the image number
+- "role": exactly one of:
+    "cover" — the product is the clear, prominent main subject and the image works as a listing cover (a clean studio shot, the product staged in a room, or a real buyer photo where the product is clearly shown)
+    "dimension" — a diagram showing measurement numbers (cm/mm) with size arrows/labels
+    "skip" — anything else: panels or infographics with headline/marketing text, schematic drawings, promo/sale banners, logos, blurry or cluttered shots, or images showing only a partial/cropped sliver of the product
+- "needs_clean": true if it has a watermark, seller/shop badge, or overlaid promotional/marketing text that must be removed to use it as a clean cover; else false
+RULES: any image containing headline text or a schematic is "skip", never "cover". The product must be prominent and clearly visible to be "cover".
+Reply with ONLY a JSON array of exactly {N} objects in image order. No prose, no code fences.`;
+
+const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
+
+async function classifyGallery(images) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey || !images || !images.length) return null;
+  const imgs = images.slice(0, 40);  // cap payload size; mega review-pools would batch
+  // OpenRouter is OpenAI-compatible: one user message, content = text + image_url
+  // (base64 data URIs). Shopee CDN blocks hotlinking, so fetch with the referer.
+  const content = [];
+  for (let i = 0; i < imgs.length; i++) {
+    try {
+      const r = await fetch(imgs[i], { headers: { Referer: 'https://shopee.sg/' } });
+      if (!r.ok) { content.push({ type: 'text', text: `Image ${i}: (unavailable)` }); continue; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      const ct = (r.headers.get('content-type') || '').includes('png') ? 'image/png' : 'image/jpeg';
+      content.push({ type: 'text', text: `Image ${i}:` });
+      content.push({ type: 'image_url', image_url: { url: `data:${ct};base64,` + buf.toString('base64') } });
+    } catch { content.push({ type: 'text', text: `Image ${i}: (unavailable)` }); }
+  }
+  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(imgs.length)).replace('{N1}', String(imgs.length - 1)) });
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: CLASSIFY_MODEL, max_tokens: 3000, messages: [{ role: 'user', content }] }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    let txt = (((data.choices || [])[0] || {}).message || {}).content || '';
+    txt = String(txt).replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const arr = JSON.parse(txt);
+    return Array.isArray(arr) ? arr : null;
+  } catch { return null; }
 }
 
 // ── main handler ──────────────────────────────────────────────────────────────
@@ -495,6 +560,65 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // 7b-covers. Cover-count split (colour-agnostic) — classify the whole image pool
+  // (gallery + description + review photos) once, then emit ONE listing per usable
+  // cover. The distinct cover is the dedup lever on Carousell; each listing also gets
+  // the shared dimensions image and a rotated title so same-account listings don't
+  // read as clones. Flag-gated; falls through to variant/single when off, when
+  // classification fails, or when it finds no covers.
+  // ponytail: covers ship raw even if the classifier flagged needs_clean — watermark/
+  //           bg cleaning is the deferred swapCoverBackground step (needs a bg API).
+  if (COVER_SPLIT && !isRefresh) {
+    const pool = [
+      ...(Array.isArray(p.images) ? p.images : []),
+      ...(Array.isArray(p.desc_images) ? p.desc_images : []),
+      ...(Array.isArray(p.review_images) ? p.review_images : []),
+    ];
+    let roles = null;
+    if (pool.length) {
+      try { roles = await classifyGallery(pool); }
+      catch (e) { console.error('classify failed:', e.message); }
+    }
+    if (roles) {
+      const covers = [...new Set(roles.filter(r => r && r.role === 'cover' && pool[r.i]).map(r => pool[r.i]))];
+      const dims   = [...new Set(roles.filter(r => r && r.role === 'dimension' && pool[r.i]).map(r => pool[r.i]))].slice(0, 1);
+      if (covers.length) {
+        const ids = [];
+        for (let k = 0; k < covers.length; k++) {
+          const imgs = [covers[k], ...dims.filter(u => u !== covers[k])];
+          const { data: v, error: vErr } = await sb.from('listings').insert({
+            title:              p.title || '',
+            // Unique per cover so each listing clears listings_shopee_url_active_unique.
+            shopee_url:         shopeeUrl + '#c' + k,
+            source_cost:        cost || null,
+            sell_price:         sellPrice,
+            images:             imgs,
+            status:             'active',
+            assigned_worker_id: worker_id,
+            account_name:       worker.account_name || null,
+            guard_warnings:     warnings.length ? warnings : null,
+            ai_title:           aiTitle ? rotateTitle(aiTitle, k) : null,
+            ai_description:     aiDescription,
+          }).select('id').single();
+          if (!vErr && v) ids.push(v.id);
+          else console.error('cover-split insert error:', vErr && vErr.message);
+        }
+        await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+        if (!ids.length) return res.status(500).json({ ok: false, error: 'cover-split-insert-failed' });
+        return res.json({
+          ok: true,
+          listing_id: ids[0],
+          listing_ids: ids,
+          split: ids.length,
+          cover_split: true,
+          warnings,
+          ai_generated: !!(aiTitle || aiDescription),
+        });
+      }
+    }
+    // no covers / classify failed → fall through to variant/single below
+  }
+
   // 7b-split. Variant splitting — one Shopee product → N listings, one per distinct
   // price. Reuses the single AI generation across variants (no N× cost); each split
   // gets its own id/ref-code and a variant label appended to its title. Skipped on
@@ -578,4 +702,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, findDimsImage };

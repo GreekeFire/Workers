@@ -6,7 +6,7 @@ const Module = require('module');
 const _load = Module._load;
 Module._load = (req, ...a) => req === '@supabase/supabase-js'
   ? { createClient: () => ({}) } : _load(req, ...a);
-const { variantGroups } = require('./api/worker-scrape.js')._test;
+const { variantGroups, rotateTitle } = require('./api/worker-scrape.js')._test;
 
 // Each variant (colour AND size) becomes its own listing, carrying its swatch.
 const groups = variantGroups([
@@ -31,5 +31,15 @@ const cover = (g) => g.image ? [g.image, ...gallery.filter(u => u !== g.image)] 
 assert.deepStrictEqual(cover(groups.find(g => g.label === 'White')), ['https://cdn/white.jpg', 'https://cdn/dims.jpg'], 'no dupe');
 assert.deepStrictEqual(cover(groups.find(g => g.label === 'Black')), ['https://cdn/black.jpg', 'https://cdn/white.jpg', 'https://cdn/dims.jpg'], 'swatch prepended');
 assert.deepStrictEqual(cover(groups.find(g => g.label === 'Brown')), gallery, 'null swatch → gallery unchanged');
+
+// Cover-split title rotation: each listing k leads with a different segment, the
+// full string stays unique, and k that lands back at start is a no-op.
+const t = 'A | B | C';
+assert.strictEqual(rotateTitle(t, 0), 'A | B | C', 'k=0 unchanged');
+assert.strictEqual(rotateTitle(t, 1), 'B | C | A', 'rotate left by 1');
+assert.strictEqual(rotateTitle(t, 2), 'C | A | B', 'rotate left by 2');
+assert.strictEqual(rotateTitle(t, 3), 'A | B | C', 'full cycle = no-op');
+assert.strictEqual(rotateTitle('Solo', 1), 'Solo', 'single segment unchanged');
+assert.strictEqual(new Set([0,1,2].map(k => rotateTitle(t, k))).size, 3, 'distinct per listing');
 
 console.log('ok');
