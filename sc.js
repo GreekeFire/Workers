@@ -245,6 +245,31 @@
 
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+  // Description images lazy-load as you scroll and aren't in the item API — so
+  // scroll the page to force them in, then collect the LARGE product images
+  // (icons/logos are tiny; gallery is excluded). Promo banners may slip through;
+  // the downstream classifier decides dims/cover/skip. Best-effort, page path only.
+  const harvestDescImages = async (galleryUrls) => {
+    const gal = new Set((galleryUrls || []).map(u => (String(u).split('/file/')[1] || '').split('?')[0]));
+    const y0 = window.scrollY;
+    try {
+      const H = document.body.scrollHeight;
+      for (let y = 0, n = 0; y < H && n < 40; y += 600, n++) { window.scrollTo(0, y); await sleep(120); }
+      window.scrollTo(0, y0);
+      await sleep(400);
+    } catch (e) { /* scroll is best-effort */ }
+    const out = [], seen = new Set();
+    for (const im of document.querySelectorAll('img')) {
+      const s = (im.currentSrc || im.src || '').split('?')[0];
+      if (!/susercontent\.com\/file\//.test(s) || im.naturalWidth < 500) continue;
+      const hash = s.split('/file/')[1] || '';
+      if (!hash || gal.has(hash) || seen.has(hash)) continue;
+      seen.add(hash);
+      out.push(s);
+    }
+    return out;
+  };
+
   const cur = /i\.\d+\.\d+|\/product\/\d+\/\d+/.test(location.href) ? location.href.split('?')[0] : '';
   if (cur) {
     const itemid = ((cur.match(/i\.\d+\.(\d+)/) || cur.match(/\/product\/\d+\/(\d+)/)) || [])[1];
@@ -291,9 +316,12 @@
         if (dl && dl.title && dl.models.length) break;
         await sleep(300);
       }
-      if (dl && dl.title && dl.models.length) { p = await post(dl); via = 'page'; }
+      if (dl && dl.title && dl.models.length) {
+        dl.desc_images = await harvestDescImages(dl.images);  // page path only — needs the DOM
+        p = await post(dl); via = 'page';
+      }
       else { p = await send(cur); via = 'api'; }
-      note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs', false, false, via === 'api');
+      note('✓ $' + Math.max(p.price_max, p.price_min, 0, ...p.models.map(x => x.price)).toFixed(2) + ' · ' + p.images.length + ' imgs' + (p.desc_images ? ' +' + p.desc_images.length + ' desc' : ''), false, false, via === 'api');
     } catch (e) {
       note('✗ ' + e.message, 1);
     }
