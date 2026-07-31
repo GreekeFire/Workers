@@ -309,14 +309,17 @@
     const m = (url || '').match(/i\.(\d+)\.(\d+)/) || (url || '').match(/\/product\/(\d+)\/(\d+)/);
     if (!m) return [];
     const shopid = m[1], itemid = m[2];
+    const CAP = 60;
     const out = [], seen = new Set();
     try {
-      for (let offset = 0; offset < 60 && out.length < 40; offset += 20) {
+      // filter=3 = reviews WITH MEDIA (photos/video); filter=1 was "with comment"
+      // (mostly text). limit=50 max per page. A couple of pages fills the cap.
+      for (let offset = 0; offset < 300 && out.length < CAP; offset += 50) {
         const ctrl = new AbortController();
         const to = setTimeout(() => ctrl.abort(), 6000);
         let d;
         try {
-          const r = await fetch('https://shopee.sg/api/v4/item/get_ratings?filter=1&type=0&itemid=' + itemid + '&shopid=' + shopid + '&limit=20&offset=' + offset, {
+          const r = await fetch('https://shopee.sg/api/v4/item/get_ratings?filter=3&type=0&itemid=' + itemid + '&shopid=' + shopid + '&limit=50&offset=' + offset, {
             credentials: 'include', headers: { accept: 'application/json' }, signal: ctrl.signal,
           });
           d = (await r.json()).data;
@@ -328,9 +331,9 @@
             if (!h || seen.has(h)) continue;
             seen.add(h);
             out.push(mapImg(h));
-            if (out.length >= 40) break;
+            if (out.length >= CAP) break;
           }
-          if (out.length >= 40) break;
+          if (out.length >= CAP) break;
         }
       }
     } catch (e) { /* reviews optional */ }
