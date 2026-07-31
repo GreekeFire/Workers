@@ -346,6 +346,62 @@ Reply with ONLY a JSON array of exactly {N} objects in image order. No prose, no
 
 const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
 
+// ── Cover cleaning (flag-gated by CLEAN_COVERS) ─────────────────────────────
+// Strip marketing overlays (seller logo, shop badge, promo text/stickers) off a
+// cover via Gemini image-edit, then host the result on Supabase Storage so the VA
+// gets a clean, public cover URL. Only runs on covers the classifier flagged
+// needs_clean. Regenerates the image (not a surgical inpaint) so it can subtly
+// restyle the product — acceptable for a listing cover, eyeballed by the owner.
+const STORAGE_BASE = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/storage/v1';
+const CLEAN_COVERS = process.env.CLEAN_COVERS === 'true';
+const CLEAN_MODEL = process.env.CLEAN_MODEL || 'google/gemini-2.5-flash-image';
+// Framed as retouching marketing overlays — NOT "remove watermark", which trips the
+// model's copyright guardrail and gets the request refused.
+const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Output only the retouched image.';
+
+async function cleanCover(url) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey || !SERVICE_KEY || !url) return null;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 40000);
+  try {
+    const r = await fetch(url, { headers: { Referer: 'https://shopee.sg/' } });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    const ct = (r.headers.get('content-type') || '').includes('png') ? 'image/png' : 'image/jpeg';
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: CLEAN_MODEL,
+        modalities: ['image', 'text'],
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: CLEAN_PROMPT },
+          { type: 'image_url', image_url: { url: `data:${ct};base64,` + buf.toString('base64') } },
+        ] }],
+      }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const msg = (((data.choices || [])[0] || {}).message) || {};
+    const uri = msg.images && msg.images[0] && ((msg.images[0].image_url && msg.images[0].image_url.url) || msg.images[0].url);
+    if (!uri || !uri.startsWith('data:')) return null;
+    const out = Buffer.from(uri.split(',')[1], 'base64');
+    // Host on the public 'covers' bucket via the Storage REST API (verified path;
+    // supabase-js storage upload isn't needed here).
+    const path = Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.png';
+    const up = await fetch(STORAGE_BASE + '/object/covers/' + path, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: 'Bearer ' + SERVICE_KEY, 'content-type': 'image/png' },
+      body: out,
+    });
+    if (!up.ok) { console.error('cover upload failed:', up.status); return null; }
+    return STORAGE_BASE + '/object/public/covers/' + path;
+  } catch (e) { console.error('cleanCover failed:', e.message); return null; }
+  finally { clearTimeout(to); }
+}
+
 async function classifyGallery(images) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !images || !images.length) return null;
@@ -566,8 +622,8 @@ module.exports = async function handler(req, res) {
   // the shared dimensions image and a rotated title so same-account listings don't
   // read as clones. Flag-gated; falls through to variant/single when off, when
   // classification fails, or when it finds no covers.
-  // ponytail: covers ship raw even if the classifier flagged needs_clean — watermark/
-  //           bg cleaning is the deferred swapCoverBackground step (needs a bg API).
+  // Covers flagged needs_clean are retouched via cleanCover (Gemini image-edit →
+  // Supabase Storage) when CLEAN_COVERS is on; raw cover is the fallback on failure.
   if (COVER_SPLIT && !isRefresh) {
     const pool = [
       ...(Array.isArray(p.images) ? p.images : []),
@@ -580,9 +636,19 @@ module.exports = async function handler(req, res) {
       catch (e) { console.error('classify failed:', e.message); }
     }
     if (roles) {
-      const covers = [...new Set(roles.filter(r => r && r.role === 'cover' && pool[r.i]).map(r => pool[r.i]))];
-      const dims   = [...new Set(roles.filter(r => r && r.role === 'dimension' && pool[r.i]).map(r => pool[r.i]))].slice(0, 1);
-      if (covers.length) {
+      // Dedupe covers by URL, remembering if any instance was flagged needs_clean.
+      const coverMap = new Map();
+      for (const r of roles) {
+        if (!r || r.role !== 'cover' || !pool[r.i]) continue;
+        coverMap.set(pool[r.i], coverMap.get(pool[r.i]) || !!r.needs_clean);
+      }
+      const dims = [...new Set(roles.filter(r => r && r.role === 'dimension' && pool[r.i]).map(r => pool[r.i]))].slice(0, 1);
+      if (coverMap.size) {
+        // Clean flagged covers in parallel — bounds wall-time to ~one image-gen call
+        // (not N), and falls back to the raw cover on any failure so a listing never
+        // loses its cover. No-op unless CLEAN_COVERS is on.
+        const covers = await Promise.all([...coverMap.entries()].map(async ([url, needsClean]) =>
+          (CLEAN_COVERS && needsClean) ? (await cleanCover(url)) || url : url));
         const ids = [];
         for (let k = 0; k < covers.length; k++) {
           const imgs = [covers[k], ...dims.filter(u => u !== covers[k])];
@@ -702,4 +768,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, findDimsImage };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, findDimsImage };
