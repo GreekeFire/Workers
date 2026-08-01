@@ -347,16 +347,18 @@ REJECT as "skip" — any ONE of these is disqualifying:
 - The product is small, distant, or cut off by the frame edge.
 - Blurry, soft, grainy, badly lit, heavily shadowed, or strongly colour-cast.
 - Cluttered or messy: cables, laundry, boxes, food, clutter on or around the product, or a busy background that competes with it.
-- Contains headline/marketing text, a schematic, a price or promo banner, or a collage of several photos.
+- Built from two or more DIFFERENT SCENES of comparable size stacked or tiled together (e.g. the product on top, an unrelated photo below), OR its main subject is a diagram, chart, 3D render or spec illustration rather than the actual product. Nothing usable survives once the graphics come off. A single scene with a small inset thumbnail in one corner is NOT a composite — that inset can be removed.
 - A person is the main subject, or a hand/body blocks the product.
 - It is not this product at all.
+
+OVERLAID TEXT IS NOT A REASON TO SKIP. Headline text, marketing copy, a price or promo banner, a watermark, a seller/shop badge, or a small inset detail box in a corner can all be removed afterwards. If a SINGLE photo underneath shows the whole product upright and clearly, it is a "cover" with "needs_clean": true — no matter how much text sits on top of it. Only reject it when the image is a multi-panel composite or is mostly graphics, so that removing the text would leave nothing worth showing.
 
 CLASSIFY each image as exactly one:
 - "cover" — meets the standard and passes every rejection test above
 - "dimension" — a measurement diagram: size numbers (cm/mm) with arrows or labelled edges
 - "skip" — everything else
 
-Also set "needs_clean": true if a watermark, seller/shop badge or promotional text overlay would have to be removed before use; else false.
+Also set "needs_clean": true if a watermark, seller/shop badge, headline/marketing text, promo banner or inset detail box would have to be removed before use; else false.
 
 WHEN IN DOUBT, CHOOSE "skip". Every "cover" becomes a real listing that shoppers see, so a mediocre photo actively costs us. Missing a decent photo costs nothing — there are always more.
 
@@ -860,4 +862,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, mapLimit, findDimsImage };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL };
