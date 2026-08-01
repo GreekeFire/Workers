@@ -335,15 +335,32 @@ async function pickCoverAndDims(images) {
 // One Haiku vision call over the whole pool (gallery + description images) → a role
 // per image. Everything after this is deterministic (cover-per-colour, dims, skip),
 // no more AI. Shopee CDN blocks hotlinking, so images fetch with the referer.
-const CLASSIFY_PROMPT = `You are sorting {N} e-commerce furniture photos (numbered 0..{N1}). For EACH image output one JSON object:
-- "i": the image number
-- "role": exactly one of:
-    "cover" — the product is the clear, prominent main subject and the image works as a listing cover (a clean studio shot, the product staged in a room, or a real buyer photo where the product is clearly shown)
-    "dimension" — a diagram showing measurement numbers (cm/mm) with size arrows/labels
-    "skip" — anything else: panels or infographics with headline/marketing text, schematic drawings, promo/sale banners, logos, blurry or cluttered shots, or images showing only a partial/cropped sliver of the product
-- "needs_clean": true if it has a watermark, seller/shop badge, or overlaid promotional/marketing text that must be removed to use it as a clean cover; else false
-RULES: any image containing headline text or a schematic is "skip", never "cover". The product must be prominent and clearly visible to be "cover".
-Reply with ONLY a JSON array of exactly {N} objects in image order. No prose, no code fences.`;
+const CLASSIFY_PROMPT = `You are picking listing cover photos for an online furniture shop. You will see {N} photos (numbered 0..{N1}).
+
+Judge EVERY image against the fixed standard below, on its own merits. Do NOT grade on a curve or compare images to each other — if all {N} images are poor, then all {N} are "skip". A batch with no good photo is a normal, expected outcome.
+
+THE STANDARD for "cover": would a shopper scrolling a marketplace feed stop at this photo and immediately understand what is being sold? It must be upright, sharp, and show the WHOLE product large and unobstructed.
+
+REJECT as "skip" — any ONE of these is disqualifying:
+- Sideways or upside down. The product must appear upright as it would stand in real life.
+- Shows only PART of the product — a close-up of a leg, a corner, a control panel, a hinge, a screw, a fabric texture, a drawer. Detail shots are never covers, however sharp.
+- The product is small, distant, or cut off by the frame edge.
+- Blurry, soft, grainy, badly lit, heavily shadowed, or strongly colour-cast.
+- Cluttered or messy: cables, laundry, boxes, food, clutter on or around the product, or a busy background that competes with it.
+- Contains headline/marketing text, a schematic, a price or promo banner, or a collage of several photos.
+- A person is the main subject, or a hand/body blocks the product.
+- It is not this product at all.
+
+CLASSIFY each image as exactly one:
+- "cover" — meets the standard and passes every rejection test above
+- "dimension" — a measurement diagram: size numbers (cm/mm) with arrows or labelled edges
+- "skip" — everything else
+
+Also set "needs_clean": true if a watermark, seller/shop badge or promotional text overlay would have to be removed before use; else false.
+
+WHEN IN DOUBT, CHOOSE "skip". Every "cover" becomes a real listing that shoppers see, so a mediocre photo actively costs us. Missing a decent photo costs nothing — there are always more.
+
+Output ONLY a JSON array of exactly {N} objects, one per image, in order: {"i":0,"role":"cover","needs_clean":false}. No prose, no code fences.`;
 
 const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
 
@@ -434,33 +451,34 @@ async function fetchDataUri(url) {
   } catch { return null; }
 }
 
-// Classify one batch. Images are numbered 0..n-1 within the batch (the prompt is
-// written that way); returned indices are shifted back to pool-global by `start`.
-async function classifyBatch(uris, start, apiKey) {
+// Classify one batch. `pairs` is [{uri, idx}] — images are numbered 0..n-1 inside
+// the batch (the prompt is written that way) and mapped back to their pool index
+// on the way out, so the caller can hand batches any subset in any order.
+async function classifyBatch(pairs, apiKey) {
   // OpenRouter is OpenAI-compatible: one user message, content = text + image_url.
   const content = [];
-  uris.forEach((uri, n) => {
-    if (!uri) { content.push({ type: 'text', text: `Image ${n}: (unavailable)` }); return; }
+  pairs.forEach((p, n) => {
+    if (!p.uri) { content.push({ type: 'text', text: `Image ${n}: (unavailable)` }); return; }
     content.push({ type: 'text', text: `Image ${n}:` });
-    content.push({ type: 'image_url', image_url: { url: uri } });
+    content.push({ type: 'image_url', image_url: { url: p.uri } });
   });
-  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(uris.length)).replace('{N1}', String(uris.length - 1)) });
+  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(pairs.length)).replace('{N1}', String(pairs.length - 1)) });
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({ model: CLASSIFY_MODEL, max_tokens: 3000, messages: [{ role: 'user', content }] }),
     });
-    if (!resp.ok) { console.error('classify batch', start, 'http', resp.status); return []; }
+    if (!resp.ok) { console.error('classify batch http', resp.status); return []; }
     const data = await resp.json();
     let txt = (((data.choices || [])[0] || {}).message || {}).content || '';
     txt = String(txt).replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     const arr = JSON.parse(txt);
     if (!Array.isArray(arr)) return [];
-    // Shift local → global, and drop anything pointing outside this batch.
-    return arr.filter(r => r && Number.isInteger(r.i) && r.i >= 0 && r.i < uris.length)
-      .map(r => ({ ...r, i: r.i + start }));
-  } catch (e) { console.error('classify batch', start, 'failed:', e.message); return []; }
+    // Map batch-local numbering back to the pool index; drop out-of-range answers.
+    return arr.filter(r => r && Number.isInteger(r.i) && r.i >= 0 && r.i < pairs.length)
+      .map(r => ({ ...r, i: pairs[r.i].idx }));
+  } catch (e) { console.error('classify batch failed:', e.message); return []; }
 }
 
 async function classifyGallery(images) {
@@ -468,11 +486,15 @@ async function classifyGallery(images) {
   if (!apiKey || !images || !images.length) return null;
   const imgs = images.slice(0, CLASSIFY_MAX);
   const uris = await mapLimit(imgs, 8, fetchDataUri);
-  const starts = [];
-  for (let s = 0; s < uris.length; s += CLASSIFY_BATCH) starts.push(s);
-  const batches = await Promise.all(
-    starts.map(s => classifyBatch(uris.slice(s, s + CLASSIFY_BATCH), s, apiKey))
-  );
+  // DEAL the pool round-robin instead of slicing it in contiguous blocks. The pool
+  // arrives grouped by source (gallery, then description, then review photos), so
+  // contiguous batches meant whole batches of nothing but buyer photos — with no
+  // clean studio shot alongside, the model's bar for "cover" drifted down and junk
+  // got through. Dealing spreads every source across every batch.
+  const nBatches = Math.max(1, Math.ceil(uris.length / CLASSIFY_BATCH));
+  const decks = Array.from({ length: nBatches }, () => []);
+  uris.forEach((uri, idx) => decks[idx % nBatches].push({ uri, idx }));
+  const batches = await Promise.all(decks.map(d => classifyBatch(d, apiKey)));
   const merged = [].concat(...batches);
   return merged.length ? merged : null;
 }
