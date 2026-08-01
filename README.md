@@ -78,7 +78,7 @@ VAs source products on Shopee and upload them to Carousell independently. Owner 
 5. Tap Done — counter increments, next listing loads
 6. Target: 100 listings/day per VA
 
-**Guards:** Wrong category = soft warn. Non-SG seller = soft warn. Under 4 stars = soft warn. Duplicate URL = hard block.
+**Guards:** Wrong category = soft warn. Non-SG seller = soft warn. Under 4 stars = soft warn. Duplicate URL = hard block *(unless `ALLOW_DUPLICATES=true` env is set — then the same Shopee URL can be listed repeatedly for the duplicate-listing/repost strategy).*
 
 **Owner side:** WORKERS tab shows each VA's count vs target today, warning flags, and controls to create VAs / assign listing batches.
 

@@ -96,7 +96,7 @@ app checks — it warns "price low" under $25 or "price high" over $300.)*
   time. It can't arrive within the 3–5 days our listings promise. (The Next Day
   Delivery filter hides most of these, but check the shipping section anyway.)
 - **Very few/no reviews + low rating** — no proof it sells or that it's decent.
-- **Duplicates** — if you (or another VA on your account) already listed it, don't relist. The app blocks exact repeats automatically, but don't waste time.
+- **Duplicates** — by default the app blocks exact repeats (same Shopee URL) automatically, so don't waste time relisting. *(Exception: if duplicate-listing mode is enabled — `ALLOW_DUPLICATES` — repeats are allowed on purpose for the repost strategy; follow the current instruction from the owner on whether to relist.)*
 
 ---
 

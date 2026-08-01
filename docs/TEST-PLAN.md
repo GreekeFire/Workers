@@ -49,7 +49,7 @@ Legend: 🤖 = can be checked automatically (curl/console) · 🙋 = needs a man
 - **4.6** 🙋 Carousell URL required before Done. A **profile/homepage** link (e.g. `carousell.sg/u/name`) keeps the border grey and Done disabled; only a real listing link (`/p/`, `/sell/`, or `app.link`) turns it green. (Client now matches the server check — no more "enabled then rejected".)
 - **4.7** 🙋 **Done** → `listings.status='done'`, `carousell_url` saved, `worker_done` row written (SGT date), count increments.
 - **4.8** 🙋 **Skip** → card hidden, count unchanged, listing still `active` in DB.
-- **4.9** 🙋 Scrape a product already listed (same Shopee URL) → it does **not** create a duplicate (app check + DB unique index).
+- **4.9** 🙋 Scrape a product already listed (same Shopee URL) → default (`ALLOW_DUPLICATES` unset): it does **not** create a duplicate (app check; verify no DB unique index still enforces this). With `ALLOW_DUPLICATES=true`: it **does** create a new duplicate listing (requires the DB constraint on `shopee_url`, if any, to be dropped).
 
 ## Part 5 — Backend & security (🤖 mostly automatable)
 
