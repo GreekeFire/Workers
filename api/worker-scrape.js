@@ -384,6 +384,46 @@ const CLEAN_MAX = Number(process.env.CLEAN_MAX || 8);  // max covers cleaned per
 // model's copyright guardrail and gets the request refused.
 const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Output only the retouched image.';
 
+// The cleaner is unreliable: it sometimes returns the image essentially unchanged
+// (branding still on it), and because it REGENERATES rather than inpaints it can
+// also hand back an obviously synthetic product. Both shipped to real listings on
+// the first production run. So the cleaned result is not trusted — it must pass this
+// check before use, and a cover that fails is dropped rather than shipped. Covers are
+// plentiful (39 from one product), so discarding the stubborn ones costs nothing.
+const VERIFY_PROMPT = `Look at this product photo and answer with ONE word.
+
+Answer "BAD" if ANY of these is true:
+- It carries overlaid text, a logo, a brand name, a watermark, a badge, a banner or a sticker anywhere in the frame.
+- The product looks artificial, warped, melted or AI-generated rather than photographed.
+- Objects on or around the product look distorted, smeared or nonsensical.
+
+Otherwise answer "GOOD".
+
+Answer with exactly one word: GOOD or BAD.`;
+
+// Returns true only on an explicit GOOD — anything else (BAD, junk, error) fails
+// closed, because the cost of a false GOOD is a branded listing going live.
+async function verifyClean(dataUri, apiKey) {
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: CLASSIFY_MODEL,
+        max_tokens: 8,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: VERIFY_PROMPT },
+          { type: 'image_url', image_url: { url: dataUri } },
+        ] }],
+      }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    const txt = ((((data.choices || [])[0] || {}).message) || {}).content || '';
+    return /^\W*GOOD\b/i.test(String(txt).trim());
+  } catch { return false; }
+}
+
 async function cleanCover(url) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !SERVICE_KEY || !url) return null;
@@ -412,6 +452,8 @@ async function cleanCover(url) {
     const msg = (((data.choices || [])[0] || {}).message) || {};
     const uri = msg.images && msg.images[0] && ((msg.images[0].image_url && msg.images[0].image_url.url) || msg.images[0].url);
     if (!uri || !uri.startsWith('data:')) return null;
+    // Gate: prove it actually came back clean and un-mangled, else give up on it.
+    if (!(await verifyClean(uri, apiKey))) { console.log('clean rejected by verify'); return null; }
     const out = Buffer.from(uri.split(',')[1], 'base64');
     // Host on the public 'covers' bucket via the Storage REST API (verified path;
     // supabase-js storage upload isn't needed here).
@@ -738,15 +780,24 @@ module.exports = async function handler(req, res) {
       const dims = [...new Set(roles.filter(r => r && r.role === 'dimension' && pool[r.i]).map(r => pool[r.i]))].slice(0, 1);
       if (coverMap.size) {
         // Clean flagged covers in parallel — bounds wall-time to ~one image-gen call
-        // (not N), and falls back to the raw cover on any failure so a listing never
-        // loses its cover. No-op unless CLEAN_COVERS is on. Capped at CLEAN_MAX: a
-        // big review pool can flag many covers, and each clean costs ~$0.04 and a
-        // slow image-gen call. Beyond the cap covers ship raw (buyer review photos
-        // usually aren't watermarked anyway, so the cap rarely bites).
+        // (not N). No-op unless CLEAN_COVERS is on. Capped at CLEAN_MAX: each clean is
+        // a slow ~$0.04 image-gen call. Beyond the cap a branded cover is dropped,
+        // not shipped raw (buyer review photos usually aren't branded, so the cap
+        // rarely bites).
         const entries = [...coverMap.entries()];
         const toClean = new Set(entries.filter(([, n]) => n).slice(0, CLEAN_MAX).map(([u]) => u));
-        const covers = await Promise.all(entries.map(async ([url]) =>
-          (CLEAN_COVERS && toClean.has(url)) ? (await cleanCover(url)) || url : url));
+        // A cover needing cleaning is used ONLY if cleaning verifiably succeeded.
+        // Falling back to the raw image would publish the source seller's branding,
+        // which is the whole thing cleaning exists to prevent — so a failure drops
+        // the cover instead. Covers that need no cleaning pass straight through.
+        const settled = await Promise.all(entries.map(async ([url, needsClean]) => {
+          if (!needsClean) return url;
+          if (!CLEAN_COVERS) return null;          // branded + cleaning off → unusable
+          return await cleanCover(url);            // null when clean/verify failed
+        }));
+        const covers = settled.filter(Boolean);
+        const dropped = settled.length - covers.length;
+        if (dropped) console.log('dropped', dropped, 'covers that could not be cleaned');
         const ids = [];
         for (let k = 0; k < covers.length; k++) {
           const imgs = [covers[k], ...dims.filter(u => u !== covers[k])];
@@ -767,17 +818,23 @@ module.exports = async function handler(req, res) {
           if (!vErr && v) ids.push(v.id);
           else console.error('cover-split insert error:', vErr && vErr.message);
         }
-        await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
-        if (!ids.length) return res.status(500).json({ ok: false, error: 'cover-split-insert-failed' });
-        return res.json({
-          ok: true,
-          listing_id: ids[0],
-          listing_ids: ids,
-          split: ids.length,
-          cover_split: true,
-          warnings,
-          ai_generated: !!(aiTitle || aiDescription),
-        });
+        // Every cover dropped by the clean gate → nothing to list here. Fall through
+        // to the variant/single path rather than failing, so the product still gets a
+        // listing (from the plain gallery) instead of vanishing.
+        if (ids.length) {
+          await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+          return res.json({
+            ok: true,
+            listing_id: ids[0],
+            listing_ids: ids,
+            split: ids.length,
+            cover_split: true,
+            covers_dropped: dropped,
+            warnings,
+            ai_generated: !!(aiTitle || aiDescription),
+          });
+        }
+        console.log('cover-split produced nothing — falling through');
       }
     }
     // no covers / classify failed → fall through to variant/single below
@@ -866,4 +923,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, verifyClean, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL };
