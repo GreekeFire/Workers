@@ -373,7 +373,11 @@ const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
 // needs_clean. Regenerates the image (not a surgical inpaint) so it can subtly
 // restyle the product — acceptable for a listing cover, eyeballed by the owner.
 const STORAGE_BASE = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/storage/v1';
-const CLEAN_COVERS = process.env.CLEAN_COVERS === 'true';
+// On by default: the classifier now ACCEPTS covers carrying the source seller's
+// branding (they're cleanable rather than disqualifying), so without cleaning those
+// covers would go live with another shop's logo on them. Set CLEAN_COVERS=false to
+// turn it off. Costs ~$0.04 per cleaned cover, capped at CLEAN_MAX per product.
+const CLEAN_COVERS = process.env.CLEAN_COVERS !== 'false';
 const CLEAN_MODEL = process.env.CLEAN_MODEL || 'google/gemini-2.5-flash-image';
 const CLEAN_MAX = Number(process.env.CLEAN_MAX || 8);  // max covers cleaned per product
 // Framed as retouching marketing overlays — NOT "remove watermark", which trips the
