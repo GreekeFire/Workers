@@ -38,9 +38,18 @@ const t = 'A | B | C';
 assert.strictEqual(rotateTitle(t, 0), 'A | B | C', 'k=0 unchanged');
 assert.strictEqual(rotateTitle(t, 1), 'B | C | A', 'rotate left by 1');
 assert.strictEqual(rotateTitle(t, 2), 'C | A | B', 'rotate left by 2');
-assert.strictEqual(rotateTitle(t, 3), 'A | B | C', 'full cycle = no-op');
 assert.strictEqual(rotateTitle('Solo', 1), 'Solo', 'single segment unchanged');
-assert.strictEqual(new Set([0,1,2].map(k => rotateTitle(t, k))).size, 3, 'distinct per listing');
+
+// Past one full cycle a plain rotation repeats: with 9 segments, listing 10 got the
+// same title as listing 1. Wrapped rotations must keep producing new strings.
+assert.notStrictEqual(rotateTitle(t, 3), rotateTitle(t, 0), 'k=n must not repeat k=0');
+const nine = 'A | B | C | D | E | F | G | H | I';
+const many = Array.from({ length: 20 }, (_, k) => rotateTitle(nine, k));
+assert.strictEqual(new Set(many).size, 20, '20 listings need 20 distinct titles, got ' + new Set(many).size);
+// The lead segment still cycles through all of them — that is what the feed shows.
+assert.strictEqual(new Set(many.map(s => s.split(' | ')[0])).size, 9, 'every segment leads at some point');
+// No segment may be lost or duplicated by the permutation.
+for (const s of many) assert.strictEqual(new Set(s.split(' | ')).size, 9, 'all 9 segments survive: ' + s);
 
 // mapLimit backs the classifier's image fetching: results MUST stay in pool order
 // (the classifier addresses images by index) and concurrency must stay bounded.

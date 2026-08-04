@@ -200,9 +200,21 @@ function variantLabel(names) {
 // no-op returning the title unchanged.
 function rotateTitle(title, k) {
   const parts = (title || '').split(' | ').map(s => s.trim()).filter(Boolean);
-  if (parts.length < 2 || !(k % parts.length)) return title;
-  const r = k % parts.length;
-  return [...parts.slice(r), ...parts.slice(0, r)].join(' | ');
+  const n = parts.length;
+  if (n < 2 || !k) return title;
+  const r = k % n;
+  const wraps = Math.floor(k / n);
+  const out = [...parts.slice(r), ...parts.slice(0, r)];
+  // Past k = n a plain rotation repeats itself: a 9-segment title gave listing 10
+  // the same string as listing 1. Once wrapped, keep the lead segment (it is what
+  // the feed shows) and rotate the tail instead, which yields n x (n-1) distinct
+  // titles rather than n.
+  if (wraps) {
+    const tail = out.slice(1);
+    const c = wraps % tail.length;
+    return [out[0], ...tail.slice(c), ...tail.slice(0, c)].join(' | ');
+  }
+  return out.join(' | ');
 }
 
 // A split listing IS a single variant — drop the "📦 Sizes/Finishes available"
