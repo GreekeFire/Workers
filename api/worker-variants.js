@@ -45,18 +45,25 @@ const restagePrompt = (scene) =>
 // "differs" from image 1 and got BAD on every attempt — for a missing monitor, a
 // missing chair, a shelf swapped for a bookcase. Those are props, and props are
 // supposed to change when the room does; the desk itself was perfect each time.
+// Answer the four questions first, THEN rule. A bare one-word verdict was useless:
+// at default temperature the same image scored GOOD/BAD/BAD across three identical
+// calls, and at temperature 0 it waved everything through. Inspecting first, at
+// temperature 0, gives stable answers.
 const checkPrompt = (name) =>
-  `The item for sale is: "${name}".\n\n`
-  + `Image 1 is the original photo. Image 2 should show THE SAME ITEM FOR SALE in a different setting.\n\n`
-  + `Ignore the surroundings entirely. Furniture, decor, plants, monitors, chairs, rugs, objects placed on or `
-  + `near the item, wall fittings and lighting are all EXPECTED to change with the new setting. None of that is a fault.\n\n`
-  + `Answer "BAD" if ANY of these is true:\n`
-  + `- THE ITEM FOR SALE differs from image 1 in shape, colour, material, proportions or design.\n`
-  + `- THE ITEM FOR SALE looks artificial, warped or AI-generated, or any part of it looks wrong.\n`
-  + `- THE ITEM FOR SALE is cut off by the frame, or only partly visible.\n`
-  + `- Image 2 carries any text, logo, watermark or badge.\n`
-  + `- The setting in image 2 is essentially the same room as image 1 (the background barely changed).\n\n`
-  + `Otherwise answer "GOOD".\n\nAnswer with exactly one word: GOOD or BAD.`;
+  `The item for sale is: "${name}".\n`
+  + `Image 1 is the original photo. Image 2 should show THE SAME ITEM in a different setting.\n\n`
+  + `Surroundings do not matter. Decor, plants, monitors, chairs, rugs, wall fittings, lighting and objects `
+  + `placed on or near the item are all EXPECTED to change. Never fault those.\n\n`
+  + `Answer these about IMAGE 2, one short line each:\n`
+  + `1. SHAPE/COLOUR: is the item for sale the same design, colour and proportions as image 1?\n`
+  + `2. RENDERING: does any part of the item look warped, melted, smeared or wrongly drawn?\n`
+  // Scoped to overlays and nonsense text: "any text at all" failed every image,
+  // because a monitor in shot showing an ordinary picture counts as text.
+  + `3. TEXT: is there text OVERLAID on the photo (watermark, seller badge, price tag, promo banner), or text `
+  + `that reads as garbled nonsense letters? Text that belongs to the scene and reads normally is FINE.\n`
+  + `4. FRAMING: is the whole item visible, not cut off by the edge?\n\n`
+  + `Then a final line, exactly: VERDICT: GOOD  or  VERDICT: BAD\n`
+  + `BAD if 1 found a difference, 2 found something wrong, 3 found an overlay or garbled text, or 4 found it cut off.`;
 
 // Duplicated from worker-scrape rather than shared, deliberately: that file is the
 // live scrape path and this endpoint must not be able to break it.
@@ -100,7 +107,7 @@ async function restage(srcUri, scene, apiKey) {
 async function checkVariant(srcUri, newUri, apiKey, productName) {
   try {
     const d = await orChat({
-      model: CHK_MODEL, max_tokens: 8,
+      model: CHK_MODEL, max_tokens: 220, temperature: 0,
       messages: [{ role: 'user', content: [
         { type: 'text', text: 'Image 1:' }, { type: 'image_url', image_url: { url: srcUri } },
         { type: 'text', text: 'Image 2:' }, { type: 'image_url', image_url: { url: newUri } },
@@ -108,7 +115,8 @@ async function checkVariant(srcUri, newUri, apiKey, productName) {
       ] }],
     }, apiKey);
     const txt = ((((d || {}).choices || [])[0] || {}).message || {}).content || '';
-    return /^\W*GOOD\b/i.test(String(txt).trim());
+    // Require an explicit GOOD verdict — an unparseable reply fails closed.
+    return /VERDICT:\s*GOOD/i.test(String(txt));
   } catch { return false; }
 }
 

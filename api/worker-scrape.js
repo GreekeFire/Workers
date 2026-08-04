@@ -452,17 +452,19 @@ const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commer
 // the first production run. So the cleaned result is not trusted — it must pass this
 // check before use, and a cover that fails is dropped rather than shipped. Covers are
 // plentiful (39 from one product), so discarding the stubborn ones costs nothing.
-const VERIFY_PROMPT = `Look at this product photo and answer with ONE word.
+// Inspect, then rule. A bare one-word verdict was unusable: at default temperature
+// the same image came back GOOD/BAD/BAD over three identical calls, and at
+// temperature 0 it passed everything. Answering the checks first, at temperature 0,
+// is stable and does not false-reject clean photos.
+const VERIFY_PROMPT = `This is a product photo for an online furniture listing.
 
-Answer "BAD" if ANY of these is true:
-- It carries overlaid text, a logo, a brand name, a watermark, a badge, a banner or a sticker anywhere in the frame.
-- The product looks artificial, warped, melted or AI-generated rather than photographed.
-- Objects on or around the product look distorted, smeared or nonsensical.
-- The product is cut off by the edge of the frame, or the shot is zoomed in so only part of it is visible. A listing cover must show the WHOLE product with its outline complete on every side.
+Answer these about the photo, one short line each:
+1. OVERLAY: is there text laid ON TOP of the photo — a watermark, shop or brand name, badge, price tag, promo banner or sticker? Text that belongs to the scene and reads normally (a book spine, a screen showing an ordinary picture) is FINE and is not an overlay. Garbled nonsense lettering is NOT fine.
+2. RENDERING: does the product look artificial, warped, melted or AI-generated rather than photographed? Do objects on or around it look smeared or nonsensical?
+3. FRAMING: is the WHOLE product visible with its outline complete on every side, not cut off by the edge and not zoomed in on part of it?
 
-Otherwise answer "GOOD".
-
-Answer with exactly one word: GOOD or BAD.`;
+Then a final line, exactly: VERDICT: GOOD  or  VERDICT: BAD
+BAD if 1 found an overlay or garbled text, 2 found something wrong, or 3 found the product cut off.`;
 
 // Returns true only on an explicit GOOD — anything else (BAD, junk, error) fails
 // closed, because the cost of a false GOOD is a branded listing going live.
@@ -473,7 +475,8 @@ async function verifyClean(dataUri, apiKey) {
       headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({
         model: CLASSIFY_MODEL,
-        max_tokens: 8,
+        max_tokens: 200,
+        temperature: 0,
         messages: [{ role: 'user', content: [
           { type: 'text', text: VERIFY_PROMPT },
           { type: 'image_url', image_url: { url: dataUri } },
@@ -483,7 +486,8 @@ async function verifyClean(dataUri, apiKey) {
     if (!resp.ok) return false;
     const data = await resp.json();
     const txt = ((((data.choices || [])[0] || {}).message) || {}).content || '';
-    return /^\W*GOOD\b/i.test(String(txt).trim());
+    // Require an explicit GOOD verdict — an unparseable reply fails closed.
+    return /VERDICT:\s*GOOD/i.test(String(txt));
   } catch { return false; }
 }
 
