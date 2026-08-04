@@ -444,7 +444,7 @@ const BG_VARIANTS = Number(process.env.BG_VARIANTS || 0);
 const BG_COVERS = Number(process.env.BG_COVERS || 5);
 // Framed as retouching marketing overlays — NOT "remove watermark", which trips the
 // model's copyright guardrail and gets the request refused.
-const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Output only the retouched image.';
+const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Keep the framing identical — same crop, same zoom, same composition — and keep the ENTIRE product visible with nothing cut off at the edges. Output only the retouched image.';
 
 // The cleaner is unreliable: it sometimes returns the image essentially unchanged
 // (branding still on it), and because it REGENERATES rather than inpaints it can
@@ -458,6 +458,7 @@ Answer "BAD" if ANY of these is true:
 - It carries overlaid text, a logo, a brand name, a watermark, a badge, a banner or a sticker anywhere in the frame.
 - The product looks artificial, warped, melted or AI-generated rather than photographed.
 - Objects on or around the product look distorted, smeared or nonsensical.
+- The product is cut off by the edge of the frame, or the shot is zoomed in so only part of it is visible. A listing cover must show the WHOLE product with its outline complete on every side.
 
 Otherwise answer "GOOD".
 
