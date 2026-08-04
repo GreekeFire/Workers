@@ -261,12 +261,46 @@ async function callCopyModel(system, userContent, maxTokens) {
   } finally { clearTimeout(to); }
 }
 
-async function generateAI(productText, delivery = DELIVERY_DEFAULT) {
+// DESC_MODE 'fixed' writes the description from a template instead of the model.
+// Taken from the competitor's live catalogue: across 12,626 listings he uses 8
+// distinct descriptions, and 12,619 of them are one boilerplate line — while his
+// TITLES stay distinct (12,254 unique, two random ones share 12% of their words).
+// So the title is what does the work; the description is a trust note. Fixed also
+// halves the per-product latency and removes a failure mode. DESC_MODE=ai restores
+// the written descriptions.
+const DESC_MODE = process.env.DESC_MODE || 'fixed';
+
+// Deterministic, no model call. Options come straight from the scraped variants,
+// which sc.js has already filtered to what's actually in stock.
+function fixedDescription(delivery, variantNames) {
+  const names = (variantNames || []).filter(Boolean);
+  const out = [delivery, '', 'Brand new and unused, delivered straight to your door.'];
+  if (names.length) {
+    const shown = names.slice(0, 12).join(', ');
+    out.push('', '📦 Options available: ' + shown + (names.length > 12 ? `, and ${names.length - 12} more` : ''));
+  }
+  out.push('', '💬 Message us to order or check stock');
+  out.push('', '🛡️ Pay with the Buy button and Carousell protects you — refunded if the item is not as described.');
+  out.push('', '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂');
+  return out.join('\n');
+}
+
+async function generateAI(productText, delivery = DELIVERY_DEFAULT, variantNames = []) {
   const productContent = `Product info:\n\n${productText}`;
+  const fixed = DESC_MODE === 'fixed';
   const [rawTitle, rawDesc] = await Promise.all([
     callCopyModel(TITLE_SYSTEM, productContent, 2500),
-    callCopyModel(DESC_SYSTEM, productContent, 3000),
+    fixed ? Promise.resolve(null) : callCopyModel(DESC_SYSTEM, productContent, 3000),
   ]);
+  if (fixed) {
+    let t = rawTitle.trim().split('\n')[0].trim();
+    if (t.length > 225) {
+      const parts = t.split(' | ');
+      while (parts.length > 1 && parts.join(' | ').length > 225) parts.pop();
+      t = parts.join(' | ');
+    }
+    return { title: t, description: fixedDescription(delivery, variantNames) };
+  }
   let title = rawTitle.trim().split('\n')[0].trim();
   // Retry once if title is too short (code-level backstop; prompt asks for segments)
   if (title.length < 180) {
@@ -723,7 +757,7 @@ module.exports = async function handler(req, res) {
       variantNames.length ? 'Variants (in stock): ' + variantNames.join(', ') : '',
     ].filter(Boolean).join('\n\n');
     if (productText.trim()) {
-      const ai = await generateAI(productText, deliveryLine(p));
+      const ai = await generateAI(productText, deliveryLine(p), variantNames);
       aiTitle       = ai.title       ?? null;
       aiDescription = ai.description ?? null;
     }
