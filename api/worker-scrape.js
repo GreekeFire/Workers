@@ -214,57 +214,67 @@ function stripSizesLine(desc) {
     .join('\n');
 }
 
-// Call Anthropic directly — worker-scrape is server-side so it can use the key
-// directly rather than routing through /api/claude (which adds a fragile internal
-// HTTP hop that was the root cause of silent AI generation failures).
-// Sonnet 5: no temperature param (non-default values are rejected), thinking
-// disabled explicitly (defaults to adaptive when omitted, which burns output
-// tokens on reasoning we don't need for listing copy).
-async function callClaudeDirect(system, userContent, maxTokens) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+// Listing copy runs through OpenRouter alongside classification and cleaning, so the
+// whole pipeline sits on one balance. (It called Anthropic directly until that
+// account ran out of credit and every title silently came back null.)
+// Gemini Flash over DeepSeek V4 purely on latency: measured on a real product,
+// title+description took 2.3s on Gemini and blew the 45s timeout on DeepSeek. The
+// scrape has a 60s ceiling to also classify ~70 images, so slow copy is a real risk.
+// DeepSeek is ~10x cheaper per token but the whole job is under a cent either way.
+// Set COPY_MODEL to switch (deepseek/deepseek-v4-flash needs the big token budget).
+const COPY_MODEL = process.env.COPY_MODEL || 'google/gemini-2.5-flash';
+
+async function callCopyModel(system, userContent, maxTokens) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 45000);
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-5',
-      max_tokens: maxTokens,
-      thinking: { type: 'disabled' },
-      system,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-    signal: ctrl.signal,
-  });
-  clearTimeout(to);
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error?.message || 'anthropic ' + resp.status);
-  }
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error.message);
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('') || '';
+  try {
+    const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + apiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: COPY_MODEL,
+        // Reasoning models still generate their chain against max_tokens even when
+        // it's excluded from the reply — at 512 DeepSeek spent the lot thinking and
+        // returned an empty title. Given room it answers in ~65 tokens.
+        max_tokens: maxTokens,
+        reasoning: { exclude: true },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userContent },
+        ],
+      }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error((err.error && err.error.message) || 'openrouter ' + resp.status);
+    }
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message || 'openrouter error');
+    const txt = (((data.choices || [])[0] || {}).message || {}).content || '';
+    // An empty reply means the budget went on reasoning — surface it rather than
+    // writing a blank listing, so the caller's retry/log path sees a real failure.
+    if (!String(txt).trim()) throw new Error('empty completion from ' + COPY_MODEL);
+    return String(txt);
+  } finally { clearTimeout(to); }
 }
 
 async function generateAI(productText, delivery = DELIVERY_DEFAULT) {
   const productContent = `Product info:\n\n${productText}`;
   const [rawTitle, rawDesc] = await Promise.all([
-    callClaudeDirect(TITLE_SYSTEM, productContent, 512),
-    callClaudeDirect(DESC_SYSTEM, productContent, 1536),
+    callCopyModel(TITLE_SYSTEM, productContent, 2500),
+    callCopyModel(DESC_SYSTEM, productContent, 3000),
   ]);
   let title = rawTitle.trim().split('\n')[0].trim();
   // Retry once if title is too short (code-level backstop; prompt asks for segments)
   if (title.length < 180) {
     try {
-      const retry = await callClaudeDirect(
+      const retry = await callCopyModel(
         TITLE_SYSTEM,
         productContent + '\n\nIMPORTANT: Previous attempt was too short. Add 1-2 NEW DISTINCT segments (a different feature, attribute, or use case). Do NOT repeat or pad existing segments.',
-        512
+        2500
       );
       title = retry.trim().split('\n')[0].trim();
     } catch { /* keep original if retry fails */ }
@@ -941,4 +951,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, verifyClean, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, verifyClean, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL, TITLE_SYSTEM, DESC_SYSTEM };
