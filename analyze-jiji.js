@@ -1,73 +1,69 @@
-// Pull a Shopee shop's catalogue sorted by sales and report what it says about
-// price points — the question is whether our markup survives in that range.
-//   node analyze-jiji.js [username] [maxPages]
+// Read a catalogue saved by shop.js and report whether our markup survives in that
+// shop's price range.  node analyze-jiji.js [path-to-shop-*.json]
 const fs = require('fs');
-const USER = process.argv[2] || 'jiji.sg';
-const MAXP = Number(process.argv[3] || 12);
-const H = {
-  'User-Agent': 'Mozilla/5.0', Referer: 'https://shopee.sg/',
-  'x-api-source': 'pc', 'x-requested-with': 'XMLHttpRequest', Accept: 'application/json',
-};
+const os = require('os');
+const path = require('path');
+
+// Default to the newest shop-*.json in Downloads — that's where shop.js puts it.
+function findFile() {
+  if (process.argv[2]) return process.argv[2];
+  const dl = path.join(os.homedir(), 'Downloads');
+  const hits = fs.readdirSync(dl).filter(f => /^shop-.*\.json$/i.test(f))
+    .map(f => ({ f: path.join(dl, f), t: fs.statSync(path.join(dl, f)).mtimeMs }))
+    .sort((a, b) => b.t - a.t);
+  if (!hits.length) throw new Error('no shop-*.json in Downloads — run the shop.js bookmarklet first');
+  return hits[0].f;
+}
 
 // MUST match calcSellPrice in api/worker-scrape.js
 const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10 - 1;
+const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0;
 
-(async () => {
-  const shop = await (await fetch(`https://shopee.sg/api/v4/shop/get_shop_detail?username=${USER}`, { headers: H })).json();
-  const d = shop.data || {};
-  const shopid = d.shopid;
-  console.log(`${USER} — shopid ${shopid} | ${d.item_count} items | ${d.follower_count} followers`);
-  console.log(`ratings: ${d.rating_good} good / ${d.rating_normal} normal / ${d.rating_bad} bad\n`);
+const file = findFile();
+const { username, shopid, items } = JSON.parse(fs.readFileSync(file, 'utf8'));
+console.log(`${username || shopid} — ${items.length} items  (${path.basename(file)})\n`);
 
-  const items = [];
-  for (let page = 0; page < MAXP; page++) {
-    const u = `https://shopee.sg/api/v4/search/search_items?by=sales&limit=100&match_id=${shopid}&newest=${page * 100}&order=desc&page_type=shop&version=2`;
-    const j = await (await fetch(u, { headers: H })).json().catch(() => null);
-    const batch = (j && j.items) || [];
-    if (!batch.length) break;
-    for (const it of batch) {
-      const b = it.item_basic || it;
-      items.push({
-        name: b.name,
-        price: (b.price || 0) / 1e5,
-        sold: b.historical_sold || b.sold || 0,
-        rating: (b.item_rating && b.item_rating.rating_star) || 0,
-        cnt: (b.item_rating && (b.item_rating.rating_count || [])[0]) || 0,
-        stock: b.stock || 0,
-      });
-    }
-    await new Promise(r => setTimeout(r, 400));
-  }
-  console.log('pulled', items.length, 'items\n');
-  fs.writeFileSync('jiji-catalog.json', JSON.stringify(items));
+// The owner's stated sourcing bar: real proof it sells.
+const winners = items.filter(x => x.sold >= 1000 && x.reviews >= 200);
 
-  // Which of their items would clear our own sourcing bar?
-  const winners = items.filter(x => x.sold >= 1000 && x.cnt >= 200);
-  const band = x => x.price < 15 ? '<$15' : x.price < 25 ? '$15-25' : x.price < 50 ? '$25-50'
-    : x.price < 100 ? '$50-100' : x.price < 200 ? '$100-200' : x.price < 300 ? '$200-300' : '>$300';
-  const tally = {};
-  for (const x of items) tally[band(x)] = (tally[band(x)] || 0) + 1;
-  const order = ['<$15', '$15-25', '$25-50', '$50-100', '$100-200', '$200-300', '>$300'];
+const BANDS = [[0, 15, '<$15'], [15, 25, '$15-25'], [25, 50, '$25-50'], [50, 100, '$50-100'],
+  [100, 200, '$100-200'], [200, 300, '$200-300'], [300, 1e9, '>$300']];
+const band = p => (BANDS.find(b => p >= b[0] && p < b[1]) || BANDS[6])[2];
 
-  console.log('PRICE SPREAD (whole catalogue)');
-  for (const k of order) {
-    const n = tally[k] || 0;
-    console.log('  ' + k.padEnd(10) + String(n).padStart(4) + '  ' + '#'.repeat(Math.round(n / items.length * 50)));
-  }
+const bar = (n, tot) => '#'.repeat(Math.round(n / Math.max(tot, 1) * 44));
+const tally = (arr) => { const t = {}; for (const x of arr) t[band(x.price)] = (t[band(x.price)] || 0) + 1; return t; };
 
-  const wt = {};
-  for (const x of winners) wt[band(x)] = (wt[band(x)] || 0) + 1;
-  console.log(`\nWINNERS ONLY (1k+ sold, 200+ reviews) — ${winners.length} items`);
-  for (const k of order) if (wt[k]) console.log('  ' + k.padEnd(10) + String(wt[k]).padStart(4));
+const all = tally(items), win = tally(winners);
+console.log('PRICE SPREAD — whole catalogue');
+for (const [, , k] of BANDS) console.log('  ' + k.padEnd(9) + String(all[k] || 0).padStart(4) + '  ' + bar(all[k] || 0, items.length));
+console.log(`\nPRICE SPREAD — winners only (1k+ sold, 200+ reviews): ${winners.length} items`);
+for (const [, , k] of BANDS) console.log('  ' + k.padEnd(9) + String(win[k] || 0).padStart(4) + '  ' + bar(win[k] || 0, winners.length));
 
-  const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0;
-  console.log('\nmedian price  all:', '$' + med(items.map(x => x.price)).toFixed(2),
-    '| winners: $' + med(winners.map(x => x.price)).toFixed(2));
-  console.log('under $15:', Math.round(items.filter(x => x.price < 15).length / items.length * 100) + '% of catalogue,',
-    Math.round(winners.filter(x => x.price < 15).length / (winners.length || 1) * 100) + '% of winners');
+console.log('\nmedian price   all: $' + med(items.map(x => x.price)).toFixed(2)
+  + '   winners: $' + med(winners.map(x => x.price)).toFixed(2));
 
-  console.log('\nTOP 15 BY UNITS SOLD  (cost -> our price)');
-  for (const x of winners.sort((a, b) => b.sold - a.sold).slice(0, 15)) {
-    console.log(`  ${String(x.sold).padStart(6)} sold  $${x.price.toFixed(2).padStart(7)} -> $${String(sell(x.price)).padStart(3)}  ${x.name.slice(0, 52)}`);
-  }
-})();
+// The crux: below ~$15 cost the +$25 floor dominates and the markup gets extreme.
+const cheapAll = items.filter(x => x.price < 15).length;
+const cheapWin = winners.filter(x => x.price < 15).length;
+console.log('under $15 cost  catalogue: ' + Math.round(cheapAll / items.length * 100)
+  + '%   winners: ' + Math.round(cheapWin / Math.max(winners.length, 1) * 100) + '%');
+
+const mult = winners.map(x => sell(x.price) / Math.max(x.price, 0.01));
+console.log('our markup on their winners  median ' + med(mult).toFixed(1) + 'x'
+  + '   (>3x on ' + winners.filter(x => sell(x.price) / Math.max(x.price, .01) > 3).length + ' of ' + winners.length + ')');
+
+console.log('\nTOP 20 BY UNITS SOLD          cost -> our price  (markup)');
+for (const x of winners.slice().sort((a, b) => b.sold - a.sold).slice(0, 20)) {
+  const s = sell(x.price);
+  console.log('  ' + String(x.sold).padStart(6) + ' sold  $' + x.price.toFixed(2).padStart(7)
+    + ' -> $' + String(s).padStart(3) + '  ' + (s / Math.max(x.price, .01)).toFixed(1).padStart(4) + 'x  '
+    + x.name.slice(0, 46));
+}
+
+// Where the model actually works: dear enough that the markup stays believable.
+const sweet = winners.filter(x => x.price >= 15 && x.price <= 300);
+console.log('\nSWEET SPOT ($15-300 cost): ' + sweet.length + ' of ' + winners.length + ' winners');
+for (const x of sweet.slice().sort((a, b) => b.sold - a.sold).slice(0, 12)) {
+  console.log('  ' + String(x.sold).padStart(6) + ' sold  $' + x.price.toFixed(2).padStart(7)
+    + ' -> $' + String(sell(x.price)).padStart(3) + '  ' + x.name.slice(0, 52));
+}
