@@ -36,13 +36,18 @@ const PLAIN = 'a clean plain light-grey studio background, no furniture or props
 // also need no per-product reasoning: a bare wall suits a bin, a chair and a desk
 // alike. 'room' restores furnished settings chosen from the product title.
 const BG_STYLE = process.env.BG_STYLE || 'plain';
+// Chosen by measurement, not taste. Six plain backdrops were generated and compared
+// pairwise: the neutral ones hashed almost identically (white+wood vs off-white+oak
+// scored 4, off-white vs charcoal scored 3) because recolouring a wall barely moves a
+// perceptual hash when the product fills the frame — the same reason colour grading
+// failed. Only backdrops differing in TEXTURE separated, scoring 26-41. These four
+// are the set that measured mutually distinct; adding more neutrals would produce
+// listings that look different to a human and identical to a deduplicator.
 const PLAIN_SCENES = [
   'a plain white wall with a light wood floor, empty room, no furniture or objects',
-  'a warm off-white wall with an oak floor, completely empty room',
   'a soft grey studio backdrop, seamless, no floor line, no props',
   'an exposed red brick wall with a wood floor, empty room, no furniture',
   'a pale beige wall with a light concrete floor, empty room, nothing else',
-  'a charcoal grey studio backdrop, seamless, no props',
 ];
 
 // Fallback only — used when scene generation fails, or when BG_SCENES is set. These
@@ -61,8 +66,21 @@ const FALLBACK_SCENES = (process.env.BG_SCENES || [
 // wants a kitchen or bathroom — a fixed list gets those wrong. One cheap text call.
 async function scenesFor(product, want, apiKey) {
   if (process.env.BG_SCENES) return FALLBACK_SCENES.slice(0, want);
-  // Plain backdrops need no reasoning about the product at all.
-  if (BG_STYLE === 'plain') return PLAIN_SCENES.slice(0, want);
+  // Plain backdrops need no reasoning about the product at all. Past the four that
+  // measured distinct, top up with furnished rooms — those scored 22-34 apart, so
+  // they extend the set where another neutral wall would just duplicate one.
+  if (BG_STYLE === 'plain') {
+    if (want <= PLAIN_SCENES.length) return PLAIN_SCENES.slice(0, want);
+    const rooms = await scenesForRooms(product, want - PLAIN_SCENES.length, apiKey);
+    return [...PLAIN_SCENES, ...rooms].slice(0, want);
+  }
+  return scenesForRooms(product, want, apiKey);
+}
+
+// Furnished rooms picked for the specific item — a bin belongs in a kitchen, a
+// gaming chair at a desk. Structurally varied, so they hash well apart.
+async function scenesForRooms(product, want, apiKey) {
+  if (want < 1) return [];
   const prompt = `A shop is photographing this item for an online listing: "${product}"\n\n`
     + `Name ${want} DIFFERENT real places in a Singapore home or workplace where a buyer would actually `
     + `use or keep this item.\n\n`
