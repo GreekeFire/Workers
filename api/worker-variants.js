@@ -41,14 +41,21 @@ const restagePrompt = (scene) =>
   + `redraw, restyle, resize or move the product, and do not add any text, logo or watermark. Show `
   + `the complete product, never a crop. Output only the edited image.`;
 
-const CHECK_PROMPT =
-  `Image 1 is the original product photo. Image 2 is meant to be the SAME product in a DIFFERENT setting.\n\n`
+// Judge the PRODUCT, never the scenery. The first version asked whether image 2
+// "differs" from image 1 and got BAD on every attempt — for a missing monitor, a
+// missing chair, a shelf swapped for a bookcase. Those are props, and props are
+// supposed to change when the room does; the desk itself was perfect each time.
+const checkPrompt = (name) =>
+  `The item for sale is: "${name}".\n\n`
+  + `Image 1 is the original photo. Image 2 should show THE SAME ITEM FOR SALE in a different setting.\n\n`
+  + `Ignore the surroundings entirely. Furniture, decor, plants, monitors, chairs, rugs, objects placed on or `
+  + `near the item, wall fittings and lighting are all EXPECTED to change with the new setting. None of that is a fault.\n\n`
   + `Answer "BAD" if ANY of these is true:\n`
-  + `- The product in image 2 differs from image 1 in shape, colour, proportions or design.\n`
-  + `- The product looks artificial, warped or AI-generated, or parts of it look wrong.\n`
-  + `- Image 2 is cropped so the product is no longer fully visible.\n`
-  + `- The background/room in image 2 is essentially the same setting as image 1.\n`
-  + `- Image 2 carries any text, logo, watermark or badge.\n\n`
+  + `- THE ITEM FOR SALE differs from image 1 in shape, colour, material, proportions or design.\n`
+  + `- THE ITEM FOR SALE looks artificial, warped or AI-generated, or any part of it looks wrong.\n`
+  + `- THE ITEM FOR SALE is cut off by the frame, or only partly visible.\n`
+  + `- Image 2 carries any text, logo, watermark or badge.\n`
+  + `- The setting in image 2 is essentially the same room as image 1 (the background barely changed).\n\n`
   + `Otherwise answer "GOOD".\n\nAnswer with exactly one word: GOOD or BAD.`;
 
 // Duplicated from worker-scrape rather than shared, deliberately: that file is the
@@ -90,14 +97,14 @@ async function restage(srcUri, scene, apiKey) {
 
 // Fails closed: anything but an explicit GOOD is treated as a reject, because a false
 // pass either misrepresents the product or ships a duplicate.
-async function checkVariant(srcUri, newUri, apiKey) {
+async function checkVariant(srcUri, newUri, apiKey, productName) {
   try {
     const d = await orChat({
       model: CHK_MODEL, max_tokens: 8,
       messages: [{ role: 'user', content: [
         { type: 'text', text: 'Image 1:' }, { type: 'image_url', image_url: { url: srcUri } },
         { type: 'text', text: 'Image 2:' }, { type: 'image_url', image_url: { url: newUri } },
-        { type: 'text', text: CHECK_PROMPT },
+        { type: 'text', text: checkPrompt(productName || 'the main furniture item') },
       ] }],
     }, apiKey);
     const txt = ((((d || {}).choices || [])[0] || {}).message || {}).content || '';
@@ -147,10 +154,14 @@ module.exports = async function handler(req, res) {
 
   // Generate in parallel: each is a slow image-gen call, so serial would blow the
   // function budget. Verification rides along with each one.
+  // Name the product so the check knows what to look at. The AI title's opening
+  // segment is the cleanest description of the item we have.
+  const productName = (src.ai_title || src.title || '').split(' | ')[0].trim().slice(0, 80);
+
   const made = await Promise.all(SCENES.slice(0, want).map(async (scene) => {
     const uri = await restage(srcUri, scene, apiKey);
     if (!uri) return null;
-    if (!(await checkVariant(srcUri, uri, apiKey))) return null;
+    if (!(await checkVariant(srcUri, uri, apiKey, productName))) return null;
     return await upload(uri);
   }));
 
