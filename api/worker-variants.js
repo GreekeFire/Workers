@@ -25,15 +25,44 @@ const { rotateTitle } = require('./worker-scrape.js')._test;
 const STORAGE_BASE = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/storage/v1';
 const IMG_MODEL = process.env.CLEAN_MODEL || 'google/gemini-2.5-flash-image';
 const CHK_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
-// Distinct rooms, so variants differ from each other and not just from the source.
-const SCENES = (process.env.BG_SCENES || [
-  'a clean plain light-grey studio background',
+// Always first, and always safe: a plain backdrop suits any product, so it is the
+// one scene never left to chance.
+const PLAIN = 'a clean plain light-grey studio background, no furniture or props';
+
+// Fallback only — used when scene generation fails, or when BG_SCENES is set. These
+// are furniture-shaped guesses and read badly for other categories (a bin does not
+// belong in "a warm dining area"), which is why scenes are normally derived from the
+// product itself below.
+const FALLBACK_SCENES = (process.env.BG_SCENES || [
   'a bright modern bedroom with a window and pale walls',
   'a tidy home office with a bookshelf against a white wall',
   'a minimal study corner with a pale rug and a floor lamp',
   'a warm dining area with wooden flooring and a potted plant',
   'a bright apartment room with white walls and large windows',
 ].join('|')).split('|').filter(Boolean);
+
+// Ask where THIS product actually belongs. A gaming chair wants a desk setup, a bin
+// wants a kitchen or bathroom — a fixed list gets those wrong. One cheap text call.
+async function scenesFor(product, want, apiKey) {
+  if (process.env.BG_SCENES) return FALLBACK_SCENES.slice(0, want);
+  const prompt = `A shop is photographing this item for an online listing: "${product}"\n\n`
+    + `Name ${want} DIFFERENT real places in a Singapore home or workplace where a buyer would actually `
+    + `use or keep this item.\n\n`
+    + `Rules: one per line, no numbering, no bullets. Each line describes ONLY the room and its look, in `
+    + `under 12 words, e.g. "a tidy home office with a bookshelf against a white wall". Never mention the `
+    + `item itself, people, text or signage. The rooms must be clearly different from one another.`;
+  try {
+    const d = await orChat({
+      model: CHK_MODEL, max_tokens: 300, temperature: 0.7,
+      messages: [{ role: 'user', content: prompt }],
+    }, apiKey);
+    const txt = ((((d || {}).choices || [])[0] || {}).message || {}).content || '';
+    const lines = String(txt).split('\n')
+      .map(s => s.replace(/^[\s\-*\d.)]+/, '').trim())   // strip bullets/numbering
+      .filter(s => s.length > 8 && s.length < 120);
+    return lines.length >= 2 ? lines.slice(0, want) : FALLBACK_SCENES.slice(0, want);
+  } catch { return FALLBACK_SCENES.slice(0, want); }
+}
 
 const restagePrompt = (scene) =>
   `Replace ONLY the background of this product photo with ${scene}. The product itself must stay `
@@ -140,7 +169,7 @@ module.exports = async function handler(req, res) {
   const { worker_id, listing_id, scenes } = req.body || {};
   if (!worker_id || !listing_id) return res.status(400).json({ error: 'worker_id and listing_id required' });
 
-  const want = Math.min(Number(scenes) || SCENES.length, SCENES.length);
+  const want = Math.max(1, Math.min(Number(scenes) || 4, 10));
 
   const { data: src, error: lErr } = await sb
     .from('listings')
@@ -166,7 +195,11 @@ module.exports = async function handler(req, res) {
   // segment is the cleanest description of the item we have.
   const productName = (src.ai_title || src.title || '').split(' | ')[0].trim().slice(0, 80);
 
-  const made = await Promise.all(SCENES.slice(0, want).map(async (scene) => {
+  // Plain backdrop first (safe for any product), then rooms chosen for this item.
+  const sceneList = [PLAIN, ...(await scenesFor(productName, want - 1, apiKey))].slice(0, want);
+  console.log('scenes for', JSON.stringify(productName), '->', sceneList.join(' | '));
+
+  const made = await Promise.all(sceneList.map(async (scene) => {
     const uri = await restage(srcUri, scene, apiKey);
     if (!uri) return null;
     if (!(await checkVariant(srcUri, uri, apiKey, productName))) return null;
