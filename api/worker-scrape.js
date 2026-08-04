@@ -380,6 +380,12 @@ const STORAGE_BASE = 'https://tzwzmzabjmsocnxdtxqx.supabase.co/storage/v1';
 const CLEAN_COVERS = process.env.CLEAN_COVERS !== 'false';
 const CLEAN_MODEL = process.env.CLEAN_MODEL || 'google/gemini-2.5-flash-image';
 const CLEAN_MAX = Number(process.env.CLEAN_MAX || 8);  // max covers cleaned per product
+// Background restaging (api/worker-variants). BG_VARIANTS = extra backgrounds per
+// cover, BG_COVERS = how many of the product's covers get the treatment. Off by
+// default: at ~$0.04 an image this is the one step that can run up a real bill, so
+// it stays opt-in until it has been watched on a live product.
+const BG_VARIANTS = Number(process.env.BG_VARIANTS || 0);
+const BG_COVERS = Number(process.env.BG_COVERS || 5);
 // Framed as retouching marketing overlays — NOT "remove watermark", which trips the
 // model's copyright guardrail and gets the request refused.
 const CLEAN_PROMPT = 'This is a product photo I am preparing for my own e-commerce listing. Please retouch it to remove overlaid marketing graphics only: promotional text banners, sale/discount stickers, shop-name badge labels, and decorative flag or border graphics. Keep the physical product and its natural background exactly as-is; do not redraw or restyle the product. Output only the retouched image.';
@@ -823,6 +829,18 @@ module.exports = async function handler(req, res) {
         // listing (from the plain gallery) instead of vanishing.
         if (ids.length) {
           await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+          // Background variants run in their own invocation, fired and forgotten —
+          // image generation is far too slow to share this request's 60s budget.
+          if (BG_VARIANTS > 0) {
+            const appUrl = process.env.APP_URL || 'https://workers-v1.vercel.app';
+            for (const id of ids.slice(0, BG_COVERS)) {
+              fetch(appUrl + '/api/worker-variants', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ worker_id, listing_id: id, scenes: BG_VARIANTS }),
+              }).catch(() => {});
+            }
+          }
           return res.json({
             ok: true,
             listing_id: ids[0],
