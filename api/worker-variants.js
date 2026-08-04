@@ -29,6 +29,22 @@ const CHK_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
 // one scene never left to chance.
 const PLAIN = 'a clean plain light-grey studio background, no furniture or props';
 
+// BG_STYLE 'plain' (default) stages against bare wall-and-floor backdrops instead of
+// furnished rooms. Same price per image — generation is charged flat — but props are
+// where the failures come from (garbled text on a monitor, a warped chair, a frame
+// turning gold beside a bookcase), so plainer scenes waste fewer generations. They
+// also need no per-product reasoning: a bare wall suits a bin, a chair and a desk
+// alike. 'room' restores furnished settings chosen from the product title.
+const BG_STYLE = process.env.BG_STYLE || 'plain';
+const PLAIN_SCENES = [
+  'a plain white wall with a light wood floor, empty room, no furniture or objects',
+  'a warm off-white wall with an oak floor, completely empty room',
+  'a soft grey studio backdrop, seamless, no floor line, no props',
+  'an exposed red brick wall with a wood floor, empty room, no furniture',
+  'a pale beige wall with a light concrete floor, empty room, nothing else',
+  'a charcoal grey studio backdrop, seamless, no props',
+];
+
 // Fallback only — used when scene generation fails, or when BG_SCENES is set. These
 // are furniture-shaped guesses and read badly for other categories (a bin does not
 // belong in "a warm dining area"), which is why scenes are normally derived from the
@@ -45,6 +61,8 @@ const FALLBACK_SCENES = (process.env.BG_SCENES || [
 // wants a kitchen or bathroom — a fixed list gets those wrong. One cheap text call.
 async function scenesFor(product, want, apiKey) {
   if (process.env.BG_SCENES) return FALLBACK_SCENES.slice(0, want);
+  // Plain backdrops need no reasoning about the product at all.
+  if (BG_STYLE === 'plain') return PLAIN_SCENES.slice(0, want);
   const prompt = `A shop is photographing this item for an online listing: "${product}"\n\n`
     + `Name ${want} DIFFERENT real places in a Singapore home or workplace where a buyer would actually `
     + `use or keep this item.\n\n`
