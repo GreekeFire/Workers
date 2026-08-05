@@ -252,11 +252,32 @@ module.exports = async function handler(req, res) {
   // segment is the cleanest description of the item we have.
   const productName = (src.ai_title || src.title || '').split(' | ')[0].trim().slice(0, 80);
 
+  // Which shots does this listing already have? Slots are numbered, so a top-up run
+  // must skip the ones already used — otherwise it regenerates them at 4c each and
+  // then fails to insert against the unique-URL index, paying for nothing. Starting
+  // at 2 variants and raising it later is the intended way to use this.
+  const { data: existing } = await sb
+    .from('listings')
+    .select('shopee_url')
+    .like('shopee_url', base + '#v' + src.id + '-%')
+    .neq('status', 'deleted');
+  const taken = new Set((existing || [])
+    .map(r => Number(String(r.shopee_url).split('-').pop()))
+    .filter(n => Number.isInteger(n)));
+
   // Two axes so the set keeps growing without repeating: backdrops cycle fastest,
   // then the camera angle changes. 4 backdrops x 3 angles = 12 distinct shots before
   // anything repeats, with the product centred in every one.
-  const backdrops = [PLAIN, ...(await scenesFor(productName, Math.max(1, want) , apiKey))];
-  const shots = Array.from({ length: want }, (_, i) => ({
+  const backdrops = [PLAIN, ...(await scenesFor(productName, Math.max(1, want), apiKey))];
+  const MAX_SLOT = backdrops.length * ANGLES.length;
+  const slots = [];
+  for (let i = 0; i < MAX_SLOT && slots.length < want; i++) if (!taken.has(i)) slots.push(i);
+  if (!slots.length) {
+    return res.json({ ok: true, source_listing: src.id, attempted: 0, passed: 0,
+      rejected: 0, listing_ids: [], note: 'all ' + MAX_SLOT + ' shots already generated' });
+  }
+  const shots = slots.map(i => ({
+    slot: i,
     backdrop: backdrops[i % backdrops.length],
     angle: ANGLES[Math.floor(i / backdrops.length) % ANGLES.length],
   }));
@@ -267,26 +288,28 @@ module.exports = async function handler(req, res) {
     const uri = await restage(srcUri, shot, apiKey);
     if (!uri) return null;
     if (!(await checkVariant(srcUri, uri, apiKey, productName))) return null;
-    return await upload(uri);
+    const url = await upload(uri);
+    return url ? { url, slot: shot.slot } : null;
   }));
 
   const good = made.filter(Boolean);
   const ids = [];
-  for (let i = 0; i < good.length; i++) {
-    // Fragment keyed to the source listing so repeat runs can't collide.
-    const url = base + '#v' + src.id + '-' + i;
+  for (const g of good) {
+    // Keyed to the source listing AND the shot slot, so a later top-up run lands on
+    // free slots instead of colliding with what is already there.
+    const url = base + '#v' + src.id + '-' + g.slot;
     const { data: v, error: vErr } = await sb.from('listings').insert({
       title: src.title || '',
       shopee_url: url,
       source_cost: src.source_cost,
       sell_price: src.sell_price,
-      images: dims ? [good[i], dims] : [good[i]],
+      images: dims ? [g.url, dims] : [g.url],
       status: 'active',
       assigned_worker_id: worker_id,
       account_name: src.account_name || null,
       guard_warnings: src.guard_warnings || null,
       // Shift the title again so a variant never repeats its parent's opening phrase.
-      ai_title: src.ai_title ? rotateTitle(src.ai_title, i + 1) : null,
+      ai_title: src.ai_title ? rotateTitle(src.ai_title, g.slot + 1) : null,
       ai_description: src.ai_description,
     }).select('id').single();
     if (!vErr && v) ids.push(v.id);
