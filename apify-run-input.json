@@ -2,7 +2,7 @@
   "country": "SG",
   "maxItems": 1000,
   "timeoutSecs": 200,
-  "priceSlicing": true,
+  "priceSlicing": false,
   "keywords": [
     "study table",
     "shoe rack",
