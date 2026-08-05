@@ -132,8 +132,15 @@ const checkPrompt = (name) =>
   + `Image 1 is the original photo. Image 2 should show THE SAME ITEM in a different setting.\n\n`
   + `Surroundings do not matter. Decor, plants, monitors, chairs, rugs, wall fittings, lighting and objects `
   + `placed on or near the item are all EXPECTED to change. Never fault those.\n\n`
+  // Image 2 is deliberately shot from a different viewpoint, so it will not look
+  // identical. Without saying so the check read a three-quarter view as a shape
+  // change and rejected 5 of 8 good images.
+  + `The CAMERA ANGLE is also EXPECTED to differ — image 2 may be taken from the front, from either side, `
+  + `or three-quarters on. The item will therefore look different in outline. That is intended, not a fault. `
+  + `Judge whether it is the SAME PHYSICAL ITEM, not whether the two photos look alike.\n\n`
   + `Answer these about IMAGE 2, one short line each:\n`
-  + `1. SHAPE/COLOUR: is the item for sale the same design, colour and proportions as image 1?\n`
+  + `1. SAME ITEM: allowing for the different viewpoint, is it the same product — same design, colour, `
+  + `materials, and same parts in the same places (drawers, legs, frame, handles)?\n`
   + `2. RENDERING: does any part of the item look warped, melted, smeared or wrongly drawn?\n`
   // Scoped to overlays and nonsense text: "any text at all" failed every image,
   // because a monitor in shot showing an ordinary picture counts as text.
@@ -141,7 +148,8 @@ const checkPrompt = (name) =>
   + `that reads as garbled nonsense letters? Text that belongs to the scene and reads normally is FINE.\n`
   + `4. FRAMING: is the whole item visible, not cut off by the edge?\n\n`
   + `Then a final line, exactly: VERDICT: GOOD  or  VERDICT: BAD\n`
-  + `BAD if 1 found a difference, 2 found something wrong, 3 found an overlay or garbled text, or 4 found it cut off.`;
+  + `BAD if 1 found it is a different product, 2 found something wrong, 3 found an overlay or garbled text, `
+  + `or 4 found it cut off. A different camera angle on its own is never a reason for BAD.`;
 
 // Duplicated from worker-scrape rather than shared, deliberately: that file is the
 // live scrape path and this endpoint must not be able to break it.
