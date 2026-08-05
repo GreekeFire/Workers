@@ -100,11 +100,24 @@ async function scenesForRooms(product, want, apiKey) {
   } catch { return FALLBACK_SCENES.slice(0, want); }
 }
 
-const restagePrompt = (scene) =>
-  `Replace ONLY the background of this product photo with ${scene}. The product itself must stay `
-  + `identical: same model, same colour, same proportions, same angle, same size in frame. Do not `
-  + `redraw, restyle, resize or move the product, and do not add any text, logo or watermark. Show `
-  + `the complete product, never a crop. Output only the edited image.`;
+// Viewpoints, not positions. Shifting the product around the frame does separate the
+// images (measured 15-25 apart) but every one looks like the same photo nudged
+// sideways. Rotating the CAMERA keeps the product centred and catalogue-like while
+// changing its silhouette, which is what a perceptual hash reads: measured 14-34
+// apart on an identical backdrop. "Slightly elevated" is left out — it scored 9
+// against the straight-on shot, below the threshold.
+const ANGLES = [
+  'Photograph it STRAIGHT ON from the front.',
+  'Photograph it from a THREE-QUARTER angle to its left.',
+  'Photograph it from a THREE-QUARTER angle to its right.',
+];
+
+const restagePrompt = (backdrop, angle) =>
+  `Re-photograph this product against ${backdrop}. ${angle} Keep the product CENTRED in the frame, `
+  + `filling most of it.\n\n`
+  + `The product itself must stay identical: same model, same colour, same materials, same proportions, `
+  + `same size. Do not redraw or restyle it, and do not add any text, logo or watermark. Show the `
+  + `COMPLETE product, never cut off at any edge. Output only the image.`;
 
 // Judge the PRODUCT, never the scenery. The first version asked whether image 2
 // "differs" from image 1 and got BAD on every attempt — for a missing monitor, a
@@ -152,12 +165,12 @@ async function orChat(body, apiKey) {
   return resp.json();
 }
 
-async function restage(srcUri, scene, apiKey) {
+async function restage(srcUri, shot, apiKey) {
   try {
     const d = await orChat({
       model: IMG_MODEL, modalities: ['image', 'text'],
       messages: [{ role: 'user', content: [
-        { type: 'text', text: restagePrompt(scene) },
+        { type: 'text', text: restagePrompt(shot.backdrop, shot.angle) },
         { type: 'image_url', image_url: { url: srcUri } },
       ] }],
     }, apiKey);
@@ -231,12 +244,19 @@ module.exports = async function handler(req, res) {
   // segment is the cleanest description of the item we have.
   const productName = (src.ai_title || src.title || '').split(' | ')[0].trim().slice(0, 80);
 
-  // Plain backdrop first (safe for any product), then rooms chosen for this item.
-  const sceneList = [PLAIN, ...(await scenesFor(productName, want - 1, apiKey))].slice(0, want);
-  console.log('scenes for', JSON.stringify(productName), '->', sceneList.join(' | '));
+  // Two axes so the set keeps growing without repeating: backdrops cycle fastest,
+  // then the camera angle changes. 4 backdrops x 3 angles = 12 distinct shots before
+  // anything repeats, with the product centred in every one.
+  const backdrops = [PLAIN, ...(await scenesFor(productName, Math.max(1, want) , apiKey))];
+  const shots = Array.from({ length: want }, (_, i) => ({
+    backdrop: backdrops[i % backdrops.length],
+    angle: ANGLES[Math.floor(i / backdrops.length) % ANGLES.length],
+  }));
+  console.log('shots for', JSON.stringify(productName), '->',
+    shots.map(s => s.backdrop.slice(0, 22) + ' / ' + s.angle.slice(18, 40)).join(' | '));
 
-  const made = await Promise.all(sceneList.map(async (scene) => {
-    const uri = await restage(srcUri, scene, apiKey);
+  const made = await Promise.all(shots.map(async (shot) => {
+    const uri = await restage(srcUri, shot, apiKey);
     if (!uri) return null;
     if (!(await checkVariant(srcUri, uri, apiKey, productName))) return null;
     return await upload(uri);
