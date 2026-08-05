@@ -87,13 +87,23 @@ const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
 // of rows, and treating "unknown" as "overseas" threw away 332 products — including
 // the Xpanse desk already listed on Carousell, whose title literally reads
 // "【SG Stock】". Where the field is blank, the title usually declares it.
-const OVERSEAS = /china|mainland|malay|malás|indon|tailand|thai|vietnam|viet/i;
+// Malaysia ships to Singapore by road in days, so it is treated as usable; China and
+// the rest are the 20-25 day wait the delivery promise cannot survive.
+// --no-malaysia to exclude it too.
+const OVERSEAS = process.argv.includes('--no-malaysia')
+  ? /china|mainland|malay|malás|indon|tailand|thai|vietnam|viet/i
+  : /china|mainland|indon|tailand|thai|vietnam|viet/i;
 // hdb and bto are Singapore-only words — a listing selling an "hdb bto shoe rack"
 // is local whatever the location field says (or doesn't).
 const SG_TITLE = /\bsg\b|singapore|local stock|ready stock|sg stock|\bhdb\b|\bbto\b/i;
+// Close enough to ship in days rather than weeks. Stated outright, so these need no
+// SG claim in the title — a Malaysian seller will never write one.
+const NEAR = process.argv.includes('--no-malaysia')
+  ? /^sg$|singapore/i
+  : /^sg$|singapore|malay|malás/i;
 const explicitlyAbroad = (r) => OVERSEAS.test(String(r.location || '').trim());
-const claimsSG = (r) => /^sg$|singapore/i.test(String(r.location || '').trim())
-  || SG_TITLE.test(String(r.name || ''));
+const explicitlyNear = (r) => NEAR.test(String(r.location || '').trim());
+const claimsSG = (r) => explicitlyNear(r) || SG_TITLE.test(String(r.name || ''));
 // A shop that says SG on one listing is SG on the others too. SEXY MAMA has one
 // listing reading "in sg stock" and another "In stock hdb bto" — same seller, and
 // the location field is blank on both.
