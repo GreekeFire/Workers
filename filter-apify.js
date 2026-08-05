@@ -24,16 +24,31 @@ const arg = (k, d) => {
 const MIN_SOLD = arg('sold', 1000);
 const MIN_REVIEWS = arg('reviews', 200);
 const MIN_RATING = arg('rating', 4.5);
+// --sg  keep only Singapore-located sellers. Measured on the first export: SG
+// sellers were proven winners 19% of the time against 5% for everyone else, and
+// they ship locally instead of the 20-25 day wait, which is what our delivery
+// promise depends on.
+const SG_ONLY = process.argv.includes('--sg');
+// --trusted  also accept a product that misses the bar IF its shop has another
+// product that cleared it. Turns "no evidence" into "no evidence yet, from a seller
+// with evidence" — 90 such products in the first export, 18 of them with 500+
+// reviews and 2k+ sales held back only by a 4.2-4.4 rating.
+const TRUST_SHOPS = process.argv.includes('--trusted');
+const TRUSTED_MIN_REVIEWS = arg('trusted-reviews', 100);
 // Price band off by default (owner's call 2026-08-05): on the first real export it
 // was rejecting 75 of 121 proven sellers — more than every other filter combined —
 // while sold/reviews/rating were doing the real work. Restore with --min=25 --max=110.
 const MIN_PRICE = arg('min', 0);
 const MAX_PRICE = arg('max', 1e9);
 
-// historicalSoldEstimated arrives as a bracket string: "1k+", "10k+", "500+".
+// historicalSoldEstimated arrives as a bracket string: "1k+", "10k+", "500+", "<100".
 function soldToNumber(v) {
   if (typeof v === 'number') return v;
-  const m = String(v || '').replace(/,/g, '').match(/([\d.]+)\s*([km]?)/i);
+  const s = String(v || '').replace(/,/g, '');
+  // "<100" means FEWER than 100 — the digits alone read as 100 and would let the
+  // deadest listings through the moment the threshold dropped to 100.
+  if (s.trim().startsWith('<')) return 0;
+  const m = s.match(/([\d.]+)\s*([km]?)/i);
   if (!m) return 0;
   return Math.round(parseFloat(m[1]) * (m[2].toLowerCase() === 'k' ? 1e3 : m[2].toLowerCase() === 'm' ? 1e6 : 1));
 }
@@ -54,8 +69,15 @@ const kept = [], reasons = {};
 const qualityPassed = [];
 const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
 
+// Shops with at least one product that clears the full bar on its own merits.
+const isSG = (r) => /^sg$|singapore/i.test(String(r.location || '').trim());
+const clears = (r) => soldToNumber(r.historicalSoldEstimated) >= MIN_SOLD
+  && (Number(r.reviewCount) || 0) >= MIN_REVIEWS && (Number(r.rating) || 0) >= MIN_RATING;
+const provenShops = new Set(items.filter(r => !r._mock && clears(r)).map(r => r.shopId));
+
 for (const it of items) {
   if (it._mock) { drop("mock row (free Apify plan returns no live data)"); continue; }
+  if (SG_ONLY && !isSG(it)) { drop('not shipped from SG'); continue; }
   const url = String(it.url || '').split('?')[0];
   if (!url) { drop('no url'); continue; }
   // Same product can arrive from several keywords and price slices.
@@ -67,9 +89,14 @@ for (const it of items) {
   const rating = Number(it.rating) || 0;
   const price = Number(it.price) || 0;
 
-  if (sold < MIN_SOLD) { drop('sold < ' + MIN_SOLD); continue; }
-  if (reviews < MIN_REVIEWS) { drop('reviews < ' + MIN_REVIEWS); continue; }
-  if (rating < MIN_RATING) { drop('rating < ' + MIN_RATING); continue; }
+  // A product from a shop that already has a winner still has to show real traction
+  // of its own — it just isn't held to the full bar on every axis at once.
+  const vouched = TRUST_SHOPS && provenShops.has(it.shopId) && reviews >= TRUSTED_MIN_REVIEWS;
+  if (!vouched) {
+    if (sold < MIN_SOLD) { drop('sold < ' + MIN_SOLD); continue; }
+    if (reviews < MIN_REVIEWS) { drop('reviews < ' + MIN_REVIEWS); continue; }
+    if (rating < MIN_RATING) { drop('rating < ' + MIN_RATING); continue; }
+  }
 
   seen.add(id);
   qualityPassed.push(price);
