@@ -21,20 +21,28 @@ const arg = (k, d) => {
 // with different numbers costs nothing and needs no new credits. The sensitivity
 // table at the end shows what each one is turning away before you decide.
 //   node filter-apify.js data.json --sold=500 --reviews=100 --rating=4.3 --min=15
+// Defaults are the settings chosen after reading the first real export
+// (2026-08-05). Rating sits at 3.8 because cheap SG furniture sellers simply do not
+// rate above 4.5 — OSUM has 19 products and not one clears it — so a 4.5 bar
+// excluded the category rather than the bad listings within it.
 const MIN_SOLD = arg('sold', 1000);
 const MIN_REVIEWS = arg('reviews', 200);
-const MIN_RATING = arg('rating', 4.5);
+const MIN_RATING = arg('rating', 3.8);
 // --sg  keep only Singapore-located sellers. Measured on the first export: SG
 // sellers were proven winners 19% of the time against 5% for everyone else, and
 // they ship locally instead of the 20-25 day wait, which is what our delivery
 // promise depends on.
-const SG_ONLY = process.argv.includes('--sg');
+const SG_ONLY = !process.argv.includes('--any-country');
 // --trusted  also accept a product that misses the bar IF its shop has another
 // product that cleared it. Turns "no evidence" into "no evidence yet, from a seller
 // with evidence" — 90 such products in the first export, 18 of them with 500+
 // reviews and 2k+ sales held back only by a 4.2-4.4 rating.
-const TRUST_SHOPS = process.argv.includes('--trusted');
-const TRUSTED_MIN_REVIEWS = arg('trusted-reviews', 100);
+// On by default, and with no review floor: a duplicate listing from a proven shop
+// is usually the SAME product with a DIFFERENT photo set — and since a listing is
+// built per usable cover, a fresh gallery is fresh inventory, not a redundant row.
+// --no-trusted turns it off.
+const TRUST_SHOPS = !process.argv.includes('--no-trusted');
+const TRUSTED_MIN_REVIEWS = arg('trusted-reviews', 0);
 // Price band off by default (owner's call 2026-08-05): on the first real export it
 // was rejecting 75 of 121 proven sellers — more than every other filter combined —
 // while sold/reviews/rating were doing the real work. Restore with --min=25 --max=110.
