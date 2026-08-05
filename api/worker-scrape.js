@@ -844,6 +844,9 @@ module.exports = async function handler(req, res) {
         if (!r || r.role !== 'cover' || !pool[r.i]) continue;
         coverMap.set(pool[r.i], coverMap.get(pool[r.i]) || !!r.needs_clean);
       }
+      // Shared across every listing of the product, deliberately: buyers need the
+      // measurements and the owner is content for the second photo to repeat. Only
+      // the cover has to be unique.
       const dims = [...new Set(roles.filter(r => r && r.role === 'dimension' && pool[r.i]).map(r => pool[r.i]))].slice(0, 1);
       if (coverMap.size) {
         // Clean flagged covers in parallel — bounds wall-time to ~one image-gen call
