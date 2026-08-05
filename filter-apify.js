@@ -24,8 +24,11 @@ const arg = (k, d) => {
 const MIN_SOLD = arg('sold', 1000);
 const MIN_REVIEWS = arg('reviews', 200);
 const MIN_RATING = arg('rating', 4.5);
-const MIN_PRICE = arg('min', 25);
-const MAX_PRICE = arg('max', 110);
+// Price band off by default (owner's call 2026-08-05): on the first real export it
+// was rejecting 75 of 121 proven sellers — more than every other filter combined —
+// while sold/reviews/rating were doing the real work. Restore with --min=25 --max=110.
+const MIN_PRICE = arg('min', 0);
+const MAX_PRICE = arg('max', 1e9);
 
 // historicalSoldEstimated arrives as a bracket string: "1k+", "10k+", "500+".
 function soldToNumber(v) {
