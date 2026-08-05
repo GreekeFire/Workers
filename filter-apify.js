@@ -25,8 +25,13 @@ const arg = (k, d) => {
 // (2026-08-05). Rating sits at 3.8 because cheap SG furniture sellers simply do not
 // rate above 4.5 — OSUM has 19 products and not one clears it — so a 4.5 bar
 // excluded the category rather than the bad listings within it.
-const MIN_SOLD = arg('sold', 1000);
-const MIN_REVIEWS = arg('reviews', 200);
+// 500 sold / 100 reviews rather than 1000 / 200: the sold field is a coarse bracket
+// where "500+" spans 500-999 actual sales, so demanding 1000 excluded that whole
+// range on no evidence, and demanding 200 reviews on top compounded it — a 4.91*
+// study table with 167 reviews and 500+ sales was being turned away. Loosening
+// either alone changed nothing; the two gates were hiding each other.
+const MIN_SOLD = arg('sold', 500);
+const MIN_REVIEWS = arg('reviews', 100);
 const MIN_RATING = arg('rating', 3.8);
 // --sg  keep only Singapore-located sellers. Measured on the first export: SG
 // sellers were proven winners 19% of the time against 5% for everyone else, and
