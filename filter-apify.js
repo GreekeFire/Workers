@@ -13,8 +13,16 @@ const path = require('path');
 const MIN_SOLD = 1000;
 const MIN_REVIEWS = 200;
 const MIN_RATING = 4.5;
-const MIN_PRICE = 25;
-const MAX_PRICE = 110;
+// Price band is the one filter worth arguing about, so it's adjustable without
+// editing the file:  node filter-apify.js data.json --min=0 --max=9999
+// Whatever it's set to, the report below shows the price spread of everything that
+// passed the quality bar — so the cost of the band is visible, not assumed.
+const arg = (k, d) => {
+  const m = process.argv.find(a => a.startsWith('--' + k + '='));
+  return m ? Number(m.split('=')[1]) : d;
+};
+const MIN_PRICE = arg('min', 25);
+const MAX_PRICE = arg('max', 110);
 
 // historicalSoldEstimated arrives as a bracket string: "1k+", "10k+", "500+".
 function soldToNumber(v) {
@@ -35,6 +43,9 @@ console.log('input rows:', items.length);
 
 const seen = new Set();
 const kept = [], reasons = {};
+// Everything that cleared sold/reviews/rating, regardless of price — this is what
+// the price band is actually costing us, and it's only visible if we keep it.
+const qualityPassed = [];
 const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
 
 for (const it of items) {
@@ -53,10 +64,12 @@ for (const it of items) {
   if (sold < MIN_SOLD) { drop('sold < ' + MIN_SOLD); continue; }
   if (reviews < MIN_REVIEWS) { drop('reviews < ' + MIN_REVIEWS); continue; }
   if (rating < MIN_RATING) { drop('rating < ' + MIN_RATING); continue; }
+
+  seen.add(id);
+  qualityPassed.push(price);
   if (price < MIN_PRICE) { drop('price < $' + MIN_PRICE); continue; }
   if (price > MAX_PRICE) { drop('price > $' + MAX_PRICE); continue; }
 
-  seen.add(id);
   kept.push({ url, name: it.name || '', price, sell: sell(price), sold, reviews, rating,
     images: Array.isArray(it.images) ? it.images.length : 0, shop: it.shopName || '' });
 }
@@ -71,6 +84,29 @@ const esc = s => '"' + String(s).replace(/"/g, '""') + '"';
 const out = ['url,name,cost_sgd,sell_sgd,sold,reviews,rating,images,shop']
   .concat(kept.map(k => [k.url, esc(k.name), k.price, k.sell, k.sold, k.reviews, k.rating, k.images, esc(k.shop)].join(',')));
 fs.writeFileSync('va-queue.csv', out.join('\n'));
+
+// What the price band costs. Everything here already sells well and is well rated —
+// the only reason it isn't in the queue is its price.
+if (qualityPassed.length) {
+  const BANDS = [[0, 15], [15, 25], [25, 50], [50, 80], [80, 110], [110, 150], [150, 300], [300, 1e9]];
+  const sellAt = c => Math.ceil(Math.max(c * 1.5, c + 25) / 10) * 10 - 1;
+  console.log('\nPRICE SPREAD of the ' + qualityPassed.length + ' products that passed sold/reviews/rating');
+  console.log('  cost band     count   would sell at   in queue?');
+  for (const [lo, hi] of BANDS) {
+    const n = qualityPassed.filter(p => p >= lo && p < hi).length;
+    if (!n) continue;
+    const inBand = lo >= MIN_PRICE && hi <= MAX_PRICE + 1;
+    const label = hi >= 1e9 ? '$' + lo + '+' : '$' + lo + '-' + hi;
+    console.log('  ' + label.padEnd(13) + String(n).padStart(5)
+      + '   $' + String(sellAt(lo)).padStart(4) + '-' + String(sellAt(Math.min(hi, lo * 2 + 50))).padEnd(5)
+      + '   ' + (inBand ? 'yes' : 'NO  <- widen --min/--max to include')
+      + '   ' + '#'.repeat(Math.round(n / qualityPassed.length * 30)));
+  }
+  const excluded = qualityPassed.filter(p => p < MIN_PRICE || p > MAX_PRICE).length;
+  console.log('  -> the $' + MIN_PRICE + '-' + MAX_PRICE + ' band excludes ' + excluded
+    + ' of ' + qualityPassed.length + ' good products ('
+    + Math.round(excluded / qualityPassed.length * 100) + '%)');
+}
 
 console.log('\nDROPPED');
 Object.entries(reasons).sort((a, b) => b[1] - a[1]).forEach(([r, n]) => console.log('  ' + String(n).padStart(5) + '  ' + r));
