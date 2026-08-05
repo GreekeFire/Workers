@@ -1,5 +1,6 @@
 // Turn an Apify shopee-scraper export into a paste-ready sourcing queue.
-//   node filter-apify.js <dataset.json|csv>
+// Takes the JSON export only (Apify: Storage -> Dataset -> Export -> JSON).
+//   node filter-apify.js <dataset.json>
 //
 // Apify returns everything the keyword matched; this keeps only what clears the
 // sourcing bar, drops what we already listed, and writes va-queue.csv — one URL per
