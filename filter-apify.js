@@ -30,7 +30,7 @@ const arg = (k, d) => {
 // range on no evidence, and demanding 200 reviews on top compounded it — a 4.91*
 // study table with 167 reviews and 500+ sales was being turned away. Loosening
 // either alone changed nothing; the two gates were hiding each other.
-const MIN_SOLD = arg('sold', 500);
+const MIN_SOLD = arg('sold', 100);
 const MIN_REVIEWS = arg('reviews', 75);
 const MIN_RATING = arg('rating', 3.8);
 // --sg  keep only Singapore-located sellers. Measured on the first export: SG
@@ -135,10 +135,26 @@ for (const it of items) {
 
   // A product from a shop that already has a winner still has to show real traction
   // of its own — it just isn't held to the full bar on every axis at once.
+  // Absolute floor, ahead of every other rule including the trusted-shop path: a
+  // listing with no reviews at all has no evidence behind it, however good the shop.
+  // Owner's rule.
+  if (reviews < 1) { drop('zero reviews'); continue; }
+
   const vouched = TRUST_SHOPS && provenShops.has(it.shopId) && reviews >= TRUSTED_MIN_REVIEWS;
   if (!vouched) {
     if (sold < MIN_SOLD) { drop('sold < ' + MIN_SOLD); continue; }
-    if (reviews < MIN_REVIEWS) { drop('reviews < ' + MIN_REVIEWS); continue; }
+    // Rating and review count are one judgement, not two gates. Reviews ARE the
+    // rating — 69 reviews at 4.91 is stronger evidence than 80 at 4.19, and the old
+    // pair of thresholds said the opposite. Shopee's own ratings API is closed to
+    // servers, so the star average is the only summary of that text we can get, and
+    // it is enough: a well-rated product needs fewer reviews to be believable.
+    //   >= 4.8  ->  40 reviews
+    //   >= 4.5  ->  60 reviews
+    //   else    ->  MIN_REVIEWS (75)
+    const needed = rating >= 4.8 ? Math.min(40, MIN_REVIEWS)
+      : rating >= 4.5 ? Math.min(60, MIN_REVIEWS)
+        : MIN_REVIEWS;
+    if (reviews < needed) { drop('reviews < ' + needed + ' (at ' + rating.toFixed(1) + '*)'); continue; }
     if (rating < MIN_RATING) { drop('rating < ' + MIN_RATING); continue; }
   }
 
