@@ -13,6 +13,11 @@ const { sb, SERVICE_KEY } = require('../lib/sb');
 
 const PRICE_BAND_MIN = 25;
 const PRICE_BAND_MAX = 300;
+// Refuse anything whose source delivery estimate reaches this many days — that is
+// what a pre-order or a China shipment looks like, and neither can back the
+// "Free Doorstep Delivery | N Working Days" the listing promises. The promise adds
+// a day at each end, so 14 here means never promising beyond about a fortnight.
+const MAX_EDT_DAYS = Number(process.env.MAX_EDT_DAYS || 14);
 // ALLOW_DUPLICATES: when 'true', the same Shopee URL can be listed more than once
 // (needed for the duplicate-listing / repost strategy). Off by default — flip the
 // Vercel env var to enable. Pair with per-repost image variation to avoid identical clones.
@@ -756,6 +761,23 @@ module.exports = async function handler(req, res) {
     // No shipping estimate from the source (usually "Seller's own delivery") —
     // listing goes out date-free; VA should confirm timing before promising one.
     if (!(Number(p.edt_max) >= 1)) warnings.push('no-edt');
+  }
+
+  // Pre-orders are refused outright. Nothing in the sourcing data exposes them —
+  // Apify has no shipping field and titles rarely say — but the source's own
+  // delivery estimate does, and a listing promising "Free Doorstep Delivery |
+  // N Working Days" cannot be fulfilled from stock that hasn't been made yet.
+  // Owner's rule: no pre-order items.
+  const edtMax = Number(p.edt_max);
+  if (!isRefresh && edtMax >= MAX_EDT_DAYS) {
+    await sb.from('scrape_inbox').update({ consumed: true }).eq('id', row.id);
+    return res.json({
+      ok: false,
+      error: 'lead-time-too-long',
+      edt_max: edtMax,
+      limit: MAX_EDT_DAYS,
+      skipped: true,
+    });
   }
 
   // 5. Sell price

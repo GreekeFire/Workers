@@ -31,7 +31,7 @@ const arg = (k, d) => {
 // study table with 167 reviews and 500+ sales was being turned away. Loosening
 // either alone changed nothing; the two gates were hiding each other.
 const MIN_SOLD = arg('sold', 500);
-const MIN_REVIEWS = arg('reviews', 100);
+const MIN_REVIEWS = arg('reviews', 75);
 const MIN_RATING = arg('rating', 3.8);
 // --sg  keep only Singapore-located sellers. Measured on the first export: SG
 // sellers were proven winners 19% of the time against 5% for everyone else, and
