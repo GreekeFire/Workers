@@ -8,13 +8,21 @@ export default async function handler(req) {
   const n   = searchParams.get('n')   || '1';
 
   // Allow any subdomain of known Shopee CDN domains
-  if (!url.match(/^https?:\/\/[a-zA-Z0-9.-]+(shopee\.sg|susercontent\.com|shopeemobile\.com)\//)) {
+  const isShopee = /^https?:\/\/[a-zA-Z0-9.-]+(shopee\.sg|susercontent\.com|shopeemobile\.com)\//.test(url);
+  // Covers that were cleaned or restaged live in our own Supabase bucket, not on
+  // Shopee — without this every such listing 400s on "Download all". Pinned to the
+  // public covers path on our project so this stays a proxy for our own files and
+  // not an open one.
+  const isOwnStorage = /^https:\/\/tzwzmzabjmsocnxdtxqx\.supabase\.co\/storage\/v1\/(object|render\/image)\/public\/covers\//.test(url);
+  if (!isShopee && !isOwnStorage) {
     return new Response('Invalid URL', { status: 400 });
   }
 
   try {
     const response = await fetch(url, {
-      headers: { 'Referer': 'https://shopee.sg/' },
+      // The referer is what gets past Shopee's hotlink protection; our own bucket
+      // neither needs nor wants it.
+      headers: isShopee ? { 'Referer': 'https://shopee.sg/' } : {},
     });
     if (!response.ok) return new Response('Image fetch failed', { status: 502 });
 
