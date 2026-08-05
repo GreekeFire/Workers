@@ -1,7 +1,6 @@
 {
   "country": "SG",
   "maxItems": 1000,
-  "timeoutSecs": 200,
   "priceSlicing": false,
   "keywords": [
     "study table",
