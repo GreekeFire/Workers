@@ -38,6 +38,7 @@ const kept = [], reasons = {};
 const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
 
 for (const it of items) {
+  if (it._mock) { drop("mock row (free Apify plan returns no live data)"); continue; }
   const url = String(it.url || '').split('?')[0];
   if (!url) { drop('no url'); continue; }
   // Same product can arrive from several keywords and price slices.
@@ -60,9 +61,11 @@ for (const it of items) {
     images: Array.isArray(it.images) ? it.images.length : 0, shop: it.shopName || '' });
 }
 
-// Best first: proven demand, and photo-rich products yield more listings per scrape
-// because every usable cover becomes its own listing.
-kept.sort((a, b) => (b.images - a.images) || (b.sold - a.sold));
+// Best first: proven demand, then social proof. NOT by image count — the actor
+// returns at most 5 image URLs per product, so it cannot tell a 27-image listing
+// from an 81-image one, which is the difference between 11 covers and 47. Photo
+// richness only becomes visible once our own scraper opens the product page.
+kept.sort((a, b) => (b.sold - a.sold) || (b.reviews - a.reviews));
 
 const esc = s => '"' + String(s).replace(/"/g, '""') + '"';
 const out = ['url,name,cost_sgd,sell_sgd,sold,reviews,rating,images,shop']
@@ -75,7 +78,7 @@ console.log('\nKEPT:', kept.length, 'products -> va-queue.csv');
 if (kept.length) {
   const med = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
   console.log('median cost $' + med(kept.map(k => k.price)).toFixed(2) + ' -> sells at $' + med(kept.map(k => k.sell)));
-  console.log('\nTOP 10 (most images first — more covers, more listings)');
+  console.log('\nTOP 10 BY SOLD VOLUME');
   kept.slice(0, 10).forEach(k => console.log('  ' + String(k.sold).padStart(6) + ' sold  $' + String(k.price).padStart(6)
-    + ' -> $' + String(k.sell).padStart(3) + '  ' + k.images + ' imgs  ' + k.name.slice(0, 48)));
+    + ' -> $' + String(k.sell).padStart(3) + '  ' + String(k.reviews).padStart(5) + ' rev  ' + k.name.slice(0, 44)));
 }
