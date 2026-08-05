@@ -121,10 +121,15 @@ for (const it of items) {
 // richness only becomes visible once our own scraper opens the product page.
 kept.sort((a, b) => (b.sold - a.sold) || (b.reviews - a.reviews));
 
+// Output path is a flag so a comparison run can't silently clobber the real queue —
+// which it did: a loop testing --rating=4.5 left a 99-row file behind that then got
+// archived and treated as the live queue.
+//   node filter-apify.js data.json --rating=4.5 --out=/tmp/compare.csv
+const OUT = (process.argv.find(a => a.startsWith('--out=')) || '--out=va-queue.csv').split('=')[1];
 const esc = s => '"' + String(s).replace(/"/g, '""') + '"';
 const out = ['url,name,cost_sgd,sell_sgd,sold,reviews,rating,images,shop']
   .concat(kept.map(k => [k.url, esc(k.name), k.price, k.sell, k.sold, k.reviews, k.rating, k.images, esc(k.shop)].join(',')));
-fs.writeFileSync('va-queue.csv', out.join('\n'));
+fs.writeFileSync(OUT, out.join('\n'));
 
 // What the price band costs. Everything here already sells well and is well rated —
 // the only reason it isn't in the queue is its price.
@@ -199,7 +204,7 @@ if (qualityPassed.length) {
 
 console.log('\nDROPPED');
 Object.entries(reasons).sort((a, b) => b[1] - a[1]).forEach(([r, n]) => console.log('  ' + String(n).padStart(5) + '  ' + r));
-console.log('\nKEPT:', kept.length, 'products -> va-queue.csv');
+console.log('\nKEPT:', kept.length, 'products ->', OUT);
 if (kept.length) {
   const med = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
   console.log('median cost $' + med(kept.map(k => k.price)).toFixed(2) + ' -> sells at $' + med(kept.map(k => k.sell)));
