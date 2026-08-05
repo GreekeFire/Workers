@@ -103,7 +103,13 @@ const NEAR = process.argv.includes('--no-malaysia')
   : /^sg$|singapore|malay|malás/i;
 const explicitlyAbroad = (r) => OVERSEAS.test(String(r.location || '').trim());
 const explicitlyNear = (r) => NEAR.test(String(r.location || '').trim());
-const claimsSG = (r) => explicitlyNear(r) || SG_TITLE.test(String(r.name || ''));
+// Sellers advertise Singapore in three places, not one: the location field, the
+// product title, and — easily missed — the SHOP NAME. "SAURON.SG", "Simple .SG"
+// and "JIJI.SG Official Store" were all being treated as unknown origin.
+const SG_SHOP = /\.sg\b|\bsg\b|singapore/i;
+const claimsSG = (r) => explicitlyNear(r)
+  || SG_TITLE.test(String(r.name || ''))
+  || SG_SHOP.test(String(r.shopName || ''));
 // A shop that says SG on one listing is SG on the others too. SEXY MAMA has one
 // listing reading "in sg stock" and another "In stock hdb bto" — same seller, and
 // the location field is blank on both.
