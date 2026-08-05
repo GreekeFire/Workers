@@ -83,7 +83,18 @@ const qualityPassed = [];
 const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
 
 // Shops with at least one product that clears the full bar on its own merits.
-const isSG = (r) => /^sg$|singapore/i.test(String(r.location || '').trim());
+// Reject only sellers Shopee says are ABROAD. The location field is empty on a third
+// of rows, and treating "unknown" as "overseas" threw away 332 products — including
+// the Xpanse desk already listed on Carousell, whose title literally reads
+// "【SG Stock】". Where the field is blank, the title usually declares it.
+const OVERSEAS = /china|mainland|malay|malás|indon|tailand|thai|vietnam|viet/i;
+const SG_TITLE = /\bsg\b|singapore|local stock|ready stock|sg stock/i;
+const isSG = (r) => {
+  const loc = String(r.location || '').trim();
+  if (OVERSEAS.test(loc)) return false;            // explicitly abroad
+  if (/^sg$|singapore/i.test(loc)) return true;    // explicitly local
+  return SG_TITLE.test(String(r.name || ''));      // unstated: believe the listing
+};
 const clears = (r) => soldToNumber(r.historicalSoldEstimated) >= MIN_SOLD
   && (Number(r.reviewCount) || 0) >= MIN_REVIEWS && (Number(r.rating) || 0) >= MIN_RATING;
 const provenShops = new Set(items.filter(r => !r._mock && clears(r)).map(r => r.shopId));
