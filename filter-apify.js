@@ -7,20 +7,22 @@
 const fs = require('fs');
 const path = require('path');
 
-// The bar. sold/reviews are proof it sells; the price band is set by our own markup —
-// max(cost x 1.5, cost + 25) means anything under ~$25 gets a 3-5x markup a buyer can
-// see through, and over ~$110 the sell price leaves the range that moves on Carousell.
-const MIN_SOLD = 1000;
-const MIN_REVIEWS = 200;
-const MIN_RATING = 4.5;
-// Price band is the one filter worth arguing about, so it's adjustable without
-// editing the file:  node filter-apify.js data.json --min=0 --max=9999
-// Whatever it's set to, the report below shows the price spread of everything that
-// passed the quality bar — so the cost of the band is visible, not assumed.
 const arg = (k, d) => {
   const m = process.argv.find(a => a.startsWith('--' + k + '='));
   return m ? Number(m.split('=')[1]) : d;
 };
+
+// The bar. sold/reviews are proof it sells; the price band comes from our markup —
+// max(cost x 1.5, cost + 25) means anything under ~$25 gets a 3-5x markup a buyer can
+// see through, and over ~$110 the sell price leaves the range that moves on Carousell.
+//
+// Every threshold is a flag, because filtering happens AFTER the scrape: re-running
+// with different numbers costs nothing and needs no new credits. The sensitivity
+// table at the end shows what each one is turning away before you decide.
+//   node filter-apify.js data.json --sold=500 --reviews=100 --rating=4.3 --min=15
+const MIN_SOLD = arg('sold', 1000);
+const MIN_REVIEWS = arg('reviews', 200);
+const MIN_RATING = arg('rating', 4.5);
 const MIN_PRICE = arg('min', 25);
 const MAX_PRICE = arg('max', 110);
 
@@ -106,6 +108,54 @@ if (qualityPassed.length) {
   console.log('  -> the $' + MIN_PRICE + '-' + MAX_PRICE + ' band excludes ' + excluded
     + ' of ' + qualityPassed.length + ' good products ('
     + Math.round(excluded / qualityPassed.length * 100) + '%)');
+}
+
+// How much does each threshold actually cost? Re-run the whole filter at a range of
+// settings so the trade-off is visible in one go, instead of guessing at a number
+// and re-running by hand.
+{
+  const rows = items.filter(it => !it._mock && it.url);
+  const uniq = new Map();
+  for (const it of rows) {
+    const u = String(it.url).split('?')[0];
+    const id = (u.match(/-i\.(\d+)\.(\d+)/) || u.match(/\/product\/(\d+)\/(\d+)/) || []).slice(1).join('.') || u;
+    if (!uniq.has(id)) uniq.set(id, {
+      sold: soldToNumber(it.historicalSoldEstimated), reviews: Number(it.reviewCount) || 0,
+      rating: Number(it.rating) || 0, price: Number(it.price) || 0,
+    });
+  }
+  const all = [...uniq.values()];
+  const count = (s, r, g, lo, hi) =>
+    all.filter(x => x.sold >= s && x.reviews >= r && x.rating >= g && x.price >= lo && x.price <= hi).length;
+
+  console.log('\nHOW MANY PRODUCTS AT EACH SETTING  (of ' + all.length + ' unique)');
+  console.log('  preset      sold  reviews  rating   price      qualify');
+  const presets = [
+    ['strict', 1000, 200, 4.5, 25, 110],
+    ['current', MIN_SOLD, MIN_REVIEWS, MIN_RATING, MIN_PRICE, MAX_PRICE],
+    ['relaxed', 500, 100, 4.3, 20, 150],
+    ['loose', 100, 50, 4.0, 15, 200],
+    ['any price', MIN_SOLD, MIN_REVIEWS, MIN_RATING, 0, 1e9],
+    ['no filter', 0, 0, 0, 0, 1e9],
+  ];
+  for (const [name, s, r, g, lo, hi] of presets) {
+    const n = count(s, r, g, lo, hi);
+    console.log('  ' + name.padEnd(11) + String(s).padStart(5) + String(r).padStart(9)
+      + String(g).padStart(8) + ('  $' + lo + '-' + (hi >= 1e9 ? 'any' : hi)).padEnd(12)
+      + String(n).padStart(6) + '  ' + '#'.repeat(Math.round(n / Math.max(all.length, 1) * 30)));
+  }
+  // Which single threshold is doing the most damage — relax that one first.
+  console.log('\n  loosening ONE filter at a time, from current:');
+  const base = count(MIN_SOLD, MIN_REVIEWS, MIN_RATING, MIN_PRICE, MAX_PRICE);
+  const solo = [
+    ['sold -> 500', count(500, MIN_REVIEWS, MIN_RATING, MIN_PRICE, MAX_PRICE)],
+    ['reviews -> 100', count(MIN_SOLD, 100, MIN_RATING, MIN_PRICE, MAX_PRICE)],
+    ['rating -> 4.3', count(MIN_SOLD, MIN_REVIEWS, 4.3, MIN_PRICE, MAX_PRICE)],
+    ['price -> any', count(MIN_SOLD, MIN_REVIEWS, MIN_RATING, 0, 1e9)],
+  ];
+  for (const [label, n] of solo) {
+    console.log('    ' + label.padEnd(16) + String(n).padStart(5) + '  (' + (n - base >= 0 ? '+' : '') + (n - base) + ')');
+  }
 }
 
 console.log('\nDROPPED');
