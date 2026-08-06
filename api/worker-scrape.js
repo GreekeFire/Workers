@@ -26,11 +26,15 @@ const ALLOW_DUPLICATES = process.env.ALLOW_DUPLICATES === 'true';
 // (needs a bg-removal API + result hosting) — see swapCoverBackground note below.
 const IMAGE_PICK = process.env.IMAGE_PICK === 'true';
 // COVER_SPLIT: classify the seller's image pool (gallery + description images) and
-// emit ONE listing per usable cover image — colour-agnostic, the count is however
-// many clean covers we found. This is the default listing model; set COVER_SPLIT=false
-// to fall back to the older variant/price split. Needs OPENROUTER_API_KEY — without it
-// classification returns null and we fall through to the variant/single paths anyway.
-const COVER_SPLIT = process.env.COVER_SPLIT !== 'false';
+// emit ONE listing per usable cover image. Off by default since 2026-08-06 — the
+// variant/price split below is the listing model now. Cover split prices every
+// listing at max(all variants), which put a mattress whose entry size costs $53.90
+// on sale at $209, and it shows the same colour whatever variant the buyer picks.
+// Variant split gives each listing its OWN price and its own swatch cover, which is
+// both honest merchandising and better economics. Set COVER_SPLIT=true to restore it.
+// Needs OPENROUTER_API_KEY when on — without it classification returns null and we
+// fall through to the variant/single paths anyway.
+const COVER_SPLIT = process.env.COVER_SPLIT === 'true';
 
 // ── AI prompts (server-side only — no other copy exists) ────────────────────
 
