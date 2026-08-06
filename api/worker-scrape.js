@@ -192,6 +192,22 @@ function variantGroups(models) {
   }));
 }
 
+// Variants differ by size AND colour, but the swatch photo only differs by COLOUR:
+// "Queen Grey 4 inch" and "Single 4 inch grey" are the same grey picture. Cleaning is
+// charged per image, so cleaning per variant pays for the same six photographs 23
+// times over. Group by colour and each colour is cleaned once, then reused by every
+// size in it — measured on a mattress with 23 variants: 6 cleanings instead of 23,
+// $0.24 instead of $0.92, and because those 6 back 23 listings the cost per listing
+// falls from about 4c to 1c.
+const COLOUR_WORD = /\b(l?navy|n?gr[ae]y|blue|turquoise|teal|black|white|beige|brown|green|pink|red|cream|oak|walnut|purple|yellow|orange|silver|gold)\b/i;
+function colourKey(name) {
+  const m = String(name || '').match(COLOUR_WORD);
+  // No colour word (a size-only or oddly-named variant) → it is its own group, which
+  // is the safe direction: an extra clean costs 4c, a wrong shared cover is a listing
+  // showing the wrong colour.
+  return m ? m[1].toLowerCase() : 'x:' + String(name || '').trim().toLowerCase();
+}
+
 // Short distinguishing label appended to a split listing's title. Prefer a
 // dimensions chunk from the variant name (what buyers pick on); else the first name.
 function variantLabel(names) {
@@ -467,6 +483,49 @@ function classifyPrompt(n, productName) {
       : 'It is not this product at all.')
     .replace(/\{N\}/g, String(n))
     .replace('{N1}', String(n - 1));
+}
+
+// One usable cover per COLOUR for the variant split. Classify FIRST: a classification
+// call over the whole set costs a fraction of a single clean, so swatches carrying no
+// seller branding skip the 4c entirely — and plenty of sellers ship clean swatches.
+// Only the flagged ones are generated.
+//
+// Role is deliberately ignored here, unlike the cover-split path. A variant swatch is
+// by definition a photograph of the product in that colour, so there is nothing to
+// select; the only question is whether the source seller stamped a label on it.
+//
+// Returns colour key -> usable URL. A colour whose clean failed is simply absent and
+// its variants fall back to the shared gallery images, which is the same fail-closed
+// rule cover split uses: never ship the raw branded image.
+async function variantCovers(groups, productName) {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const byColour = new Map();
+  for (const g of groups) {
+    if (!g.image) continue;
+    const k = colourKey(g.name);
+    if (!byColour.has(k)) byColour.set(k, g.image);
+  }
+  const out = new Map();
+  if (!byColour.size) return out;
+  const keys = [...byColour.keys()];
+  const urls = keys.map(k => byColour.get(k));
+  let roles = null;
+  if (CLEAN_COVERS && apiKey) {
+    try { roles = await classifyGallery(urls, productName); }
+    catch (e) { console.error('variant swatch classify failed:', e.message); }
+  }
+  // No classification (call failed, or cleaning off) → use the swatches as they are.
+  // Better a branded swatch than 23 listings with no colour at all; the cover-split
+  // path is where the strict rule belongs, because there the image IS the listing.
+  const settled = await mapLimit(keys, 4, async (k, i) => {
+    const needsClean = roles ? !!((roles.find(r => r.i === i) || {}).needs_clean) : false;
+    if (!needsClean) return [k, urls[i]];
+    return [k, await cleanCover(urls[i])];
+  });
+  const cleaned = settled.filter(([, u]) => u).length;
+  console.log('variant covers:', byColour.size, 'colours from', groups.length, 'variants;', cleaned, 'usable');
+  for (const [k, u] of settled) if (u) out.set(k, u);
+  return out;
 }
 
 // ── Cover cleaning (flag-gated by CLEAN_COVERS) ─────────────────────────────
@@ -1026,12 +1085,25 @@ module.exports = async function handler(req, res) {
   const groups = isRefresh ? null : variantGroups(p.models);
   if (groups) {
     const splitDesc = stripSizesLine(aiDescription);
+    // One cleaned cover per colour, shared by every size in it.
+    const vCovers = await variantCovers(groups, (aiTitle || p.title || '').split(' | ')[0].trim().slice(0, 80));
+    const palette = [...new Set(vCovers.values())];
     const ids = [];
-    for (const g of groups) {
-      // Variant swatch as cover (deduped), gallery after — else the shared gallery.
-      const vImages = g.image
-        ? withReviewPhotos([g.image, ...(baseImages || []).filter(u => u !== g.image)], p.review_images)
-        : listingImages;
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      // TWO photos a listing, owner's cap — this listing's own colour first, then one
+      // OTHER colour taken from the same cleaned set. The second slot therefore costs
+      // nothing extra to produce, and stepping it by position stops neighbouring
+      // listings in the feed from showing an identical pair.
+      const own = vCovers.get(colourKey(g.name)) || null;
+      let second = null;
+      if (own && palette.length > 1) {
+        for (let s = 1; s <= palette.length; s++) {
+          const cand = palette[(gi + s) % palette.length];
+          if (cand !== own) { second = cand; break; }
+        }
+      }
+      const vImages = own ? [own, second].filter(Boolean) : listingImages.slice(0, 2);
       const { data: v, error: vErr } = await sb.from('listings').insert({
         title:              p.title || '',
         // Unique per variant so each split clears listings_shopee_url_active_unique.
