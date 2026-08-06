@@ -353,25 +353,33 @@
   // Buyer-uploaded review photos — real, unique, un-watermarked cover candidates
   // (and colour-diverse: buyers photograph the variant they bought). Pure API
   // (item/get_ratings, media-only) so no DOM/lazy-load. Capped to keep it bounded.
+  // Returns { images, status } — an empty list alone is a lie. 2026-08-06: the same
+  // product scraped minutes apart gave 0 images in Chrome and 60 in Firefox. Chrome's
+  // third-party cookie blocking kills the credentials:'include' call and Shopee answers
+  // error 90309999 / is_login false, but the payload recorded review_images: 0 both
+  // times, so we concluded the product had no review photos. status says which it was.
   const harvestReviewImages = async (url) => {
     const m = (url || '').match(/i\.(\d+)\.(\d+)/) || (url || '').match(/\/product\/(\d+)\/(\d+)/);
-    if (!m) return [];
+    if (!m) return { images: [], status: 'error' };   // no ids to page with — not the same as "no photos"
     const shopid = m[1], itemid = m[2];
     const CAP = 60;
     const out = [], seen = new Set();
+    let status = 'empty';                             // only survives if page ONE came back with no ratings
     try {
       // filter=3 = reviews WITH MEDIA (photos/video); filter=1 was "with comment"
       // (mostly text). limit=50 max per page. A couple of pages fills the cap.
       for (let offset = 0; offset < 300 && out.length < CAP; offset += 50) {
         const ctrl = new AbortController();
         const to = setTimeout(() => ctrl.abort(), 6000);
-        let d;
+        let body;
         try {
           const r = await fetch('https://shopee.sg/api/v4/item/get_ratings?filter=3&type=0&itemid=' + itemid + '&shopid=' + shopid + '&limit=50&offset=' + offset, {
             credentials: 'include', headers: { accept: 'application/json' }, signal: ctrl.signal,
           });
-          d = (await r.json()).data;
+          body = await r.json();
         } finally { clearTimeout(to); }
+        if (body && body.error === 90309999) { status = 'blocked'; break; }   // anti-bot / not logged in, verified live
+        const d = body && body.data;
         const ratings = (d && d.ratings) || [];
         if (!ratings.length) break;
         for (const rt of ratings) {
@@ -391,8 +399,12 @@
           if (out.length >= CAP) break;
         }
       }
-    } catch (e) { /* reviews optional */ }
-    return out;
+    } catch (e) {                                     // reviews stay optional — never break the scrape
+      status = e && e.name === 'AbortError' ? 'timeout' : 'error';
+    }
+    // Anything collected means the call worked, including when a later page ends
+    // pagination normally; only a run that got nothing reports why it got nothing.
+    return { images: out, status: out.length ? 'ok' : status };
   };
 
   const cur = /i\.\d+\.\d+|\/product\/\d+\/\d+/.test(location.href) ? location.href.split('?')[0] : '';
@@ -447,7 +459,9 @@
         const dom = await harvestDescImages(dl.images, dl.description);       // page path only — needs the DOM
         dl.desc_images = [...new Set([...(dl.rich_images || []), ...dom])];
         delete dl.rich_images;
-        dl.review_images = await harvestReviewImages(dl.url);                 // pure API — works on both paths
+        const { images: revImgs, status: revStatus } = await harvestReviewImages(dl.url);  // pure API — works on both paths
+        dl.review_images = revImgs;
+        dl.review_status = revStatus;                                         // 'empty' is the only one that means "genuinely none"
         p = await post(dl); via = 'page';
       }
       else { p = await send(cur); via = 'api'; }

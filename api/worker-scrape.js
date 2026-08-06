@@ -25,8 +25,8 @@ const ALLOW_DUPLICATES = process.env.ALLOW_DUPLICATES === 'true';
 // flip the Vercel env var to test. Cover background-swap is a separate, later step
 // (needs a bg-removal API + result hosting) — see swapCoverBackground note below.
 const IMAGE_PICK = process.env.IMAGE_PICK === 'true';
-// COVER_SPLIT: classify the full image pool (gallery + description + review photos)
-// and emit ONE listing per usable cover image — colour-agnostic, the count is however
+// COVER_SPLIT: classify the seller's image pool (gallery + description images) and
+// emit ONE listing per usable cover image — colour-agnostic, the count is however
 // many clean covers we found. This is the default listing model; set COVER_SPLIT=false
 // to fall back to the older variant/price split. Needs OPENROUTER_API_KEY — without it
 // classification returns null and we fall through to the variant/single paths anyway.
@@ -196,28 +196,29 @@ function variantLabel(names) {
   return (dims ? dims[0] : names[0]).replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
-// Distinct title per same-product cover-split listing: rotate the pipe segments so
-// each listing leads with a different phrase (the feed truncates ~40 chars, so the
-// visible title differs) and the whole string is unique — avoids same-account clone
-// flagging without a second AI call. k=0 (or a rotation that lands back at 0) is a
-// no-op returning the title unchanged.
+// Bracketed tag prefixes, rotated so each listing of the same product opens with a
+// different one. Lifted from thelivinghub, the competitor being modelled: he never
+// reorders the product name out of position one, he varies a tag in front of it.
+const TAGS = ['[READY STOCK]','[NEW IN]','[VALUE BUY]','[LAST FEW]','[MUST HAVE]',
+              '[SELLING FAST]','[CUSTOMER FAV]','[FAST DISPATCH]','[EXCLUSIVE]','[TOP RATED]'];
+
+// Distinct title per same-product listing, without a second AI call. Rotating ALL
+// the pipe segments (what this did until 2026-08-06) cost more than it bought: of 7
+// listings for one foldable mattress only ONE led with "Foldable Foam Mattress" —
+// the rest opened with "Anti Dust Mite", "3 Inch Thickness", "High Density Firm".
+// The feed truncates the title around 40 chars, so six of seven read as a spec
+// fragment that never says what the item is. So the lead segment — the product name
+// — now never moves; the tail rotates and a rotating tag goes in front, which is
+// enough to keep every string unique. His live titles run ~210 chars, so the extra
+// tag costs nothing.
 function rotateTitle(title, k) {
-  const parts = (title || '').split(' | ').map(s => s.trim()).filter(Boolean);
-  const n = parts.length;
-  if (n < 2 || !k) return title;
-  const r = k % n;
-  const wraps = Math.floor(k / n);
-  const out = [...parts.slice(r), ...parts.slice(0, r)];
-  // Past k = n a plain rotation repeats itself: a 9-segment title gave listing 10
-  // the same string as listing 1. Once wrapped, keep the lead segment (it is what
-  // the feed shows) and rotate the tail instead, which yields n x (n-1) distinct
-  // titles rather than n.
-  if (wraps) {
-    const tail = out.slice(1);
-    const c = wraps % tail.length;
-    return [out[0], ...tail.slice(c), ...tail.slice(0, c)].join(' | ');
-  }
-  return out.join(' | ');
+  const seg = (title || '').split(' | ').map(s => s.trim()).filter(Boolean);
+  if (seg.length < 2) return TAGS[k % TAGS.length] + ' ' + title;
+  const lead = seg[0];                     // product name — never moves
+  const tail = seg.slice(1);
+  const r = k % tail.length;
+  const rotated = tail.slice(r).concat(tail.slice(0, r));
+  return TAGS[k % TAGS.length] + ' ' + [lead, ...rotated].join(' | ');
 }
 
 // A split listing IS a single variant — drop the "📦 Sizes/Finishes available"
@@ -391,11 +392,25 @@ async function pickCoverAndDims(images) {
   return [images[0], dimsIdx > 0 ? images[dimsIdx] : images[1]];
 }
 
+// [cover, up to 2 buyer review photos, whatever else the path already picked].
+// Review photos are barred from the cover pool (2026-08-06: 43 listings shipped with
+// covers showing mattresses on tiled HDB floors beside slippers, cardboard boxes and
+// a bathroom scale, under a description promising "Brand new and unused"), but as
+// SECOND and third photos the same shots are useful — they are the only proof the
+// thing exists outside a studio. Same two on every listing of the product; only the
+// cover has to be unique.
+function withReviewPhotos(images, reviews) {
+  if (!images || !images.length) return images;
+  const extra = (Array.isArray(reviews) ? reviews : [])
+    .filter(u => u && u !== images[0]).slice(0, 2);
+  return [images[0], ...extra, ...images.slice(1)];
+}
+
 // One Haiku vision call over the whole pool (gallery + description images) → a role
 // per image. Everything after this is deterministic (cover-per-colour, dims, skip),
 // no more AI. Shopee CDN blocks hotlinking, so images fetch with the referer.
 const CLASSIFY_PROMPT = `You are picking listing cover photos for an online furniture shop. You will see {N} photos (numbered 0..{N1}).
-
+{ITEM_LINE}
 Judge EVERY image against the fixed standard below, on its own merits. Do NOT grade on a curve or compare images to each other — if all {N} images are poor, then all {N} are "skip". A batch with no good photo is a normal, expected outcome.
 
 THE STANDARD for "cover": would a shopper scrolling a marketplace feed stop at this photo and immediately understand what is being sold? It must be upright, sharp, and show the WHOLE product large and unobstructed.
@@ -408,7 +423,7 @@ REJECT as "skip" — any ONE of these is disqualifying:
 - Cluttered or messy: cables, laundry, boxes, food, clutter on or around the product, or a busy background that competes with it.
 - Built from two or more DIFFERENT SCENES of comparable size stacked or tiled together (e.g. the product on top, an unrelated photo below), OR its main subject is a diagram, chart, 3D render or spec illustration rather than the actual product. Nothing usable survives once the graphics come off. A single scene with a small inset thumbnail in one corner is NOT a composite — that inset can be removed.
 - A person is the main subject, or a hand/body blocks the product.
-- It is not this product at all.
+- {ITEM_RULE}
 
 OVERLAID TEXT IS NOT A REASON TO SKIP. Headline text, marketing copy, a price or promo banner, a watermark, a seller/shop badge, or a small inset detail box in a corner can all be removed afterwards. If a SINGLE photo underneath shows the whole product upright and clearly, it is a "cover" with "needs_clean": true — no matter how much text sits on top of it. Only reject it when the image is a multi-panel composite or is mostly graphics, so that removing the text would leave nothing worth showing.
 
@@ -424,6 +439,31 @@ WHEN IN DOUBT, CHOOSE "skip". Every "cover" becomes a real listing that shoppers
 Output ONLY a JSON array of exactly {N} objects, one per image, in order: {"i":0,"role":"cover","needs_clean":false}. No prose, no code fences.`;
 
 const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'google/gemini-2.5-flash';
+
+// The classifier only ever sees pixels, so "it is not this product at all" was an
+// unenforceable rule — nothing told it what the product WAS. Two covers shipped on
+// 2026-08-06 that prove the gap: the mattress zipped inside its carry bag (packaging,
+// not the item) and the mattress wrapped in plastic in a car boot in a wet carpark (a
+// "fits in your car" demo). Both are sharp, well-lit, single-subject and upright, so
+// no other rejection rule touched them. Naming the item is what makes the rule bite.
+// The rule stays RELATIVE to the named item and must never become a blanket "reject
+// packaging": this queue also holds a Foldable Storage Box Organizer, a Foldable
+// Wardrobe (a fabric wardrobe looks exactly like a zipped bag), a Wardrobe Divider
+// Organizer and mattress protectors shot in their retail sleeve — for those the
+// bag-shaped object IS what is being sold. No name available (older payload, AI copy
+// failed) → both placeholders collapse back to the pre-2026-08-06 wording.
+function classifyPrompt(n, productName) {
+  const name = String(productName || '').trim();
+  return CLASSIFY_PROMPT
+    .replace('{ITEM_LINE}', name
+      ? `\nThe item being sold is: ${name}. Judge every photo against THAT item.\n`
+      : '')
+    .replace('{ITEM_RULE}', name
+      ? `It is not a photo of ${name} itself: it shows the box, packaging or carry bag ${name} comes in with the item itself not visible, or it demonstrates ${name} somewhere else (loaded into a car boot, being carried, on a trolley) instead of photographing the item. If ${name} IS itself a bag, box, case, cover or sleeve, then a photo of that object is the product and is fine — judge against the named item, never against the shape.`
+      : 'It is not this product at all.')
+    .replace(/\{N\}/g, String(n))
+    .replace('{N1}', String(n - 1));
+}
 
 // ── Cover cleaning (flag-gated by CLEAN_COVERS) ─────────────────────────────
 // Strip marketing overlays (seller logo, shop badge, promo text/stickers) off a
@@ -539,8 +579,8 @@ async function cleanCover(url) {
   finally { clearTimeout(to); }
 }
 
-// Big pools (a product with many review photos easily passes 80 images) are split
-// into batches classified IN PARALLEL — one 80-image request would be a ~30MB body
+// Big pools (a seller with a long picture-story description easily passes 80 images)
+// are split into batches classified IN PARALLEL — one 80-image request would be a ~30MB body
 // and would blow the function timeout. Batches also fail independently: one bad
 // batch loses its own images, not the whole classification.
 const CLASSIFY_BATCH = Number(process.env.CLASSIFY_BATCH || 20);
@@ -572,7 +612,7 @@ async function fetchDataUri(url) {
 // Classify one batch. `pairs` is [{uri, idx}] — images are numbered 0..n-1 inside
 // the batch (the prompt is written that way) and mapped back to their pool index
 // on the way out, so the caller can hand batches any subset in any order.
-async function classifyBatch(pairs, apiKey) {
+async function classifyBatch(pairs, apiKey, productName) {
   // OpenRouter is OpenAI-compatible: one user message, content = text + image_url.
   const content = [];
   pairs.forEach((p, n) => {
@@ -580,7 +620,7 @@ async function classifyBatch(pairs, apiKey) {
     content.push({ type: 'text', text: `Image ${n}:` });
     content.push({ type: 'image_url', image_url: { url: p.uri } });
   });
-  content.push({ type: 'text', text: CLASSIFY_PROMPT.replace(/\{N\}/g, String(pairs.length)).replace('{N1}', String(pairs.length - 1)) });
+  content.push({ type: 'text', text: classifyPrompt(pairs.length, productName) });
   try {
     const resp = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -599,20 +639,20 @@ async function classifyBatch(pairs, apiKey) {
   } catch (e) { console.error('classify batch failed:', e.message); return []; }
 }
 
-async function classifyGallery(images) {
+async function classifyGallery(images, productName) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey || !images || !images.length) return null;
   const imgs = images.slice(0, CLASSIFY_MAX);
   const uris = await mapLimit(imgs, 8, fetchDataUri);
   // DEAL the pool round-robin instead of slicing it in contiguous blocks. The pool
-  // arrives grouped by source (gallery, then description, then review photos), so
-  // contiguous batches meant whole batches of nothing but buyer photos — with no
-  // clean studio shot alongside, the model's bar for "cover" drifted down and junk
-  // got through. Dealing spreads every source across every batch.
+  // arrives grouped by source (gallery, then description images), so contiguous
+  // batches meant whole batches of nothing but description art — with no clean studio
+  // shot alongside, the model's bar for "cover" drifted down and junk got through.
+  // Dealing spreads every source across every batch.
   const nBatches = Math.max(1, Math.ceil(uris.length / CLASSIFY_BATCH));
   const decks = Array.from({ length: nBatches }, () => []);
   uris.forEach((uri, idx) => decks[idx % nBatches].push({ uri, idx }));
-  const batches = await Promise.all(decks.map(d => classifyBatch(d, apiKey)));
+  const batches = await Promise.all(decks.map(d => classifyBatch(d, apiKey, productName)));
   const merged = [].concat(...batches);
   return merged.length ? merged : null;
 }
@@ -760,6 +800,16 @@ module.exports = async function handler(req, res) {
     // No shipping estimate from the source (usually "Seller's own delivery") —
     // listing goes out date-free; VA should confirm timing before promising one.
     if (!(Number(p.edt_max) >= 1)) warnings.push('no-edt');
+    // sc.js reports how the review harvest went ('ok' | 'empty' | 'blocked' |
+    // 'timeout' | 'error'). Only 'empty' means the product genuinely has no buyer
+    // photos — the rest mean we failed to fetch them and the listing silently loses
+    // its secondary photos. 'blocked' is the common one: Chrome's third-party cookie
+    // blocking breaks the credentialed ratings call, and the same product returned 0
+    // review images in Chrome and 60 in Firefox minutes apart with nothing in the
+    // data showing a failure. A missing field is an older payload, not a problem.
+    if (p.review_status && p.review_status !== 'ok' && p.review_status !== 'empty') {
+      warnings.push('reviews-blocked');
+    }
   }
 
   // Pre-orders are refused outright. Nothing in the sourcing data exposes them —
@@ -806,9 +856,11 @@ module.exports = async function handler(req, res) {
   // Image selection (flag-gated): keep only cover + dimensions image, else all.
   // Falls back to all images if the vision pick fails, so a listing never loses
   // its photos. Used by every insert/refresh path below.
-  const listingImages = IMAGE_PICK
-    ? (await pickCoverAndDims(p.images) || (Array.isArray(p.images) && p.images.length ? p.images : null))
-    : (Array.isArray(p.images) && p.images.length ? p.images : null);
+  // baseImages is kept review-free so the variant path can rebuild the array around
+  // its own swatch cover without the review photos landing twice.
+  const gallery = Array.isArray(p.images) && p.images.length ? p.images : null;
+  const baseImages = IMAGE_PICK ? (await pickCoverAndDims(p.images) || gallery) : gallery;
+  const listingImages = withReviewPhotos(baseImages, p.review_images);
 
   // 7a. Refresh existing active listing — update AI, images, price, and assignment
   if (isRefresh) {
@@ -839,23 +891,29 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // 7b-covers. Cover-count split (colour-agnostic) — classify the whole image pool
-  // (gallery + description + review photos) once, then emit ONE listing per usable
-  // cover. The distinct cover is the dedup lever on Carousell; each listing also gets
-  // the shared dimensions image and a rotated title so same-account listings don't
-  // read as clones. Flag-gated; falls through to variant/single when off, when
-  // classification fails, or when it finds no covers.
+  // 7b-covers. Cover-count split (colour-agnostic) — classify the SELLER'S image pool
+  // (gallery + description images) once, then emit ONE listing per usable cover. The
+  // distinct cover is the dedup lever on Carousell; each listing also gets the first
+  // two buyer review photos, the shared dimensions image, and a rotated title so
+  // same-account listings don't read as clones. Flag-gated; falls through to
+  // variant/single when off, when classification fails, or when it finds no covers.
+  // Buyer photos are deliberately NOT in the pool: on 2026-08-06 they produced 43
+  // listings whose covers were mattresses on tiled HDB floors with slippers and
+  // cardboard boxes in frame, under a "Brand new and unused" description. Seller-only
+  // gave 7 clean studio covers from the same product — and cut the pool from 69
+  // images to 9, which is most of the classification bill gone with it.
   // Covers flagged needs_clean are retouched via cleanCover (Gemini image-edit →
   // Supabase Storage) when CLEAN_COVERS is on; raw cover is the fallback on failure.
   if (COVER_SPLIT && !isRefresh) {
     const pool = [
       ...(Array.isArray(p.images) ? p.images : []),
       ...(Array.isArray(p.desc_images) ? p.desc_images : []),
-      ...(Array.isArray(p.review_images) ? p.review_images : []),
     ];
     let roles = null;
     if (pool.length) {
-      try { roles = await classifyGallery(pool); }
+      // Same derivation worker-variants uses to name the product for its checks.
+      const productName = (aiTitle || p.title || '').split(' | ')[0].trim().slice(0, 80);
+      try { roles = await classifyGallery(pool, productName); }
       catch (e) { console.error('classify failed:', e.message); }
     }
     if (roles) {
@@ -873,8 +931,9 @@ module.exports = async function handler(req, res) {
         // Clean flagged covers in parallel — bounds wall-time to ~one image-gen call
         // (not N). No-op unless CLEAN_COVERS is on. Capped at CLEAN_MAX: each clean is
         // a slow ~$0.04 image-gen call. Beyond the cap a branded cover is dropped,
-        // not shipped raw (buyer review photos usually aren't branded, so the cap
-        // rarely bites).
+        // not shipped raw. Now that the pool is seller-only the cap bites harder —
+        // seller art carries branding far more often than buyer photos did — but a
+        // gallery+desc pool is ~9 images, so it still rarely binds.
         const entries = [...coverMap.entries()];
         const toClean = new Set(entries.filter(([, n]) => n).slice(0, CLEAN_MAX).map(([u]) => u));
         // A cover needing cleaning is used ONLY if cleaning verifiably succeeded.
@@ -891,7 +950,7 @@ module.exports = async function handler(req, res) {
         if (dropped) console.log('dropped', dropped, 'covers that could not be cleaned');
         const ids = [];
         for (let k = 0; k < covers.length; k++) {
-          const imgs = [covers[k], ...dims.filter(u => u !== covers[k])];
+          const imgs = withReviewPhotos([covers[k], ...dims.filter(u => u !== covers[k])], p.review_images);
           const { data: v, error: vErr } = await sb.from('listings').insert({
             title:              p.title || '',
             // Unique per cover so each listing clears listings_shopee_url_active_unique.
@@ -954,7 +1013,7 @@ module.exports = async function handler(req, res) {
     for (const g of groups) {
       // Variant swatch as cover (deduped), gallery after — else the shared gallery.
       const vImages = g.image
-        ? [g.image, ...(listingImages || []).filter(u => u !== g.image)]
+        ? withReviewPhotos([g.image, ...(baseImages || []).filter(u => u !== g.image)], p.review_images)
         : listingImages;
       const { data: v, error: vErr } = await sb.from('listings').insert({
         title:              p.title || '',
@@ -1026,4 +1085,4 @@ module.exports = async function handler(req, res) {
   });
 };
 
-module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, classifyGallery, cleanCover, verifyClean, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL, TITLE_SYSTEM, DESC_SYSTEM };
+module.exports._test = { normalizeDesc, deliveryLine, generateAI, calcSellPrice, variantGroups, variantLabel, stripSizesLine, rotateTitle, withReviewPhotos, classifyGallery, classifyPrompt, cleanCover, verifyClean, mapLimit, findDimsImage, CLASSIFY_PROMPT, CLASSIFY_MODEL, TITLE_SYSTEM, DESC_SYSTEM };
