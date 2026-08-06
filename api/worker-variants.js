@@ -54,12 +54,19 @@ const PLAIN_SCENES = [
 // are furniture-shaped guesses and read badly for other categories (a bin does not
 // belong in "a warm dining area"), which is why scenes are normally derived from the
 // product itself below.
+// Lifted from thelivinghub's live covers (2026-08-06) — a competitor reposting the same
+// product fortnightly, each time restaged into one of these. Each names ONE loud fixture
+// (a gold lamp, a shoji screen, pendant bulbs) instead of describing a mood. That is the
+// whole trick: "a bright modern bedroom with pale walls" lets the generator fall back to
+// the same beige room every call, which is how the neutral backdrops ended up hashing
+// 3-7 apart. A nameable fixture forces structure into the frame, and structure is what a
+// perceptual hash actually separates on.
 const FALLBACK_SCENES = (process.env.BG_SCENES || [
-  'a bright modern bedroom with a window and pale walls',
-  'a tidy home office with a bookshelf against a white wall',
-  'a minimal study corner with a pale rug and a floor lamp',
-  'a warm dining area with wooden flooring and a potted plant',
-  'a bright apartment room with white walls and large windows',
+  'a sage green wall with a gold dome pendant lamp and a roman blind',
+  'a shoji screen window with warm light and a honey wood plank floor',
+  'a blush wall with two black cord pendant bulbs and a woven basket planter',
+  'an exposed red brick wall with a black metal floor lamp',
+  'a charcoal wall with white panelling and a rattan floor basket',
 ].join('|')).split('|').filter(Boolean);
 
 // Ask where THIS product actually belongs. A gaming chair wants a desk setup, a bin
@@ -85,8 +92,13 @@ async function scenesForRooms(product, want, apiKey) {
     + `Name ${want} DIFFERENT real places in a Singapore home or workplace where a buyer would actually `
     + `use or keep this item.\n\n`
     + `Rules: one per line, no numbering, no bullets. Each line describes ONLY the room and its look, in `
-    + `under 12 words, e.g. "a tidy home office with a bookshelf against a white wall". Never mention the `
-    + `item itself, people, text or signage. The rooms must be clearly different from one another.`;
+    + `under 14 words. Never mention the item itself, people, text or signage.\n\n`
+    // Vague rooms all render as the same beige box, which is how neutral backdrops ended
+    // up hashing 3-7 apart. Naming a fixture forces structure into the frame.
+    + `Each room MUST name a distinctive wall colour AND one specific fixture — a lamp, a window `
+    + `covering, a floor material — e.g. "a sage green wall with a gold pendant lamp and a roman blind". `
+    + `Never write a vague room like "a bright modern bedroom". The rooms must differ from one another in `
+    + `wall colour, lighting and floor, not just in name.`;
   try {
     const d = await orChat({
       model: CHK_MODEL, max_tokens: 300, temperature: 0.7,

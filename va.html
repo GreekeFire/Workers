@@ -481,9 +481,10 @@ function calcPct(count, target) {
 }
 
 function warnLabel(w) {
+  // Price warnings dropped 2026-08-06 — VAs no longer source, so price is settled
+  // upstream in filter-apify.js. Unknown codes still fall through to the generic
+  // label below, so any older listing carrying one still renders.
   const map = {
-    'price-too-low': '⚠ Price low',
-    'price-too-high':'⚠ Price high',
     'no-edt':        '⚠ No delivery est.',
   };
   return map[w] || ('⚠ ' + w);

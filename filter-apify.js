@@ -93,19 +93,38 @@ function soldToNumber(v) {
 
 const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10 - 1;
 
-const file = process.argv[2];
-if (!file) { console.error('usage: node filter-apify.js <dataset.json>'); process.exit(1); }
+// One run of the Apify actor caps out around 1200 items, so a full sourcing pass is
+// several exports. Take them all and let the itemId dedup below merge them.
+const files = process.argv.slice(2).filter(a => !a.startsWith('--'));
+if (!files.length) { console.error('usage: node filter-apify.js <dataset.json> [more.json ...]'); process.exit(1); }
 
-let items = JSON.parse(fs.readFileSync(file, 'utf8'));
-if (!Array.isArray(items)) items = items.items || [];
-console.log('input rows:', items.length);
+let items = [];
+for (const f of files) {
+  let rows = JSON.parse(fs.readFileSync(f, 'utf8'));
+  if (!Array.isArray(rows)) rows = rows.items || [];
+  console.log('input rows:', rows.length, '<-', path.basename(f));
+  items = items.concat(rows);
+}
+if (files.length > 1) console.log('input rows:', items.length, '(combined)');
 
 const seen = new Set();
 const kept = [], reasons = {};
 // Everything that cleared sold/reviews/rating, regardless of price — this is what
 // the price band is actually costing us, and it's only visible if we keep it.
 const qualityPassed = [];
-const drop = (r) => { reasons[r] = (reasons[r] || 0) + 1; };
+// --rejects=file.csv dumps what was thrown away and why. Reviewing rejects by hand is
+// how every bug in this filter has been found so far, so it needs to be one flag away.
+// The loop sets `cursor` once per item rather than every drop() passing itself — the
+// call sites stay untouched and none can forget.
+const rejected = [];
+let cursor = null;
+const drop = (r) => {
+  reasons[r] = (reasons[r] || 0) + 1;
+  if (cursor) rejected.push({ reason: r, url: String(cursor.url || '').split('?')[0],
+    name: cursor.name || '', price: Number(cursor.price) || 0,
+    sold: String(cursor.historicalSoldEstimated || ''), reviews: Number(cursor.reviewCount) || 0,
+    rating: Number(cursor.rating) || 0, location: cursor.location || '', shop: cursor.shopName || '' });
+};
 
 // Shops with at least one product that clears the full bar on its own merits.
 // Reject only sellers Shopee says are ABROAD. The location field is empty on a third
@@ -158,6 +177,7 @@ try {
 if (blocked.size) console.log('blocklist:', blocked.size, 'hand-rejected products');
 
 for (const it of items) {
+  cursor = it;
   if (it._mock) { drop("mock row (free Apify plan returns no live data)"); continue; }
   if (blocked.has(String(it.itemId))) { drop('hand-rejected (see blocklist.txt)'); continue; }
   if (SG_ONLY && !isSG(it)) { drop('not shipped from SG'); continue; }
@@ -211,6 +231,18 @@ for (const it of items) {
 // from an 81-image one, which is the difference between 11 covers and 47. Photo
 // richness only becomes visible once our own scraper opens the product page.
 kept.sort((a, b) => (b.sold - a.sold) || (b.reviews - a.reviews));
+
+// --rejects=file.csv  everything thrown away, best-looking first, so a hand review
+// starts with the ones most likely to be the filter's fault rather than the product's.
+const REJ = (process.argv.find(a => a.startsWith('--rejects=')) || '').split('=')[1];
+if (REJ) {
+  rejected.sort((a, b) => (b.reviews - a.reviews) || (b.rating - a.rating));
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  fs.writeFileSync(REJ, ['reason,url,name,cost_sgd,sold,reviews,rating,location,shop']
+    .concat(rejected.map(r => [q(r.reason), r.url, q(r.name), r.price, q(r.sold),
+      r.reviews, r.rating, q(r.location), q(r.shop)].join(','))).join('\n'));
+  console.log('rejects:', rejected.length, '->', REJ);
+}
 
 // Output path is a flag so a comparison run can't silently clobber the real queue —
 // which it did: a loop testing --rating=4.5 left a 99-row file behind that then got

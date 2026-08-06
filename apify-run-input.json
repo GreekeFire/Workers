@@ -1,8 +1,18 @@
 {
   "country": "SG",
   "maxItems": 4000,
-  "priceSlicing": true,
+  "priceSlicing": false,
   "keywords": [
+    "mattress",
+    "sofa",
+    "couch",
+    "sofa bed",
+    "bed frame",
+    "wardrobe",
+    "dining table set",
+    "tv cabinet",
+    "chest freezer",
+    "office desk",
     "study table",
     "shoe rack",
     "bedside table",
@@ -45,17 +55,7 @@
     "console table",
     "bedside cabinet",
     "wooden side table",
-    "sofa bed",
     "bar table",
-    "bar stool",
-    "mattress",
-    "sofa",
-    "couch",
-    "bed frame",
-    "wardrobe",
-    "dining table set",
-    "tv cabinet",
-    "chest freezer",
-    "office desk"
+    "bar stool"
   ]
 }

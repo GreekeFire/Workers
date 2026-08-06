@@ -11,8 +11,6 @@
 
 const { sb, SERVICE_KEY } = require('../lib/sb');
 
-const PRICE_BAND_MIN = 25;
-const PRICE_BAND_MAX = 300;
 // Refuse anything whose source delivery estimate reaches this many days — that is
 // what a pre-order or a China shipment looks like, and neither can back the
 // "Free Doorstep Delivery | N Working Days" the listing promises. The promise adds
@@ -750,14 +748,15 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // 4. Soft guards — price band only. Category / SG-seller / rating guards were
-  // removed: they only fired when the scrape happened to capture those fields
-  // (often null on the dataLayer path), so they gave false confidence. Product
-  // quality is enforced by the owner instead.
+  // 4. Soft guards. The price band was removed 2026-08-06: VAs no longer source, so
+  // they have no call to make about whether an item is too cheap or too dear — that
+  // is settled upstream in filter-apify.js before the URL ever reaches the queue.
+  // A warning nobody can act on is noise that hides the one that matters.
+  // Category / SG-seller / rating guards went earlier, for a different reason: they
+  // only fired when the scrape happened to capture those fields (often null on the
+  // dataLayer path), so they gave false confidence.
   const warnings = [];
   if (!isRefresh) {
-    if (cost > 0 && cost < PRICE_BAND_MIN) warnings.push('price-too-low');
-    if (cost > 0 && cost > PRICE_BAND_MAX) warnings.push('price-too-high');
     // No shipping estimate from the source (usually "Seller's own delivery") —
     // listing goes out date-free; VA should confirm timing before promising one.
     if (!(Number(p.edt_max) >= 1)) warnings.push('no-edt');
