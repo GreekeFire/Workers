@@ -31,8 +31,33 @@ const arg = (k, d) => {
 // study table with 167 reviews and 500+ sales was being turned away. Loosening
 // either alone changed nothing; the two gates were hiding each other.
 const MIN_SOLD = arg('sold', 100);
-const MIN_REVIEWS = arg('reviews', 75);
+const MIN_REVIEWS = arg('reviews', 50);
 const MIN_RATING = arg('rating', 3.8);
+
+// Volume expectations have to scale with price, or the bar silently becomes a
+// category filter. Measured on the first export: 50% of items under $20 clear
+// 100 sold + 50 reviews, against 5% of items over $200. An $8 shoe rack selling 80
+// units is nothing; a $600 mattress selling 80 units is a hit. A flat threshold
+// encodes the economics of cheap goods and would reject nearly all furniture.
+//
+// Thresholds below are relative to MIN_SOLD/MIN_REVIEWS so the flags still work.
+// --flat-bar turns the scaling off.
+// The sold field cannot express anything between "<100" and "100+", so scaling that
+// threshold down is meaningless — a product is either in the unusable bucket or at
+// 100+. For dear items the gate has to come OFF, with reviews carrying the volume
+// evidence instead: 20 reviews means at least 20 people bought it, which the bracket
+// cannot show. 92 of 97 items over $200 sit in that bucket, and 20 of them have 15+
+// reviews at 4.5*+.
+//
+// The rating bar rises as the sold gate falls, so less volume evidence is traded for
+// more satisfaction evidence rather than for nothing.
+const SCALE_BY_PRICE = !process.argv.includes('--flat-bar');
+function barFor(price) {
+  if (!SCALE_BY_PRICE) return { sold: MIN_SOLD, reviews: MIN_REVIEWS, rating: MIN_RATING };
+  if (price >= 200) return { sold: 0, reviews: 20, rating: 4.5 };   // couches, mattresses
+  if (price >= 100) return { sold: 0, reviews: 30, rating: 4.5 };   // electric desks
+  return { sold: MIN_SOLD, reviews: MIN_REVIEWS, rating: MIN_RATING };
+}
 // --sg  keep only Singapore-located sellers. Measured on the first export: SG
 // sellers were proven winners 19% of the time against 5% for everyone else, and
 // they ship locally instead of the 20-25 day wait, which is what our delivery
@@ -156,20 +181,20 @@ for (const it of items) {
 
   const vouched = TRUST_SHOPS && provenShops.has(it.shopId) && reviews >= TRUSTED_MIN_REVIEWS;
   if (!vouched) {
-    if (sold < MIN_SOLD) { drop('sold < ' + MIN_SOLD); continue; }
+    // The bar moves with price: a $600 mattress is not held to a $8 shoe rack's
+    // volume. See barFor().
+    const bar = barFor(price);
+    if (sold < bar.sold) { drop('sold < ' + bar.sold + ' (at $' + price.toFixed(0) + ')'); continue; }
     // Rating and review count are one judgement, not two gates. Reviews ARE the
     // rating — 69 reviews at 4.91 is stronger evidence than 80 at 4.19, and the old
     // pair of thresholds said the opposite. Shopee's own ratings API is closed to
     // servers, so the star average is the only summary of that text we can get, and
     // it is enough: a well-rated product needs fewer reviews to be believable.
-    //   >= 4.8  ->  40 reviews
-    //   >= 4.5  ->  60 reviews
-    //   else    ->  MIN_REVIEWS (75)
-    const needed = rating >= 4.8 ? Math.min(40, MIN_REVIEWS)
-      : rating >= 4.5 ? Math.min(60, MIN_REVIEWS)
-        : MIN_REVIEWS;
-    if (reviews < needed) { drop('reviews < ' + needed + ' (at ' + rating.toFixed(1) + '*)'); continue; }
-    if (rating < MIN_RATING) { drop('rating < ' + MIN_RATING); continue; }
+    const needed = rating >= 4.8 ? Math.max(15, Math.round(bar.reviews * 0.8))
+      : rating >= 4.5 ? bar.reviews
+        : Math.round(bar.reviews * 1.5);
+    if (reviews < needed) { drop('reviews < ' + needed + ' (at ' + rating.toFixed(1) + '*, $' + price.toFixed(0) + ')'); continue; }
+    if (rating < bar.rating) { drop('rating < ' + bar.rating + ' (at $' + price.toFixed(0) + ')'); continue; }
   }
 
   seen.add(id);
