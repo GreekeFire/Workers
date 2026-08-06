@@ -119,8 +119,22 @@ const clears = (r) => soldToNumber(r.historicalSoldEstimated) >= MIN_SOLD
   && (Number(r.reviewCount) || 0) >= MIN_REVIEWS && (Number(r.rating) || 0) >= MIN_RATING;
 const provenShops = new Set(items.filter(r => !r._mock && clears(r)).map(r => r.shopId));
 
+// Hand-rejected products, kept in blocklist.txt. Pre-order status and real delivery
+// time are invisible in the Apify data — they are found by opening the listing or
+// messaging the seller — so those findings have to live somewhere the filter reads,
+// or they are lost every time the queue is regenerated.
+const blocked = new Set();
+try {
+  for (const line of fs.readFileSync(path.join(__dirname, 'blocklist.txt'), 'utf8').split('\n')) {
+    const id = line.trim().split(/[\s#]/)[0];
+    if (/^\d+$/.test(id)) blocked.add(id);
+  }
+} catch { /* no blocklist yet */ }
+if (blocked.size) console.log('blocklist:', blocked.size, 'hand-rejected products');
+
 for (const it of items) {
   if (it._mock) { drop("mock row (free Apify plan returns no live data)"); continue; }
+  if (blocked.has(String(it.itemId))) { drop('hand-rejected (see blocklist.txt)'); continue; }
   if (SG_ONLY && !isSG(it)) { drop('not shipped from SG'); continue; }
   const url = String(it.url || '').split('?')[0];
   if (!url) { drop('no url'); continue; }

@@ -1,0 +1,17 @@
+# Products rejected by hand, and why. One Shopee item id per line.
+#
+# These decisions cannot be derived from the Apify data — pre-order status, real
+# delivery time and product quality are only visible on the listing page or by
+# messaging the seller. Without this file every regeneration of the queue would
+# re-admit them, and the checking would have to be redone.
+#
+# The item id is the LAST number in a Shopee URL:
+#   https://shopee.sg/...-i.1166087445.28515489501  ->  28515489501
+#
+# Owner's rule: no pre-orders. A listing promises "Free Doorstep Delivery |
+# N Working Days" and one angry buyer's review lands on the account that carries
+# every other listing.
+
+28515489501   # GLOVOSYNC Folding Table $18.99 — pre-order despite 54 reviews / 4.61*
+47358748503   # Nova&Store.Sg Solid Wood Study Desk $156 — confirmed 20+ day delivery
+24738650923   # Goshawk.store Standing Desk $139.65 — pre-order, no SG stock
