@@ -477,9 +477,9 @@ function validCaroLink(u) {
   return !!u && /carousell\./i.test(u) && /\/p\/|\/sell\/|app\.link/i.test(u);
 }
 
-// TEST ONLY — REVERT BEFORE LAUNCH. Lets a VA press Done with no Carousell link
-// (server already accepts an empty link). Set to false to restore the gate.
-const ALLOW_EMPTY_CARO = true;
+// Done requires a real Carousell listing link (/p/, /sell/, or app.link).
+// Set true to bypass the gate for testing — the server accepts an empty link.
+const ALLOW_EMPTY_CARO = false;
 
 function autoResize(el) {
   el.style.height = 'auto';
