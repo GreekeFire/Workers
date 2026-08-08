@@ -23,7 +23,7 @@ const MAX_BATCH = 50;
 
 async function getWorker(id) {
   const { data, error } = await sb
-    .from('workers').select('id, active, daily_target').eq('id', id).single();
+    .from('workers').select('id, active, daily_target, account_name').eq('id', id).single();
   if (error || !data) return { err: [404, 'worker-not-found'] };
   if (!data.active)   return { err: [403, 'worker-inactive'] };
   return { worker: data };
@@ -70,14 +70,21 @@ module.exports = async function handler(req, res) {
         reference_url: r.carousell_url,
       }));
 
-    const { data: stats } = await sb.from('work_queue_stats').select('pending').single();
+    // Pool depth for THIS worker's account. work_queue_stats spans every
+    // account's pass, so with N accounts it reads N times what this VA can
+    // actually be handed.
+    const { count: pending } = await sb
+      .from('work_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('state', 'pending')
+      .eq('account', worker.account_name);
 
     return res.json({
       ok:           true,
       items,
       count_today:  await countToday(w),
       daily_target: worker.daily_target,
-      pending:      stats ? stats.pending : null,
+      pending:      pending == null ? null : pending,
     });
   }
 
