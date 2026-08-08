@@ -14,7 +14,7 @@ Run supabase/migrations-phase5.sql first — this writes to work_queue.
 import csv, json, os, sys, urllib.request, urllib.error, argparse
 
 HERE    = os.path.dirname(os.path.abspath(__file__))
-VAULT   = r'D:\The Vault\Workers\1st Affiliate\research'
+VAULT   = r'C:\The Vault\Workers\1st Affiliate\research'
 CATALOG = os.path.join(VAULT, 'catalog-full.csv')
 RANKED  = os.path.join(VAULT, 'va-queue.csv')   # 577 rows carrying times_listed
 PROJECT = 'tzwzmzabjmsocnxdtxqx'
@@ -27,6 +27,11 @@ ap.add_argument('--top',     type=int, help='only the N highest-prominence rows'
 ap.add_argument('--ranked-only', action='store_true',
                 help='load just the 577 vetted rotation products (recommended '
                      'first load) instead of all 12,626 individual listings')
+ap.add_argument('--source', default='closingdownsale',
+                help="which competitor catalogue this CSV is (tags work_queue.source)")
+ap.add_argument('--account', default='steadymart',
+                help='which Carousell account this pass is for (phase 8). Must match '
+                     'workers.account_name exactly or its VA sees an empty queue')
 ap.add_argument('--dry-run', action='store_true')
 args = ap.parse_args()
 
@@ -71,7 +76,8 @@ for r in csv.DictReader(open(args.catalog, encoding='utf-8')):
         price = None
 
     rows.append({
-        'source':        'closingdownsale',
+        'source':        args.source,
+        'account':       args.account,
         'carousell_url': url,
         'title':         title,
         'price_sgd':     price,
@@ -110,7 +116,10 @@ if rows:
     print(f'  no images on {sum(1 for x in rows if not x["images"])} rows')
     print('\n  first three:')
     for x in rows[:3]:
-        print(f'    x{x["times_listed"]:<4} ${x["price_sgd"]:<8} {len(x["images"])} imgs  {x["title"][:58]}')
+        line = f'    x{x["times_listed"]:<4} ${x["price_sgd"]:<8} {len(x["images"])} imgs  {x["title"][:58]}'
+        # Titles carry CJK and emoji; a cp1252 console raises here and kills the
+        # run before a single row is inserted.
+        print(line.encode('ascii', 'replace').decode())
 
 if args.dry_run:
     print('\n--dry-run: nothing written.')
@@ -119,9 +128,13 @@ if args.dry_run:
 # ── insert ───────────────────────────────────────────────────────────────────
 KEY = service_key()
 # on_conflict names the constraint to resolve against. Without it PostgREST only
-# considers the primary key, so an existing carousell_url raises 23505 instead of
-# being skipped — which breaks both reruns and resuming a partial load.
-URL = f'https://{PROJECT}.supabase.co/rest/v1/work_queue?on_conflict=carousell_url'
+# considers the primary key, so an existing row raises 23505 instead of being
+# skipped — which breaks both reruns and resuming a partial load.
+# Phase 8 replaced the unique on carousell_url with (carousell_url, account), so
+# this must name both or PostgREST 42P10s: there is no single-column index to
+# resolve against any more.
+URL = (f'https://{PROJECT}.supabase.co/rest/v1/work_queue'
+       '?on_conflict=carousell_url,account')
 inserted = 0
 
 for i in range(0, len(rows), BATCH):
