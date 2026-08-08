@@ -41,7 +41,10 @@ def ago(**kw):
 checks = []
 def check(name, ok, detail=''):
     checks.append((name, ok))
-    print(('  PASS  ' if ok else '  FAIL  ') + name + (f'   {detail}' if detail else ''))
+    line = ('  PASS  ' if ok else '  FAIL  ') + name + (f'   {detail}' if detail else '')
+    # Catalogue titles are full of CJK and emoji; a cp1252 console would raise
+    # mid-print and skip the cleanup below.
+    print(line.encode('ascii', 'replace').decode())
 
 
 holder = db('GET', 'workers?select=id&limit=1')[0]['id']   # stands in for VA #1
@@ -64,9 +67,9 @@ try:
     held_5h  = seed('stale-hold', 99998, state='claimed', claimed_by=holder, claimed_at=ago(hours=5))
     free     = seed('pending',    99997)
 
-    # n=3 so all three seeds are reachable — otherwise the two stale rows outrank
-    # the pending one and 'still handed out' fails for the wrong reason.
-    got = db('POST', 'rpc/claim_work', {'w': second, 'n': 3}) or []
+    # n=2 = exactly the seeds a correct lease can hand out (stale-hold + pending).
+    # Asking for more makes claim_work reach past the seeds into the real pool.
+    got = db('POST', 'rpc/claim_work', {'w': second, 'n': 2}) or []
     titles = sorted(r['title'] for r in got)
 
     check('a 45-min-old hold is NOT stolen (was: stolen at 30 min)',
@@ -85,7 +88,13 @@ try:
 
 finally:
     db('DELETE', f'work_queue?source=eq.{TAG}')
-    if second: db('DELETE', f'workers?id=eq.{second}')
+    if second:
+        # If a seed assumption ever slips and a real row gets claimed, hand it back
+        # before deleting the worker — work_queue.claimed_by references workers, so
+        # the delete would 409 and strand a real product held by a ghost worker.
+        db('PATCH', f'work_queue?claimed_by=eq.{second}',
+           {'state': 'pending', 'claimed_by': None, 'claimed_at': None})
+        db('DELETE', f'workers?id=eq.{second}')
     left = db('GET', f'work_queue?select=id&source=eq.{TAG}')
     print(f"\ncleanup: {'removed test rows + worker' if left == [] else 'LEFTOVERS ' + str(left)}")
 
