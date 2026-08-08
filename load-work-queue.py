@@ -118,7 +118,10 @@ if args.dry_run:
 
 # ── insert ───────────────────────────────────────────────────────────────────
 KEY = service_key()
-URL = f'https://{PROJECT}.supabase.co/rest/v1/work_queue'
+# on_conflict names the constraint to resolve against. Without it PostgREST only
+# considers the primary key, so an existing carousell_url raises 23505 instead of
+# being skipped — which breaks both reruns and resuming a partial load.
+URL = f'https://{PROJECT}.supabase.co/rest/v1/work_queue?on_conflict=carousell_url'
 inserted = 0
 
 for i in range(0, len(rows), BATCH):

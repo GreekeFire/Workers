@@ -451,6 +451,7 @@ let queuePending = null;  // queue mode: rows still unclaimed pool-wide
 let skipSet     = new Set();  // listing IDs the VA has skipped this session
 let ackedWarns  = new Set();  // listing IDs whose warnings the VA has acked
 let caroUrlDraft = {};        // listing id → carousell URL typed by VA (survives render)
+let targetBannerDismissed = false;  // VA chose to keep listing past today's target
 let pollTimer   = null;
 let busy        = false;
 
@@ -735,6 +736,12 @@ function render() {
 
   const pct   = calcPct(profile.count_today, profile.daily_target);
   const cur   = currentListing();
+  // Target is a marker, not a gate — nothing stops a VA listing past it. This
+  // just makes hitting it visible, since a full progress bar is easy to miss
+  // mid-flow. Dismissible so it doesn't nag someone who chooses to keep going.
+  const hitTarget = profile.daily_target > 0
+    && profile.count_today >= profile.daily_target
+    && !targetBannerDismissed;
 
   let html = '';
 
@@ -751,6 +758,18 @@ function render() {
         </div>
       </div>
     </div>`;
+
+  if (hitTarget) {
+    html += `
+      <div style="background:rgba(107,227,164,0.12);border:1px solid rgba(107,227,164,0.35);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:20px;line-height:1">🎉</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--accent)">Target reached — ${profile.count_today} listed today</div>
+          <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px">You're done for the day. Carry on if you want to — nothing is stopping you.</div>
+        </div>
+        <button onclick="dismissTargetBanner()" style="flex-shrink:0;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer">Keep going</button>
+      </div>`;
+  }
 
   if (!cur) {
     // Queue empty — distinguish "truly empty" from "all skipped this session"
@@ -928,6 +947,11 @@ function render() {
   }
 }
 
+function dismissTargetBanner() {
+  targetBannerDismissed = true;
+  render();
+}
+
 function flashProgressBar() {
   const fill = document.querySelector('.progress-bar-fill');
   if (!fill) return;
@@ -1008,7 +1032,12 @@ async function doDone(listingId, warningsOverridden) {
     listings = listings.filter(l => l.id !== listingId);
     ackedWarns.delete(listingId);
     delete caroUrlDraft[listingId];
-    showToast('Done ✓  ' + result.count_today + ' / ' + profile.daily_target + ' today');
+    // Announce the crossing itself, not every listing after it.
+    const justHit = profile.daily_target > 0
+      && result.count_today === profile.daily_target;
+    showToast(justHit
+      ? '🎉 Target reached — ' + result.count_today + ' listed today'
+      : 'Done ✓  ' + result.count_today + ' / ' + profile.daily_target + ' today');
     render();
   } catch (e) {
     showToast('Failed to mark done — tap Done again to retry', true);
