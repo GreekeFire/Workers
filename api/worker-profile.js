@@ -1,7 +1,7 @@
 /**
  * GET /api/worker-profile?w=UUID
  *
- * Returns { id, name, daily_target, count_today, bookmarklet }.
+ * Returns { id, name, daily_target, count_today, queue_mode, bookmarklet }.
  * 403 if worker is inactive.
  */
 
@@ -15,7 +15,7 @@ module.exports = async function handler(req, res) {
   if (!w) return res.status(400).json({ error: 'w (worker UUID) required' });
 
   const { data: worker, error: wErr } = await sb
-    .from('workers').select('id, name, daily_target, active').eq('id', w).single();
+    .from('workers').select('id, name, daily_target, active, queue_mode').eq('id', w).single();
   if (wErr || !worker) return res.status(404).json({ error: 'worker-not-found' });
   if (!worker.active)  return res.status(403).json({ error: 'worker-inactive' });
 
@@ -34,6 +34,7 @@ module.exports = async function handler(req, res) {
     name:         worker.name,
     daily_target: worker.daily_target,
     count_today:  count || 0,
+    queue_mode:   worker.queue_mode,
     bookmarklet,
   });
 };

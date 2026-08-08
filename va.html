@@ -438,14 +438,14 @@ const params   = new URLSearchParams(location.search);
 const WORKER_ID = params.get('w');
 
 // Queue mode: work is CLAIMED from the shared work_queue pool instead of being
-// pre-assigned via listings.assigned_worker_id. Opt-in per link (&queue=1) so
-// existing VAs keep the old flow untouched while this is proven — flip the
-// default here once it is.
-const QUEUE_MODE     = params.get('queue') === '1';
+// pre-assigned via listings.assigned_worker_id. Set per worker (workers.queue_mode,
+// read from the profile below) so a trimmed or retyped link can't drop a VA into
+// the wrong flow. &queue=1 still forces it on, for previewing without a DB edit.
+let QUEUE_MODE       = params.get('queue') === '1';
 const CLAIM_BATCH    = 20;   // rows per claim_work call
 const CLAIM_REFILL_AT = 5;   // claim more once this few are left
 
-let profile     = null;   // { id, name, daily_target, count_today, bookmarklet }
+let profile     = null;   // { id, name, daily_target, count_today, queue_mode, bookmarklet }
 let listings    = [];     // active assigned listings from API
 let queuePending = null;  // queue mode: rows still unclaimed pool-wide
 let skipSet     = new Set();  // listing IDs the VA has skipped this session
@@ -1089,6 +1089,7 @@ async function doSkip(listingId) {
 
   try {
     profile  = await fetchProfile();
+    QUEUE_MODE = QUEUE_MODE || !!profile.queue_mode;
     listings = QUEUE_MODE ? await claimQueue() : await fetchListings();
     render();
     pollTimer = setTimeout(poll, 10000);
