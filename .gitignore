@@ -9,6 +9,10 @@ Thumbs.db
 .claude/
 .vercel/
 
+# Competitor catalogue snapshot — 14MB of images + a base64-embedded sheet.
+# Reference material, not source; it would ship to Vercel on every deploy.
+competitor/
+
 # Secrets / local env
 .env
 .env.*

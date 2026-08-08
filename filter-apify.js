@@ -91,7 +91,7 @@ function soldToNumber(v) {
   return Math.round(parseFloat(m[1]) * (m[2].toLowerCase() === 'k' ? 1e3 : m[2].toLowerCase() === 'm' ? 1e6 : 1));
 }
 
-const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10 - 1;
+const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10;
 
 // One run of the Apify actor caps out around 1200 items, so a full sourcing pass is
 // several exports. Take them all and let the itemId dedup below merge them.
@@ -258,7 +258,7 @@ fs.writeFileSync(OUT, out.join('\n'));
 // the only reason it isn't in the queue is its price.
 if (qualityPassed.length) {
   const BANDS = [[0, 15], [15, 25], [25, 50], [50, 80], [80, 110], [110, 150], [150, 300], [300, 1e9]];
-  const sellAt = c => Math.ceil(Math.max(c * 1.5, c + 25) / 10) * 10 - 1;
+  const sellAt = c => Math.ceil(Math.max(c * 1.5, c + 25) / 10) * 10;
   console.log('\nPRICE SPREAD of the ' + qualityPassed.length + ' products that passed sold/reviews/rating');
   console.log('  cost band     count   would sell at   in queue?');
   for (const [lo, hi] of BANDS) {

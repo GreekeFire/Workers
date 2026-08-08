@@ -162,11 +162,11 @@ function normalizeShopeeUrl(url) {
   return clean;
 }
 
-// max(×1.5, +$25), rounded up to the next $10 then −$1 → $x9 endings
-// (left-digit pricing). MUST match calcSell in work.html.
+// max(×1.5, +$25), rounded up to the next $10.
+// MUST match calcSell in work.html.
 function calcSellPrice(cost) {
   const raw = Math.max(cost * 1.5, cost + 25);
-  return Math.ceil(raw / 10) * 10 - 1;
+  return Math.ceil(raw / 10) * 10;
 }
 
 // ── Variant splitting (Option A) ────────────────────────────────────────────

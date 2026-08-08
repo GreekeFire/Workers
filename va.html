@@ -437,8 +437,17 @@
 const params   = new URLSearchParams(location.search);
 const WORKER_ID = params.get('w');
 
+// Queue mode: work is CLAIMED from the shared work_queue pool instead of being
+// pre-assigned via listings.assigned_worker_id. Opt-in per link (&queue=1) so
+// existing VAs keep the old flow untouched while this is proven — flip the
+// default here once it is.
+const QUEUE_MODE     = params.get('queue') === '1';
+const CLAIM_BATCH    = 20;   // rows per claim_work call
+const CLAIM_REFILL_AT = 5;   // claim more once this few are left
+
 let profile     = null;   // { id, name, daily_target, count_today, bookmarklet }
 let listings    = [];     // active assigned listings from API
+let queuePending = null;  // queue mode: rows still unclaimed pool-wide
 let skipSet     = new Set();  // listing IDs the VA has skipped this session
 let ackedWarns  = new Set();  // listing IDs whose warnings the VA has acked
 let caroUrlDraft = {};        // listing id → carousell URL typed by VA (survives render)
@@ -592,6 +601,64 @@ async function fetchListings() {
   return d.listings || [];
 }
 
+// Queue items are catalogue rows, not Shopee scrapes — there are no in-stock
+// variants and no delivery estimate to compute, so this is fixedDescription()
+// from api/worker-scrape.js with those two parts omitted. Keep the two in step.
+const QUEUE_DESC = [
+  '🚚 Free Doorstep Delivery',
+  '',
+  'Brand new and unused, delivered straight to your door.',
+  '',
+  '💬 Message us to order or check stock',
+  '',
+  '🛡️ Pay with the Buy button and Carousell protects you — refunded if the item is not as described.',
+  '',
+  '💳 PayNow / PayLah / Bank Transfer / Credit & Debit Card / Carousell Buy Button accepted 🙂',
+].join('\n');
+
+// Claim a batch, then shape each row like a listing so render() needs no
+// branching. `_queue` marks them so Done/Skip route to the queue endpoints.
+async function claimQueue(n = CLAIM_BATCH) {
+  const r = await fetch('/api/worker-queue?w=' + WORKER_ID + '&n=' + n);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+  const d = await r.json();
+  if (profile && d.count_today != null) profile.count_today = d.count_today;
+  queuePending = d.pending;
+  return (d.items || []).map(it => ({
+    id:             it.queue_id,
+    _queue:         true,
+    ai_title:       it.title,
+    ai_description: QUEUE_DESC,
+    sell_price:     it.price_sgd,
+    images:         it.images || [],
+    shopee_url:     null,
+    carousell_url:  null,
+    reference_url:  it.reference_url,
+    guard_warnings: [],
+  }));
+}
+
+// Only calls the server when the local batch runs low, so a VA working steadily
+// hits the API once per 20 listings instead of every 10 seconds.
+async function topUpQueue() {
+  const remaining = listings.filter(l => !skipSet.has(l.id)).length;
+  if (remaining > CLAIM_REFILL_AT) return;
+  const batch = await claimQueue();
+  const known = new Set(listings.map(l => l.id));
+  for (const it of batch) if (!known.has(it.id)) listings.push(it);
+}
+
+async function postQueueDone(queue_id, carousell_url) {
+  const r = await fetch('/api/worker-queue', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ worker_id: WORKER_ID, queue_id, action: 'done', carousell_url }),
+  });
+  const d = await r.json();
+  if (!r.ok || !d.ok) throw new Error(d.error || r.status);
+  return d;
+}
+
 async function postDone(listing_id, warnings_overridden, carousell_url) {
   const r = await fetch('/api/worker-done', {
     method: 'POST',
@@ -607,6 +674,14 @@ async function postDone(listing_id, warnings_overridden, carousell_url) {
 // ── Poll ──────────────────────────────────────────────────────────────────────
 async function poll() {
   try {
+    if (QUEUE_MODE) {
+      // Claimed rows are ours until we finish them or the lease lapses, so
+      // there is nothing to reconcile — just refill when the batch runs down.
+      await topUpQueue();
+      render();
+      pollTimer = setTimeout(poll, 10000);
+      return;
+    }
     const fresh = await fetchListings();
     // Build a lookup map for O(1) access
     const freshMap = new Map(fresh.map(l => [l.id, l]));
@@ -688,7 +763,12 @@ function render() {
           <div class="empty-sub">You've skipped all listings in your queue.<br>Contact your manager if you need help with these, or wait for new ones to appear.</div>
         </div>`;
     } else {
-      html += `
+      html += QUEUE_MODE ? `
+        <div class="empty-card">
+          <div class="empty-icon">🎉</div>
+          <div class="empty-title">Nothing left to claim</div>
+          <div class="empty-sub">The shared queue is empty — every product has been listed or rejected.<br>Contact your manager for more work.</div>
+        </div>` : `
         <div class="empty-card">
           <div class="empty-icon">📦</div>
           <div class="empty-title">Queue empty</div>
@@ -696,8 +776,9 @@ function render() {
         </div>`;
     }
 
-    // Bookmarklet (only shown when genuinely empty, not when all-skipped)
-    if (!allSkipped && profile.bookmarklet) {
+    // Bookmarklet (only shown when genuinely empty, not when all-skipped).
+    // Queue mode has no scraping step, so it has no bookmarklet.
+    if (!allSkipped && !QUEUE_MODE && profile.bookmarklet) {
       html += `
         <div class="bm-card">
           <div class="bm-label">Your Shopee bookmarklet</div>
@@ -718,7 +799,10 @@ function render() {
     // Ref-code = base36 of the listing id, appended to the title so it rides into
     // the Carousell listing. Lets the owner look up the Shopee source from any order
     // (work.html lookup box). Unique because id is unique — no DB storage needed.
-    const refCode      = cur.id.toString(36).toUpperCase().padStart(6, '0');
+    // Queue ids and listing ids are separate sequences, so an unprefixed code
+    // could decode to the wrong row. 'Q' keeps them apart — work.html's #REFCODE
+    // lookup needs a matching branch before queue-sourced sales can be traced.
+    const refCode      = (cur._queue ? 'Q' : '') + cur.id.toString(36).toUpperCase().padStart(6, '0');
     const title        = (cur.ai_title || cur.title || '') + '  |  ' + refCode;
     const desc         = cur.ai_description || '';
     const images       = cur.images || [];
@@ -787,6 +871,7 @@ function render() {
     {
       html += `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">`;
       if (cur.shopee_url) html += `<a href="${esc(cur.shopee_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">Open on Shopee ↗</a>`;
+      if (cur.reference_url) html += `<a href="${esc(cur.reference_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">Reference listing ↗</a>`;
       if (existingCaroUrl) html += `<a href="${esc(existingCaroUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text-secondary);text-decoration:none;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px">Open on Carousell ↗</a>`;
       html += `<button id="pull-btn" onclick="doPull()" style="display:inline-flex;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.06);color:var(--text-secondary);font-size:13px;font-weight:600;cursor:pointer">↻ Pull</button>`;
       html += `</div>`;
@@ -913,7 +998,10 @@ async function doDone(listingId, warningsOverridden) {
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
 
   try {
-    const result = await postDone(listingId, warningsOverridden, caroUrl);
+    const item = listings.find(l => l.id === listingId);
+    const result = item && item._queue
+      ? await postQueueDone(listingId, caroUrl)
+      : await postDone(listingId, warningsOverridden, caroUrl);
     profile.count_today = result.count_today;
     flashProgressBar();
     // Remove from queue
@@ -936,9 +1024,18 @@ async function doSkip(listingId) {
   delete caroUrlDraft[listingId];
   render();  // render first so the next card shows immediately
   try {
-    // Persist server-side (deletes the listing) so it never comes back on
-    // refresh and never reaches the owner's listings.
-    const r = await fetch('/api/worker-done', {
+    // Persist server-side so it never comes back on refresh. For a queue item
+    // that means 'rejected' — NOT back to pending, or the next VA burns the
+    // same time rediscovering it's unsourceable. For an assigned listing it
+    // means deleting the row so it never reaches the owner's listings.
+    const item = listings.find(l => l.id === listingId);
+    const r = item && item._queue
+      ? await fetch('/api/worker-queue', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ worker_id: WORKER_ID, queue_id: listingId, action: 'reject', reason: 'va-skip' }),
+        })
+      : await fetch('/api/worker-done', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ worker_id: WORKER_ID, listing_id: listingId, skip: true }),
@@ -963,9 +1060,22 @@ async function doSkip(listingId) {
 
   try {
     profile  = await fetchProfile();
-    listings = await fetchListings();
+    listings = QUEUE_MODE ? await claimQueue() : await fetchListings();
     render();
     pollTimer = setTimeout(poll, 10000);
+
+    // Hand unfinished rows straight back when the VA closes the tab, so the
+    // pool refills now instead of waiting out the 30-minute lease. Best effort:
+    // if the beacon doesn't land, the lease still covers it.
+    if (QUEUE_MODE) {
+      addEventListener('pagehide', () => {
+        try {
+          navigator.sendBeacon('/api/worker-queue', new Blob(
+            [JSON.stringify({ worker_id: WORKER_ID, action: 'release' })],
+            { type: 'application/json' }));
+        } catch (e) { /* nothing useful to do on the way out */ }
+      });
+    }
   } catch (e) {
     const msg = e.message || 'unknown error';
     if (msg === 'worker-inactive') {

@@ -16,7 +16,7 @@ function findFile() {
 }
 
 // MUST match calcSellPrice in api/worker-scrape.js
-const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10 - 1;
+const sell = (cost) => Math.ceil(Math.max(cost * 1.5, cost + 25) / 10) * 10;
 const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0;
 
 const file = findFile();
