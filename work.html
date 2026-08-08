@@ -1449,7 +1449,10 @@ function _renderWorkersView() {
 
   const renderWorkerCard = w => {
         const pct = w.daily_target ? Math.min(100, Math.round(w.count_today / w.daily_target * 100)) : 0;
-        const vaUrl = `${location.origin}/va?w=${w.id}`;
+        // &queue=1 puts the VA on the shared work_queue pool. Without it they see
+        // only listings hand-assigned via assigned_worker_id — which for a new
+        // worker is none, so they'd get an empty screen with 12,626 items waiting.
+        const vaUrl = `${location.origin}/va?w=${w.id}&queue=1`;
         return `
           <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:12px;padding:16px;margin-bottom:12px${w.active ? '' : ';opacity:0.45'}">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
@@ -1624,7 +1627,7 @@ function showUrlFallback(label, url) {
 }
 
 async function copyVaLink(workerId) {
-  const url = `${location.origin}/va?w=${workerId}`;
+  const url = `${location.origin}/va?w=${workerId}&queue=1`;
   try {
     await navigator.clipboard.writeText(url);
     toast('VA link copied ✓');
@@ -1669,7 +1672,7 @@ async function _doRotateLink(workerId, name) {
   _workersData = null;
   await refreshWorkers();
   // Show new link
-  const url = `${location.origin}/va?w=${newId}`;
+  const url = `${location.origin}/va?w=${newId}&queue=1`;
   try { await navigator.clipboard.writeText(url); toast('New VA link copied ✓'); }
   catch (e) { showUrlFallback('New VA link — old one is now deactivated. Long-press to copy:', url); }
 }
